@@ -71,6 +71,18 @@ Run the scalable Monte Carlo surrogate on larger systems and estimate the spectr
 python main.py --mode monte-carlo --sites 256 --degree 8 --temperature 0.95
 ```
 
+Use the GPU with CuPy when available:
+
+```powershell
+python main.py --mode monte-carlo --sites 2048 --backend cupy
+```
+
+If you want CUDA progress without the interactive bar, use log mode:
+
+```powershell
+python main.py --mode monte-carlo --sites 2048 --backend cupy --progress-mode log
+```
+
 Sweep across increasing system sizes and save a scaling plot:
 
 ```powershell
@@ -116,3 +128,20 @@ The scalable Monte Carlo mode is a coarse-grained surrogate of the original exac
 quantum model. It replaces the full `2^N` Hilbert-space evolution with sparse
 pair and triadic interactions in an effective low-energy spin sector, which makes
 large-`N` scaling studies computationally feasible.
+
+## GPU Acceleration
+
+The Monte Carlo surrogate supports an optional `CuPy` backend for CUDA GPUs.
+
+- `--backend auto`: use `cupy` if installed and a CUDA device is available, otherwise fall back to CPU
+- `--backend cpu`: force NumPy on the CPU
+- `--backend cupy`: require the CUDA backend and fail if it is unavailable
+- `--progress-mode bar`: interactive progress bar
+- `--progress-mode log`: periodic progress lines, usually better for long CUDA runs and captured terminals
+- `--progress-mode off`: disable progress output entirely
+
+Recommended install in the project virtual environment:
+
+```powershell
+.venv\Scripts\python.exe -m pip install cupy-cuda12x
+```

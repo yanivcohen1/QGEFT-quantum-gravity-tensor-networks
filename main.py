@@ -13,6 +13,7 @@ from emergent_simulation import (
     write_scan_json,
 )
 from scalable_simulation import (
+    MonteCarloConfig,
     render_scaling_report,
     run_scaling_sweep,
     save_scaling_visualizations,
@@ -34,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scan-seeds", type=int, default=0, help="If > 0, run this many consecutive seeds and rank the emergent regimes.")
     parser.add_argument("--plot-dir", type=Path, default=None, help="Optional directory for visualization PNG files.")
     parser.add_argument("--degree", type=int, default=8, help="Sparse algebraic degree for Monte Carlo mode.")
+    parser.add_argument("--backend", choices=["auto", "cpu", "cupy"], default="auto", help="Array backend for Monte Carlo mode. 'auto' prefers CuPy on a CUDA GPU when available.")
     parser.add_argument("--burn-in-sweeps", type=int, default=180, help="Burn-in sweeps for Monte Carlo mode.")
     parser.add_argument("--measurement-sweeps", type=int, default=420, help="Measurement sweeps for Monte Carlo mode.")
     parser.add_argument("--sample-interval", type=int, default=6, help="Sampling interval in sweeps for Monte Carlo mode.")
@@ -41,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-walk-steps", type=int, default=24, help="Maximum random-walk time for spectral-dimension estimation.")
     parser.add_argument("--size-scan", type=str, default="", help="Comma-separated system sizes for a Monte Carlo scaling sweep, for example 64,128,256,512.")
     parser.add_argument("--no-progress", action="store_true", help="Disable the live terminal progress bar for long Monte Carlo runs.")
+    parser.add_argument("--progress-mode", choices=["bar", "log", "off"], default="bar", help="Progress display mode for Monte Carlo runs. 'log' is often more stable for CUDA/CuPy runs.")
     return parser
 
 
@@ -57,9 +60,8 @@ def parse_size_scan(raw: str) -> list[int]:
 def run_monte_carlo_mode(args: argparse.Namespace) -> None:
     sizes = parse_size_scan(args.size_scan)
     target_sizes = sizes if sizes else [args.sites]
-    sweep, artifacts = run_scaling_sweep(
-        sizes=target_sizes,
-        seed=args.seed,
+    progress_mode = "off" if args.no_progress else args.progress_mode
+    config = MonteCarloConfig(
         degree=args.degree,
         coupling_scale=args.coupling_scale,
         field_scale=args.field_scale,
@@ -70,7 +72,13 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         sample_interval=args.sample_interval,
         walker_count=args.walker_count,
         max_walk_steps=args.max_walk_steps,
-        show_progress=not args.no_progress,
+        backend=args.backend,
+    )
+    sweep, artifacts = run_scaling_sweep(
+        sizes=target_sizes,
+        seed=args.seed,
+        config=config,
+        progress_mode=progress_mode,
     )
     print(render_scaling_report(sweep))
     if args.json_out is not None:
