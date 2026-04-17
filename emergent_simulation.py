@@ -47,6 +47,8 @@ class EmergentSummary:
     mean_link_trace: float
     wilson_loop: float
     solved_sector_fillings: list[list[int]]
+    excitation_count: int
+    excitation_channels: list[dict[str, object]]
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -67,6 +69,21 @@ class EmergentArtifacts:
     coordinates: np.ndarray
     connected: np.ndarray
     gravity_profile: GravityProfile
+
+
+@dataclass(frozen=True)
+class ExcitationChannel:
+    state_index: int
+    energy: float
+    gap: float
+    charge: float
+    color_counts: list[int]
+    dominant_color: int
+    color_imbalance: float
+    localization_ipr: float
+    site_entropy: float
+    sector_label: str
+    channel_label: str
 
 
 @dataclass(frozen=True)
@@ -170,6 +187,7 @@ class OperatorNetworkSimulation:
         symmetry_score = average_block_symmetry(block_results)
         generations = detect_generations(energies)
         mass_gaps, mass_ratios = mass_spectrum(energies)
+        excitation_channels = classify_excitation_channels(low_states)
 
         source = int(np.argmax(occupancies))
         perturbed_results = [self._solve_sector(sector, links, link_phases, perturbation_site=source) for sector in sector_bases]
@@ -225,6 +243,8 @@ class OperatorNetworkSimulation:
             mean_link_trace=mean_link_trace,
             wilson_loop=float(np.real(wilson_loop)),
             solved_sector_fillings=[list(state.color_counts) for state in low_states],
+            excitation_count=len(excitation_channels),
+            excitation_channels=[asdict(channel) for channel in excitation_channels],
         )
         return EmergentArtifacts(
             summary=summary,
@@ -722,6 +742,78 @@ def mass_spectrum(energies: np.ndarray) -> tuple[list[float], list[float]]:
     return selected.tolist(), ratios.tolist()
 
 
+def classify_excitation_channels(states: list[EigenStateRecord]) -> list[ExcitationChannel]:
+    if not states:
+        return []
+    ground_energy = states[0].energy
+    channels: list[ExcitationChannel] = []
+    for index, state in enumerate(states[1:], start=1):
+        normalized_occupancy = state.occupancies / max(float(np.sum(state.occupancies)), 1e-12)
+        localization_ipr = float(np.sum(normalized_occupancy**2))
+        site_entropy = float(-np.sum(normalized_occupancy * np.log(normalized_occupancy + 1e-12)))
+        color_fraction = np.asarray(state.color_counts, dtype=float) / max(float(sum(state.color_counts)), 1.0)
+        dominant_color = int(np.argmax(color_fraction))
+        color_imbalance = float(np.max(color_fraction) - np.min(color_fraction)) if len(color_fraction) > 1 else 0.0
+        sector_label = classify_sector_label(state.charge, color_fraction, color_imbalance)
+        channel_label = classify_channel_label(state.charge, color_imbalance, localization_ipr, site_entropy)
+        channels.append(
+            ExcitationChannel(
+                state_index=index,
+                energy=state.energy,
+                gap=float(state.energy - ground_energy),
+                charge=state.charge,
+                color_counts=list(state.color_counts),
+                dominant_color=dominant_color,
+                color_imbalance=color_imbalance,
+                localization_ipr=localization_ipr,
+                site_entropy=site_entropy,
+                sector_label=sector_label,
+                channel_label=channel_label,
+            )
+        )
+    return channels
+
+
+def classify_sector_label(charge: float, color_fraction: np.ndarray, color_imbalance: float) -> str:
+    if abs(charge) < 1e-6:
+        charge_label = "neutral"
+    elif charge > 0.0:
+        charge_label = "positive"
+    else:
+        charge_label = "negative"
+    if len(color_fraction) == 1:
+        color_label = "single-color"
+    elif color_imbalance < 0.15:
+        color_label = "color-balanced"
+    elif color_imbalance < 0.45:
+        color_label = "color-mixed"
+    else:
+        color_label = "color-polarized"
+    return f"{charge_label}/{color_label}"
+
+
+def classify_channel_label(charge: float, color_imbalance: float, localization_ipr: float, site_entropy: float) -> str:
+    if abs(charge) < 1e-6:
+        charge_family = "neutral"
+    elif abs(charge) < 0.5:
+        charge_family = "fractional"
+    else:
+        charge_family = "charged"
+    if color_imbalance < 0.15:
+        color_family = "balanced"
+    elif color_imbalance < 0.45:
+        color_family = "mixed"
+    else:
+        color_family = "polarized"
+    if localization_ipr > 0.45:
+        profile = "localized"
+    elif site_entropy > 1.6:
+        profile = "delocalized"
+    else:
+        profile = "mesoscopic"
+    return f"{charge_family}-{color_family}-{profile}"
+
+
 def neighbors(sites: int) -> list[tuple[int, int]]:
     return [(index, (index + 1) % sites) for index in range(sites)]
 
@@ -776,8 +868,18 @@ def render_report(summary: EmergentSummary) -> str:
             f"matter weight: {summary.matter_weight:.6f}",
             f"antimatter weight: {summary.antimatter_weight:.6f}",
             f"matter-antimatter asymmetry: {summary.matter_antimatter_asymmetry:.6f}",
+            f"excitation count: {summary.excitation_count}",
         ]
     )
+    if summary.excitation_channels:
+        lines.append("excitation channels:")
+        for channel in summary.excitation_channels[:8]:
+            lines.append(
+                "  "
+                f"#{channel['state_index']} gap={channel['gap']:.6f} charge={channel['charge']:.3f} "
+                f"sector={channel['sector_label']} label={channel['channel_label']} "
+                f"colors={channel['color_counts']} ipr={channel['localization_ipr']:.3f}"
+            )
     return "\n".join(lines)
 
 

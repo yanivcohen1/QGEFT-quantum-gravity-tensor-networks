@@ -148,6 +148,13 @@ class MonteCarloSummary:
     gravity_power_exponent: float
     gravity_inverse_square_r2: float
     gravity_inverse_square_mae: float
+    fine_structure_proxy: float
+    electron_gap: float
+    proton_gap: float
+    proton_electron_mass_ratio_proxy: float
+    effective_light_cone_speed: float
+    light_cone_fit_r2: float
+    light_cone_leakage: float
 
 
 @dataclass(frozen=True)
@@ -180,6 +187,9 @@ class MonteCarloArtifacts:
     return_probabilities: np.ndarray
     return_fit: np.ndarray
     edge_distances: np.ndarray
+    signal_times: np.ndarray
+    signal_frontier: np.ndarray
+    signal_frontier_fit: np.ndarray
 
 
 @dataclass
@@ -198,6 +208,13 @@ class ScalingPoint:
     gravity_power_exponent: float
     gravity_inverse_square_r2: float
     gravity_inverse_square_mae: float
+    fine_structure_proxy: float
+    electron_gap: float
+    proton_gap: float
+    proton_electron_mass_ratio_proxy: float
+    effective_light_cone_speed: float
+    light_cone_fit_r2: float
+    light_cone_leakage: float
     samples_collected: int
     seed: int
 
@@ -209,6 +226,9 @@ class ScalingSweepResult:
     gauge_group: str
     tensor_bond_dim: int
     degree: int
+    asymptotic_fine_structure_proxy: float | None
+    asymptotic_proton_electron_mass_ratio_proxy: float | None
+    asymptotic_light_cone_speed: float | None
     points: list[ScalingPoint]
 
     def to_json(self) -> str:
@@ -219,6 +239,9 @@ class ScalingSweepResult:
                 "gauge_group": self.gauge_group,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
+                "asymptotic_fine_structure_proxy": self.asymptotic_fine_structure_proxy,
+                "asymptotic_proton_electron_mass_ratio_proxy": self.asymptotic_proton_electron_mass_ratio_proxy,
+                "asymptotic_light_cone_speed": self.asymptotic_light_cone_speed,
                 "points": [asdict(point) for point in self.points],
             },
             indent=2,
@@ -285,6 +308,24 @@ class MonteCarloOperatorNetwork:
             edge_j,
             edge_weights,
         )
+        signal_times, signal_frontier, signal_fit, light_cone_speed, light_cone_fit_r2, light_cone_leakage = estimate_light_cone_diagnostics(
+            sites=self.sites,
+            positions=positions,
+            edge_i=edge_i,
+            edge_j=edge_j,
+            edge_weights=edge_weights,
+            max_walk_steps=self.max_walk_steps,
+            source_count=self.walker_count,
+            xp=self.xp,
+        )
+        fine_structure_proxy, electron_gap, proton_gap, mass_ratio_proxy = estimate_scalar_emergent_constants(
+            mean_link_trace=1.0,
+            theta_order=theta_order,
+            spectral_dimension=spectral_dimension,
+            gravity_r2=gravity_r2,
+            gravity_mae=gravity_mae,
+            mean_return_error=fit_error,
+        )
         mean_magnetization = float(np.mean(np.abs(np.mean(samples, axis=1))))
         summary = MonteCarloSummary(
             sites=self.sites,
@@ -313,6 +354,13 @@ class MonteCarloOperatorNetwork:
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
+            fine_structure_proxy=fine_structure_proxy,
+            electron_gap=electron_gap,
+            proton_gap=proton_gap,
+            proton_electron_mass_ratio_proxy=mass_ratio_proxy,
+            effective_light_cone_speed=light_cone_speed,
+            light_cone_fit_r2=light_cone_fit_r2,
+            light_cone_leakage=light_cone_leakage,
         )
         return MonteCarloArtifacts(
             summary=summary,
@@ -325,6 +373,9 @@ class MonteCarloOperatorNetwork:
             return_probabilities=returns,
             return_fit=fitted,
             edge_distances=edge_distances,
+            signal_times=signal_times,
+            signal_frontier=signal_frontier,
+            signal_frontier_fit=signal_fit,
         )
 
     def _progress(self, current: int, total: int, stage: str) -> None:
@@ -665,10 +716,28 @@ class SU3TensorNetworkMonteCarlo:
         edge_weights = self._edge_correlations(samples, edge_i, edge_j, couplings)
         times, returns, fitted, spectral_dimension, spectral_std, fit_error = self._estimate_spectral_dimension(edge_i, edge_j, edge_weights)
         edge_distances, gravity_exponent, gravity_r2, gravity_mae = self._fit_inverse_square_gravity(positions, edge_i, edge_j, edge_weights)
+        signal_times, signal_frontier, signal_fit, light_cone_speed, light_cone_fit_r2, light_cone_leakage = estimate_light_cone_diagnostics(
+            sites=self.sites,
+            positions=positions,
+            edge_i=edge_i,
+            edge_j=edge_j,
+            edge_weights=edge_weights,
+            max_walk_steps=self.max_walk_steps,
+            source_count=self.walker_count,
+            xp=np,
+        )
         theta_order, matter_weight, antimatter_weight, asymmetry, wilson_loop = self._estimate_su3_sector_observables(samples, link_phases, edge_i, edge_j)
         color_entropy = self._mean_color_entropy(marginals)
         mean_color_imbalance = self._mean_color_imbalance(samples)
         mean_link_trace = float(np.mean(np.abs(np.mean(link_phases, axis=1)))) if len(link_phases) > 0 else 1.0
+        fine_structure_proxy, electron_gap, proton_gap, mass_ratio_proxy = estimate_su3_emergent_constants(
+            kernels=kernels,
+            mean_link_trace=mean_link_trace,
+            wilson_loop=wilson_loop,
+            theta_order=theta_order,
+            spectral_dimension=spectral_dimension,
+            tensor_residual=tensor_residual,
+        )
         summary = MonteCarloSummary(
             sites=self.sites,
             seed=self.seed,
@@ -696,6 +765,13 @@ class SU3TensorNetworkMonteCarlo:
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
+            fine_structure_proxy=fine_structure_proxy,
+            electron_gap=electron_gap,
+            proton_gap=proton_gap,
+            proton_electron_mass_ratio_proxy=mass_ratio_proxy,
+            effective_light_cone_speed=light_cone_speed,
+            light_cone_fit_r2=light_cone_fit_r2,
+            light_cone_leakage=light_cone_leakage,
         )
         features = marginals.reshape(self.sites, self.color_count)
         return MonteCarloArtifacts(
@@ -709,6 +785,9 @@ class SU3TensorNetworkMonteCarlo:
             return_probabilities=returns,
             return_fit=fitted,
             edge_distances=edge_distances,
+            signal_times=signal_times,
+            signal_frontier=signal_frontier,
+            signal_frontier_fit=signal_fit,
         )
 
     def _progress(self, current: int, total: int, stage: str) -> None:
@@ -1008,6 +1087,129 @@ class SU3TensorNetworkMonteCarlo:
         return float(np.mean(np.max(fractions, axis=1) - 1.0 / self.color_count))
 
 
+def estimate_scalar_emergent_constants(
+    mean_link_trace: float,
+    theta_order: float,
+    spectral_dimension: float,
+    gravity_r2: float,
+    gravity_mae: float,
+    mean_return_error: float,
+) -> tuple[float, float, float, float]:
+    electron_gap = float(np.clip(mean_return_error + 0.25 * max(0.0, 1.0 - gravity_r2), 1e-6, None))
+    proton_gap = float(np.clip(electron_gap * (1.0 + theta_order + max(gravity_mae, 0.0)), 1e-6, None))
+    alpha_eff = float(
+        np.clip(
+            (mean_link_trace**2) * theta_order * max(gravity_r2, 1e-6)
+            / (4.0 * np.pi * max(spectral_dimension, 1e-6) * (1.0 + mean_return_error + gravity_mae)),
+            0.0,
+            None,
+        )
+    )
+    mass_ratio = float(proton_gap / max(electron_gap, 1e-12))
+    return alpha_eff, electron_gap, proton_gap, mass_ratio
+
+
+def estimate_su3_emergent_constants(
+    kernels: np.ndarray,
+    mean_link_trace: float,
+    wilson_loop: complex,
+    theta_order: float,
+    spectral_dimension: float,
+    tensor_residual: float,
+) -> tuple[float, float, float, float]:
+    if len(kernels) == 0:
+        return 0.0, 0.0, 0.0, 0.0
+    average_kernel = np.mean(kernels, axis=0)
+    symmetric_kernel = 0.5 * (average_kernel + average_kernel.T)
+    eigenvalues = np.sort(np.abs(np.linalg.eigvalsh(symmetric_kernel)))[::-1]
+    singlet_transfer = max(float(eigenvalues[0]), 1e-12)
+    charged_transfer = max(float(eigenvalues[1]) if len(eigenvalues) > 1 else singlet_transfer, 1e-12)
+    baryon_transfer = max(float(np.abs(np.linalg.det(average_kernel)) ** (1.0 / 3.0)), 1e-12)
+    electron_gap = float(np.clip(-np.log(charged_transfer / singlet_transfer + 1e-12), 1e-6, None))
+    proton_gap = float(np.clip(-np.log(baryon_transfer / singlet_transfer + 1e-12), 1e-6, None))
+    wilson_strength = max(abs(float(np.real(wilson_loop))), 1e-6)
+    alpha_eff = float(
+        np.clip(
+            (mean_link_trace**2) * wilson_strength * theta_order * electron_gap
+            / (4.0 * np.pi * max(spectral_dimension, 1e-6) * (1.0 + tensor_residual)),
+            0.0,
+            None,
+        )
+    )
+    mass_ratio = float(proton_gap / max(electron_gap, 1e-12))
+    return alpha_eff, electron_gap, proton_gap, mass_ratio
+
+
+def estimate_light_cone_diagnostics(
+    sites: int,
+    positions: np.ndarray,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+    max_walk_steps: int,
+    source_count: int,
+    xp: object,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float]:
+    transition = xp.zeros((sites, sites), dtype=xp.float32)
+    edge_i_xp = xp.asarray(edge_i)
+    edge_j_xp = xp.asarray(edge_j)
+    edge_w_xp = xp.asarray(edge_weights, dtype=xp.float32)
+    transition[edge_i_xp, edge_j_xp] = edge_w_xp
+    transition[edge_j_xp, edge_i_xp] = edge_w_xp
+    row_sum = xp.sum(transition, axis=1, keepdims=True)
+    isolated = row_sum[:, 0] <= 1e-12
+    transition = xp.divide(transition, xp.maximum(row_sum, 1e-12), out=transition)
+    if bool(to_numpy(xp.any(isolated))):
+        isolated_idx = xp.where(isolated)[0]
+        transition[isolated_idx, isolated_idx] = 1.0
+
+    source_total = min(max(1, source_count), sites)
+    starts = np.linspace(0, sites - 1, num=source_total, dtype=np.int32)
+    starts_xp = xp.asarray(starts)
+    distributions = xp.zeros((source_total, sites), dtype=xp.float32)
+    distributions[xp.arange(source_total), starts_xp] = 1.0
+
+    delta = np.abs(positions[starts][:, None, :] - positions[None, :, :])
+    wrapped = np.minimum(delta, 1.0 - delta)
+    source_distances = np.sqrt(np.sum(wrapped**2, axis=-1)).astype(np.float32)
+    source_distances_xp = xp.asarray(source_distances, dtype=xp.float32)
+    shell = max(float(np.median(edge_weights)), 1e-3)
+
+    times = np.arange(1, max_walk_steps + 1, dtype=float)
+    frontier: list[float] = []
+    leakage: list[float] = []
+    for step in range(1, max_walk_steps + 1):
+        distributions = distributions @ transition
+        mean_radius = xp.sum(distributions * source_distances_xp, axis=1)
+        frontier.append(float(to_numpy(xp.mean(mean_radius))))
+        threshold = xp.asarray(step * shell, dtype=xp.float32)
+        outside_mask = source_distances_xp > threshold
+        outside_mass = xp.sum(distributions * outside_mask, axis=1)
+        leakage.append(float(to_numpy(xp.mean(outside_mass))))
+
+    frontier_array = np.asarray(frontier, dtype=float)
+    fit_slice = slice(0, len(times))
+    slope, intercept = np.polyfit(times[fit_slice], frontier_array[fit_slice], deg=1)
+    fitted = intercept + slope * times
+    residual = frontier_array - fitted
+    variance = float(np.sum((frontier_array - np.mean(frontier_array)) ** 2)) + 1e-12
+    fit_r2 = float(1.0 - np.sum(residual**2) / variance)
+    leakage_array = np.asarray(leakage, dtype=float)
+    return times, frontier_array, fitted, float(max(slope, 0.0)), fit_r2, float(np.mean(leakage_array))
+
+
+def extrapolate_inverse_size_limit(sizes: list[int], values: list[float]) -> float | None:
+    if len(sizes) == 0 or len(values) == 0 or len(sizes) != len(values):
+        return None
+    if len(values) == 1:
+        return float(values[0])
+    inverse_size = 1.0 / np.asarray(sizes, dtype=float)
+    observed = np.asarray(values, dtype=float)
+    slope, intercept = np.polyfit(inverse_size, observed, deg=1)
+    _ = slope
+    return float(intercept)
+
+
 def run_scaling_sweep(
     sizes: list[int],
     seed: int,
@@ -1056,16 +1258,29 @@ def run_scaling_sweep(
                 gravity_power_exponent=summary.gravity_power_exponent,
                 gravity_inverse_square_r2=summary.gravity_inverse_square_r2,
                 gravity_inverse_square_mae=summary.gravity_inverse_square_mae,
+                fine_structure_proxy=summary.fine_structure_proxy,
+                electron_gap=summary.electron_gap,
+                proton_gap=summary.proton_gap,
+                proton_electron_mass_ratio_proxy=summary.proton_electron_mass_ratio_proxy,
+                effective_light_cone_speed=summary.effective_light_cone_speed,
+                light_cone_fit_r2=summary.light_cone_fit_r2,
+                light_cone_leakage=summary.light_cone_leakage,
                 samples_collected=summary.samples_collected,
                 seed=summary.seed,
             )
         )
+    asymptotic_alpha = extrapolate_inverse_size_limit(sizes, [point.fine_structure_proxy for point in points])
+    asymptotic_mass_ratio = extrapolate_inverse_size_limit(sizes, [point.proton_electron_mass_ratio_proxy for point in points])
+    asymptotic_light_cone_speed = extrapolate_inverse_size_limit(sizes, [point.effective_light_cone_speed for point in points])
     result = ScalingSweepResult(
         mode="monte-carlo",
         backend=artifacts[0].summary.backend if artifacts else config.backend,
         gauge_group=config.gauge_group,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
+        asymptotic_fine_structure_proxy=asymptotic_alpha,
+        asymptotic_proton_electron_mass_ratio_proxy=asymptotic_mass_ratio,
+        asymptotic_light_cone_speed=asymptotic_light_cone_speed,
         points=points,
     )
     return result, artifacts
@@ -1079,6 +1294,9 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         f"gauge group: {result.gauge_group}",
         f"tensor bond dim: {result.tensor_bond_dim}",
         f"degree: {result.degree}",
+        f"alpha_eff(N->inf): {result.asymptotic_fine_structure_proxy:.8f}" if result.asymptotic_fine_structure_proxy is not None else "alpha_eff(N->inf): n/a",
+        f"m_p/m_e(N->inf): {result.asymptotic_proton_electron_mass_ratio_proxy:.6f}" if result.asymptotic_proton_electron_mass_ratio_proxy is not None else "m_p/m_e(N->inf): n/a",
+        f"c_eff(N->inf): {result.asymptotic_light_cone_speed:.6f}" if result.asymptotic_light_cone_speed is not None else "c_eff(N->inf): n/a",
         "sites | spectral dimension | std | return fit error | |m| | samples | seed",
     ]
     for point in result.points:
@@ -1089,6 +1307,8 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         lines.append(
             f"      gauge={point.gauge_group} theta={point.theta_order:.5f} asym={point.matter_antimatter_asymmetry:.5f} "
             f"entropy={point.color_entropy:.5f} tn_res={point.tensor_residual:.5f} "
+            f"alpha_eff={point.fine_structure_proxy:.8f} m_e={point.electron_gap:.6f} m_p={point.proton_gap:.6f} m_p/m_e={point.proton_electron_mass_ratio_proxy:.6f} "
+            f"c_eff={point.effective_light_cone_speed:.6f} cone_R2={point.light_cone_fit_r2:.5f} cone_leak={point.light_cone_leakage:.5f} "
             f"gravity p={point.gravity_power_exponent:.3f} R^2={point.gravity_inverse_square_r2:.5f} "
             f"mae={point.gravity_inverse_square_mae:.5f}"
         )
@@ -1187,6 +1407,32 @@ def save_scaling_visualizations(
             (
                 f"d_s = {artifact.summary.spectral_dimension:.3f}\n"
                 f"std = {artifact.summary.spectral_dimension_std:.3f}"
+            ),
+            transform=axis.transAxes,
+            va="top",
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "#bbbbbb"},
+        )
+        figure.tight_layout()
+        figure.savefig(path, dpi=180)
+        plt.close(figure)
+        paths.append(path)
+
+        path = output_dir / f"{prefix}_light_cone_{artifact.summary.sites}.png"
+        figure, axis = plt.subplots(figsize=(7.0, 4.8))
+        axis.plot(artifact.signal_times, artifact.signal_frontier, "o", color="#005f73", label="frontier radius")
+        axis.plot(artifact.signal_times, artifact.signal_frontier_fit, "-", color="#bb3e03", linewidth=2.0, label="linear cone fit")
+        axis.set_title(f"Effective Light Cone (N={artifact.summary.sites})")
+        axis.set_xlabel("Transfer time")
+        axis.set_ylabel("Mean propagation radius")
+        axis.grid(True, alpha=0.25)
+        axis.legend()
+        axis.text(
+            0.05,
+            0.95,
+            (
+                f"c_eff = {artifact.summary.effective_light_cone_speed:.4f}\n"
+                f"R^2 = {artifact.summary.light_cone_fit_r2:.4f}\n"
+                f"leak = {artifact.summary.light_cone_leakage:.4f}"
             ),
             transform=axis.transAxes,
             va="top",

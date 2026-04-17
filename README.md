@@ -147,6 +147,8 @@ In Monte Carlo mode, the program instead reports:
 - error bars from the local slope dispersion of the return-probability fit
 - scaling diagnostics across multiple system sizes
 - for `SU(3)`, color-entropy and tensor-truncation diagnostics from the tensor-network surrogate
+- emergent coupling and mass-sector proxies `alpha_eff` and `m_p/m_e`, plus an `N -> infinity` extrapolation during size sweeps
+- an effective light-cone diagnostic `c_eff`, with linear-front fit quality and out-of-cone leakage
 
 If `--plot-dir` is provided, the program also writes:
 
@@ -179,6 +181,20 @@ This is a tensor-network-assisted Monte Carlo toy model, not a full non-Abelian
 tensor-network simulation. It is meant to probe scaling behavior at sizes such as
 `N=1024` while preserving some color-sector structure.
 
+For `SU(3)` sweeps, the Monte Carlo report now derives two asymptotic observables
+from the sampled transfer sectors instead of taking them as manual inputs:
+
+- `alpha_eff`: an effective fine-structure-like coupling built from the charged transfer gap, Wilson-loop strength, and emergent spectral geometry
+- `m_p/m_e`: a proton/electron-like mass-ratio proxy built from singlet versus charged transfer gaps
+
+These are model-dependent emergent proxies. The current code does not claim that
+the toy dynamics reproduces the physical values $1/137$ or $1836$.
+
+The same caution applies to time and relativity: `c_eff` is only a bounded-speed
+propagation diagnostic extracted from transfer-matrix spreading on the emergent
+graph. It is a necessary consistency check for causal emergence, not a proof of
+Lorentz invariance, relativistic kinematics, or the Einstein equations.
+
 ## Exact Sparse Mode
 
 The exact mode is designed for approximately `N ~= 12-16` depending on available
@@ -194,6 +210,11 @@ RAM and how many low-energy eigenpairs you request with `--eig-count`.
 The reported diagnostics now include a symmetry score from number-operator
 commutators, near-degenerate generation groups, mass-gap ratios, mean normalized
 link trace, and a Wilson-loop proxy around the ring.
+
+The exact report also classifies the lowest excitations into coarse channel labels
+based on charge, color balance, and spatial localization. These labels are meant
+to organize the emergent spectrum into consistent sectors; they are not claims of
+direct identification with Standard Model particles.
 
 The exact engine no longer collapses each gauge link to `Tr(U_ij)`. Instead, it
 propagates explicit color channels and solves the low-energy spectrum block by
