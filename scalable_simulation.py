@@ -4,8 +4,54 @@ from dataclasses import asdict, dataclass
 import json
 from math import pi
 from pathlib import Path
+import sys
+import time
 
 import numpy as np
+
+
+class LiveProgressBar:
+    def __init__(self, enabled: bool = True, width: int = 28, prefix: str = "") -> None:
+        self.enabled = enabled
+        self.width = width
+        self.prefix = prefix.strip()
+        self._line_length = 0
+        self._start_time = time.perf_counter()
+
+    def update(self, current: int, total: int, label: str) -> None:
+        if not self.enabled:
+            return
+        safe_total = max(total, 1)
+        clamped = min(max(current, 0), safe_total)
+        fraction = clamped / safe_total
+        filled = int(self.width * fraction)
+        bar = "#" * filled + "-" * (self.width - filled)
+        elapsed = time.perf_counter() - self._start_time
+        title = f"{self.prefix} {label}".strip()
+        line = f"\r{title} [{bar}] {clamped:>4}/{safe_total:<4} {fraction:6.1%} {elapsed:6.1f}s"
+        padding = " " * max(0, self._line_length - len(line))
+        print(line + padding, end="", file=sys.stderr, flush=True)
+        self._line_length = len(line)
+
+    def finish(self, label: str = "") -> None:
+        if not self.enabled:
+            return
+        elapsed = time.perf_counter() - self._start_time
+        title = f"{self.prefix} {label}".strip()
+        line = f"\r{title} [completed] {elapsed:6.1f}s"
+        padding = " " * max(0, self._line_length - len(line))
+        print(line + padding, file=sys.stderr, flush=True)
+        self._line_length = 0
+
+    def abort(self, label: str = "interrupted") -> None:
+        if not self.enabled:
+            return
+        elapsed = time.perf_counter() - self._start_time
+        title = f"{self.prefix} {label}".strip()
+        line = f"\r{title} [stopped]   {elapsed:6.1f}s"
+        padding = " " * max(0, self._line_length - len(line))
+        print(line + padding, file=sys.stderr, flush=True)
+        self._line_length = 0
 
 
 @dataclass
@@ -80,6 +126,7 @@ class MonteCarloOperatorNetwork:
         sample_interval: int = 6,
         walker_count: int = 512,
         max_walk_steps: int = 24,
+        progress_bar: LiveProgressBar | None = None,
     ) -> None:
         if sites < 16:
             raise ValueError("Monte Carlo mode is intended for at least 16 sites")
@@ -97,13 +144,18 @@ class MonteCarloOperatorNetwork:
         self.sample_interval = sample_interval
         self.walker_count = walker_count
         self.max_walk_steps = max_walk_steps
+        self.progress_bar = progress_bar
         self.rng = np.random.default_rng(seed)
 
     def analyze(self) -> MonteCarloArtifacts:
+        self._progress(0, 4, "build locality")
         features, positions, edge_i, edge_j, couplings, local_fields = self._build_sparse_algebraic_locality()
+        self._progress(1, 4, "build triads")
         triads = self._build_sparse_triads(edge_i, edge_j)
+        self._progress(2, 4, "monte carlo")
         samples, energies = self._sample_spin_configurations(edge_i, edge_j, couplings, local_fields, triads)
         edge_weights = self._edge_covariances(samples, edge_i, edge_j, couplings)
+        self._progress(3, 4, "diffusion")
         times, returns, fitted, spectral_dimension, spectral_std, fit_error = self._estimate_spectral_dimension(
             edge_i,
             edge_j,
@@ -134,6 +186,11 @@ class MonteCarloOperatorNetwork:
             return_probabilities=returns,
             return_fit=fitted,
         )
+
+    def _progress(self, current: int, total: int, stage: str) -> None:
+        if self.progress_bar is None:
+            return
+        self.progress_bar.update(current, total, stage)
 
     def _build_sparse_algebraic_locality(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         dims = self._balanced_lattice_dims(self.sites)
@@ -236,6 +293,7 @@ class MonteCarloOperatorNetwork:
 
         for sweep in range(total_sweeps):
             self._metropolis_sweep(spins, neighbor_index, local_fields, triads, beta)
+            self._progress(sweep + 1, total_sweeps, "monte carlo")
             if sweep >= self.burn_in_sweeps and (sweep - self.burn_in_sweeps) % self.sample_interval == 0:
                 samples.append(spins.copy())
                 energies.append(self._energy(spins, edge_i, edge_j, couplings, local_fields, triads))
@@ -335,6 +393,7 @@ class MonteCarloOperatorNetwork:
                     continue
                 evolved[:, neighbor_nodes] += distributions[:, node : node + 1] * neighbor_probabilities[None, :]
             distributions = evolved
+            self._progress(step, self.max_walk_steps, "diffusion")
             if step in times:
                 returns.append(float(np.mean(distributions[np.arange(source_count), starts])))
 
@@ -365,25 +424,33 @@ def run_scaling_sweep(
     sample_interval: int,
     walker_count: int,
     max_walk_steps: int,
+    show_progress: bool = True,
 ) -> tuple[ScalingSweepResult, list[MonteCarloArtifacts]]:
     points: list[ScalingPoint] = []
     artifacts: list[MonteCarloArtifacts] = []
     for offset, size in enumerate(sizes):
-        simulation = MonteCarloOperatorNetwork(
-            sites=size,
-            seed=seed + 37 * offset,
-            degree=degree,
-            coupling_scale=coupling_scale,
-            field_scale=field_scale,
-            chiral_scale=chiral_scale,
-            temperature=temperature,
-            burn_in_sweeps=burn_in_sweeps,
-            measurement_sweeps=measurement_sweeps,
-            sample_interval=sample_interval,
-            walker_count=walker_count,
-            max_walk_steps=max_walk_steps,
-        )
-        artifact = simulation.analyze()
+        progress_bar = LiveProgressBar(enabled=show_progress, prefix=f"[{offset + 1}/{len(sizes)}] N={size}")
+        try:
+            simulation = MonteCarloOperatorNetwork(
+                sites=size,
+                seed=seed + 37 * offset,
+                degree=degree,
+                coupling_scale=coupling_scale,
+                field_scale=field_scale,
+                chiral_scale=chiral_scale,
+                temperature=temperature,
+                burn_in_sweeps=burn_in_sweeps,
+                measurement_sweeps=measurement_sweeps,
+                sample_interval=sample_interval,
+                walker_count=walker_count,
+                max_walk_steps=max_walk_steps,
+                progress_bar=progress_bar,
+            )
+            artifact = simulation.analyze()
+            progress_bar.finish()
+        except KeyboardInterrupt:
+            progress_bar.abort()
+            raise
         artifacts.append(artifact)
         summary = artifact.summary
         points.append(

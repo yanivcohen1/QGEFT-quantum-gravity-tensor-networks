@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from math import isclose
 from pathlib import Path
+import sys
 
 from emergent_simulation import (
     OperatorNetworkSimulation,
@@ -39,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--walker-count", type=int, default=512, help="Number of random walkers for spectral-dimension estimation.")
     parser.add_argument("--max-walk-steps", type=int, default=24, help="Maximum random-walk time for spectral-dimension estimation.")
     parser.add_argument("--size-scan", type=str, default="", help="Comma-separated system sizes for a Monte Carlo scaling sweep, for example 64,128,256,512.")
+    parser.add_argument("--no-progress", action="store_true", help="Disable the live terminal progress bar for long Monte Carlo runs.")
     return parser
 
 
@@ -68,6 +70,7 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         sample_interval=args.sample_interval,
         walker_count=args.walker_count,
         max_walk_steps=args.max_walk_steps,
+        show_progress=not args.no_progress,
     )
     print(render_scaling_report(sweep))
     if args.json_out is not None:
@@ -133,4 +136,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt as exc:
+        print("\nSimulation stopped by user (Ctrl+C).", file=sys.stderr, flush=True)
+        raise SystemExit(130) from exc
