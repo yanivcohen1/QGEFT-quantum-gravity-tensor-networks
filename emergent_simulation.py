@@ -49,6 +49,12 @@ class EmergentSummary:
     solved_sector_fillings: list[list[int]]
     excitation_count: int
     excitation_channels: list[dict[str, object]]
+    yukawa_scale: float
+    domain_wall_height: float
+    domain_wall_width: float
+    hierarchy_ratio: float | None
+    hierarchy_numerator: str | None
+    hierarchy_denominator: str | None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -87,10 +93,18 @@ class ExcitationChannel:
 
 
 @dataclass(frozen=True)
+class ExactMassConfig:
+    yukawa_scale: float = 0.0
+    domain_wall_height: float = 0.0
+    domain_wall_width: float = 0.18
+
+
+@dataclass(frozen=True)
 class SectorBasis:
     color_counts: tuple[int, ...]
     basis_states: tuple[int, ...]
     occupancy_diag: np.ndarray
+    color_occupancy_diag: np.ndarray
     charge_diag: np.ndarray
     state_index: dict[int, int]
 
@@ -126,6 +140,7 @@ class OperatorNetworkSimulation:
         eig_count: int = 10,
         filling: int | None = None,
         color_filling: tuple[int, ...] | None = None,
+        mass_config: ExactMassConfig | None = None,
     ) -> None:
         if sites < 4:
             raise ValueError("sites must be at least 4")
@@ -139,6 +154,10 @@ class OperatorNetworkSimulation:
         self.coupling_scale = coupling_scale
         self.field_scale = field_scale
         self.chiral_scale = chiral_scale
+        self.mass_config = mass_config or ExactMassConfig()
+        self.yukawa_scale = self.mass_config.yukawa_scale
+        self.domain_wall_height = self.mass_config.domain_wall_height
+        self.domain_wall_width = self.mass_config.domain_wall_width
         self.temperature = temperature
         self.rg_steps = max(rg_steps, 1)
         self.gauge_group = normalized_group
@@ -188,6 +207,7 @@ class OperatorNetworkSimulation:
         generations = detect_generations(energies)
         mass_gaps, mass_ratios = mass_spectrum(energies)
         excitation_channels = classify_excitation_channels(low_states)
+        hierarchy_ratio, hierarchy_numerator, hierarchy_denominator = summarize_hierarchy_proxy(excitation_channels)
 
         source = int(np.argmax(occupancies))
         perturbed_results = [self._solve_sector(sector, links, link_phases, perturbation_site=source) for sector in sector_bases]
@@ -245,6 +265,12 @@ class OperatorNetworkSimulation:
             solved_sector_fillings=[list(state.color_counts) for state in low_states],
             excitation_count=len(excitation_channels),
             excitation_channels=[asdict(channel) for channel in excitation_channels],
+            yukawa_scale=self.yukawa_scale,
+            domain_wall_height=self.domain_wall_height,
+            domain_wall_width=self.domain_wall_width,
+            hierarchy_ratio=hierarchy_ratio,
+            hierarchy_numerator=hierarchy_numerator,
+            hierarchy_denominator=hierarchy_denominator,
         )
         return EmergentArtifacts(
             summary=summary,
@@ -287,6 +313,9 @@ class OperatorNetworkSimulation:
             coupling_scale=self.coupling_scale,
             field_scale=self.field_scale,
             interaction_scale=self.chiral_scale,
+            yukawa_scale=self.yukawa_scale,
+            domain_wall_height=self.domain_wall_height,
+            domain_wall_width=self.domain_wall_width,
             perturbation_site=perturbation_site,
         )
         energies, vectors = solve_spectrum(hamiltonian, self.eig_count)
@@ -463,29 +492,35 @@ def enumerate_color_blocks(
 def build_sector_basis(sites: int, color_counts: tuple[int, ...]) -> SectorBasis:
     basis_states: list[int] = []
     occupancy_diag: list[np.ndarray] = []
+    color_occupancy_diag: list[np.ndarray] = []
     charge_diag: list[float] = []
     color_charges = color_charge_weights(len(color_counts))
     choices_per_color = [list(combinations(range(sites), count)) for count in color_counts]
     for selection in product(*choices_per_color):
         state = 0
         occupancy = np.zeros(sites, dtype=np.float32)
+        color_occupancy = np.zeros((len(color_counts), sites), dtype=np.float32)
         charge = 0.0
         for color, sites_for_color in enumerate(selection):
             base = color * sites
             for site in sites_for_color:
                 state |= 1 << (base + site)
                 occupancy[site] += 1.0
+                color_occupancy[color, site] = 1.0
                 charge += color_charges[color]
         basis_states.append(state)
         occupancy_diag.append(occupancy)
+        color_occupancy_diag.append(color_occupancy)
         charge_diag.append(charge)
     index = {state: idx for idx, state in enumerate(basis_states)}
     occupancy_matrix = np.asarray(occupancy_diag, dtype=np.float32).T
+    color_occupancy_tensor = np.asarray(color_occupancy_diag, dtype=np.float32).transpose(1, 2, 0)
     charge_array = np.asarray(charge_diag, dtype=np.float32)
     return SectorBasis(
         color_counts=color_counts,
         basis_states=tuple(basis_states),
         occupancy_diag=occupancy_matrix,
+        color_occupancy_diag=color_occupancy_tensor,
         charge_diag=charge_array,
         state_index=index,
     )
@@ -499,6 +534,37 @@ def color_charge_weights(colors: int) -> np.ndarray:
     return np.array([-1.0, 0.0, 1.0], dtype=np.float32)
 
 
+def build_higgs_domain_wall_background(
+    sites: int,
+    colors: int,
+    field_scale: float,
+    yukawa_scale: float,
+    domain_wall_height: float,
+    domain_wall_width: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    coordinates = np.linspace(-0.5, 0.5, num=sites, endpoint=False, dtype=np.float64)
+    width = max(domain_wall_width, 1e-3)
+    wall_profile = np.tanh(coordinates / width)
+    higgs_profile = np.exp(-(coordinates**2) / (2.0 * width**2))
+    higgs_profile += np.exp(-((np.abs(coordinates) - 0.5) ** 2) / (2.0 * width**2))
+    higgs_profile /= np.max(higgs_profile) + 1e-12
+    site_mass = field_scale * (1.0 + 0.1 * np.cos(2.0 * np.pi * np.arange(sites) / sites))
+    site_mass += 0.35 * domain_wall_height * wall_profile
+
+    color_axis = np.linspace(-1.0, 1.0, num=colors, dtype=np.float64)
+    color_hierarchy = np.exp(domain_wall_height * np.abs(color_axis))
+    charge_axis = np.abs(color_charge_weights(colors).astype(np.float64)) + 1.0
+    yukawa_background = yukawa_scale * (color_hierarchy * charge_axis)[:, None] * higgs_profile[None, :]
+
+    confinement_scale = 0.25 * abs(yukawa_scale) * max(domain_wall_height, 0.0)
+    confinement_background = np.zeros((sites, sites), dtype=np.float64)
+    for site in range(sites):
+        right = (site + 1) % sites
+        confinement_background[site, right] = confinement_scale * 0.5 * (higgs_profile[site] + higgs_profile[right])
+        confinement_background[right, site] = confinement_background[site, right]
+    return site_mass.astype(np.float64), yukawa_background.astype(np.float64), confinement_background.astype(np.float64)
+
+
 def build_sector_hamiltonian(
     sites: int,
     colors: int,
@@ -508,6 +574,9 @@ def build_sector_hamiltonian(
     coupling_scale: float,
     field_scale: float,
     interaction_scale: float,
+    yukawa_scale: float,
+    domain_wall_height: float,
+    domain_wall_width: float,
     perturbation_site: int | None = None,
 ) -> sp.csr_matrix:
     dimension = len(sector.basis_states)
@@ -517,15 +586,32 @@ def build_sector_hamiltonian(
     data: list[complex] = []
     basis_states = sector.basis_states
     occupancy_diag = sector.occupancy_diag
+    color_occupancy_diag = sector.color_occupancy_diag
 
-    site_mass = field_scale * (1.0 + 0.1 * np.cos(2.0 * np.pi * np.arange(sites) / sites))
+    site_mass, yukawa_background, confinement_background = build_higgs_domain_wall_background(
+        sites=sites,
+        colors=colors,
+        field_scale=field_scale,
+        yukawa_scale=yukawa_scale,
+        domain_wall_height=domain_wall_height,
+        domain_wall_width=domain_wall_width,
+    )
     if perturbation_site is not None:
         site_mass = site_mass.copy()
         site_mass[perturbation_site] += 0.03
 
     for state_index, bitstate in enumerate(basis_states):
         occupancy = occupancy_diag[:, state_index]
-        diagonal[state_index] += state_diagonal_energy(occupancy, links, site_mass, interaction_scale)
+        color_occupancy = color_occupancy_diag[:, :, state_index]
+        diagonal[state_index] += state_diagonal_energy(
+            occupancy=occupancy,
+            color_occupancy=color_occupancy,
+            links=links,
+            site_mass=site_mass,
+            interaction_scale=interaction_scale,
+            yukawa_background=yukawa_background,
+            confinement_background=confinement_background,
+        )
         append_state_hoppings(
             rows=rows,
             cols=cols,
@@ -561,13 +647,20 @@ def apply_hop(state: int, source_mode: int, target_mode: int) -> tuple[int, floa
 
 def state_diagonal_energy(
     occupancy: np.ndarray,
+    color_occupancy: np.ndarray,
     links: list[tuple[int, int]],
     site_mass: np.ndarray,
     interaction_scale: float,
+    yukawa_background: np.ndarray,
+    confinement_background: np.ndarray,
 ) -> complex:
     energy = np.dot(site_mass, occupancy)
+    energy += float(np.sum(yukawa_background * color_occupancy))
     for left, right in links:
         energy += interaction_scale * occupancy[left] * occupancy[right]
+        color_overlap = float(np.dot(color_occupancy[:, left], color_occupancy[:, right]))
+        balanced_link = float(np.sum(color_occupancy[:, left]) * np.sum(color_occupancy[:, right]) - color_overlap)
+        energy += confinement_background[left, right] * balanced_link
     return complex(energy)
 
 
@@ -814,6 +907,23 @@ def classify_channel_label(charge: float, color_imbalance: float, localization_i
     return f"{charge_family}-{color_family}-{profile}"
 
 
+def summarize_hierarchy_proxy(channels: list[ExcitationChannel]) -> tuple[float | None, str | None, str | None]:
+    if not channels:
+        return None, None, None
+    charged_like = [channel for channel in channels if "charged" in channel.channel_label and channel.gap > 1e-9]
+    baryonic_like = [
+        channel
+        for channel in channels
+        if channel.sector_label == "neutral/color-balanced" and channel.color_imbalance < 0.15 and channel.gap > 1e-9
+    ]
+    if not charged_like or not baryonic_like:
+        return None, None, None
+    light_charged = min(charged_like, key=lambda channel: channel.gap)
+    heavy_balanced = max(baryonic_like, key=lambda channel: channel.gap)
+    ratio = float(heavy_balanced.gap / max(light_charged.gap, 1e-12))
+    return ratio, heavy_balanced.channel_label, light_charged.channel_label
+
+
 def neighbors(sites: int) -> list[tuple[int, int]]:
     return [(index, (index + 1) % sites) for index in range(sites)]
 
@@ -848,6 +958,9 @@ def render_report(summary: EmergentSummary) -> str:
         f"preferred embedding dimension: {summary.preferred_dimension}",
         f"mean link trace: {summary.mean_link_trace:.6f}",
         f"Wilson loop proxy: {summary.wilson_loop:.6f}",
+        f"yukawa scale: {summary.yukawa_scale:.6f}",
+        f"domain-wall height: {summary.domain_wall_height:.6f}",
+        f"domain-wall width: {summary.domain_wall_width:.6f}",
         f"solved sector fillings: {summary.solved_sector_fillings}",
         f"generation count: {summary.generation_count}",
         f"generation groups: {summary.generations}",
@@ -869,6 +982,11 @@ def render_report(summary: EmergentSummary) -> str:
             f"antimatter weight: {summary.antimatter_weight:.6f}",
             f"matter-antimatter asymmetry: {summary.matter_antimatter_asymmetry:.6f}",
             f"excitation count: {summary.excitation_count}",
+            (
+                f"hierarchy proxy ({summary.hierarchy_numerator}/{summary.hierarchy_denominator}): {summary.hierarchy_ratio:.6f}"
+                if summary.hierarchy_ratio is not None and summary.hierarchy_numerator is not None and summary.hierarchy_denominator is not None
+                else "hierarchy proxy: n/a"
+            ),
         ]
     )
     if summary.excitation_channels:
@@ -896,6 +1014,7 @@ def scan_parameter_regime(
     eig_count: int = 10,
     filling: int | None = None,
     color_filling: tuple[int, ...] | None = None,
+    mass_config: ExactMassConfig | None = None,
 ) -> list[EmergentSummary]:
     results: list[EmergentSummary] = []
     for offset in range(trials):
@@ -911,6 +1030,7 @@ def scan_parameter_regime(
             eig_count=eig_count,
             filling=filling,
             color_filling=color_filling,
+            mass_config=mass_config,
         )
         results.append(simulation.run())
     return sorted(results, key=_score_summary, reverse=True)

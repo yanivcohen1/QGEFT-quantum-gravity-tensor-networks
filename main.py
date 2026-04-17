@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from emergent_simulation import (
+    ExactMassConfig,
     OperatorNetworkSimulation,
     render_report,
     save_visualizations,
@@ -35,6 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--coupling-scale", type=float, default=0.55, help="Scale for pair couplings.")
     parser.add_argument("--field-scale", type=float, default=0.35, help="Scale for local fields.")
     parser.add_argument("--chiral-scale", type=float, default=0.18, help="Scale for chiral terms.")
+    parser.add_argument("--yukawa-scale", type=float, default=0.0, help="Toy Higgs/Yukawa scale for exact mode.")
+    parser.add_argument("--domain-wall-height", type=float, default=0.0, help="Toy domain-wall amplitude for exact mode.")
+    parser.add_argument("--domain-wall-width", type=float, default=0.18, help="Toy domain-wall width for exact mode.")
     parser.add_argument("--rg-steps", type=int, default=5, help="Number of renormalization-style flow steps.")
     parser.add_argument("--json-out", type=Path, default=None, help="Optional path to write JSON summary.")
     parser.add_argument("--scan-seeds", type=int, default=0, help="If > 0, run this many consecutive seeds and rank the emergent regimes.")
@@ -108,6 +112,11 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
 def main() -> None:
     args = build_parser().parse_args()
     color_filling = parse_color_filling(args.color_filling)
+    exact_mass_config = ExactMassConfig(
+        yukawa_scale=args.yukawa_scale,
+        domain_wall_height=args.domain_wall_height,
+        domain_wall_width=args.domain_wall_width,
+    )
     if args.mode == "monte-carlo":
         run_monte_carlo_mode(args)
         return
@@ -126,6 +135,7 @@ def main() -> None:
             eig_count=args.eig_count,
             filling=args.filling,
             color_filling=color_filling,
+            mass_config=exact_mass_config,
         )
         best = results[0]
         print("Top emergent regime across scanned seeds")
@@ -146,6 +156,7 @@ def main() -> None:
                 eig_count=args.eig_count,
                 filling=args.filling,
                 color_filling=color_filling,
+                mass_config=exact_mass_config,
             )
             artifacts = best_simulation.analyze()
             save_visualizations(artifacts, args.plot_dir, prefix=f"seed_{best.seed}")
@@ -163,6 +174,7 @@ def main() -> None:
         eig_count=args.eig_count,
         filling=args.filling,
         color_filling=color_filling,
+        mass_config=exact_mass_config,
     )
     artifacts = simulation.analyze()
     summary = artifacts.summary

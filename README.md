@@ -82,6 +82,12 @@ Pin the exact solver to an explicit per-color block:
 python main.py --mode exact --sites 10 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 8
 ```
 
+Turn on the toy domain-wall Higgs/Yukawa extension in exact mode:
+
+```powershell
+python main.py --mode exact --sites 10 --gauge-group su3 --filling 2 --eig-count 10 --yukawa-scale 0.6 --domain-wall-height 2.2 --domain-wall-width 0.12
+```
+
 Optional:
 
 ```powershell
@@ -215,6 +221,11 @@ The exact report also classifies the lowest excitations into coarse channel labe
 based on charge, color balance, and spatial localization. These labels are meant
 to organize the emergent spectrum into consistent sectors; they are not claims of
 direct identification with Standard Model particles.
+
+An optional toy extension can add a domain-wall profile and Higgs/Yukawa-like
+diagonal background in exact mode. This is intended only as a controllable way to
+test whether a larger mass hierarchy can emerge between charged and color-balanced
+channels. It is not a faithful lattice Standard Model implementation.
 
 The exact engine no longer collapses each gauge link to `Tr(U_ij)`. Instead, it
 propagates explicit color channels and solves the low-energy spectrum block by
