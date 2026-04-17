@@ -2,25 +2,27 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
-from itertools import combinations
-from math import log
+from itertools import combinations, product
+from math import comb, log
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
-
-
-PAULI_X = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex)
-PAULI_Y = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=complex)
-PAULI_Z = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=complex)
-IDENTITY_2 = np.eye(2, dtype=complex)
+import scipy.sparse as sp
+import scipy.sparse.linalg as spla
 
 
 @dataclass
 class EmergentSummary:
     seed: int
     sites: int
+    colors: int
+    total_modes: int
     hilbert_dimension: int
+    projected_dimension: int
+    filling: int
+    color_filling: list[int] | None
+    block_count: int
+    largest_block_dimension: int
     ground_energy: float
     energy_gap: float
     spectral_dimension: float
@@ -35,6 +37,16 @@ class EmergentSummary:
     matter_antimatter_asymmetry: float
     mean_correlation: float
     correlation_length: float
+    gauge_group: str
+    eigensolved: int
+    symmetry_score: float
+    generation_count: int
+    generations: list[list[int]]
+    mass_gaps: list[float]
+    mass_ratios: list[float]
+    mean_link_trace: float
+    wilson_loop: float
+    solved_sector_fillings: list[list[int]]
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -57,6 +69,32 @@ class EmergentArtifacts:
     gravity_profile: GravityProfile
 
 
+@dataclass(frozen=True)
+class SectorBasis:
+    color_counts: tuple[int, ...]
+    basis_states: tuple[int, ...]
+    occupancy_diag: np.ndarray
+    charge_diag: np.ndarray
+    state_index: dict[int, int]
+
+
+@dataclass
+class EigenStateRecord:
+    energy: float
+    color_counts: tuple[int, ...]
+    occupancies: np.ndarray
+    pairs: np.ndarray
+    charge: float
+
+
+@dataclass
+class BlockSolveResult:
+    sector: SectorBasis
+    hamiltonian: sp.csr_matrix
+    symmetry_score: float
+    states: list[EigenStateRecord]
+
+
 class OperatorNetworkSimulation:
     def __init__(
         self,
@@ -67,56 +105,107 @@ class OperatorNetworkSimulation:
         chiral_scale: float = 0.18,
         temperature: float = 0.35,
         rg_steps: int = 5,
+        gauge_group: str = "su2",
+        eig_count: int = 10,
+        filling: int | None = None,
+        color_filling: tuple[int, ...] | None = None,
     ) -> None:
         if sites < 4:
             raise ValueError("sites must be at least 4")
+        normalized_group = gauge_group.lower().strip()
+        if normalized_group not in {"none", "su2", "su3"}:
+            raise ValueError("gauge_group must be one of: none, su2, su3")
+        if eig_count < 2:
+            raise ValueError("eig_count must be at least 2")
         self.sites = sites
         self.seed = seed
         self.coupling_scale = coupling_scale
         self.field_scale = field_scale
         self.chiral_scale = chiral_scale
         self.temperature = temperature
-        self.rg_steps = rg_steps
+        self.rg_steps = max(rg_steps, 1)
+        self.gauge_group = normalized_group
+        self.eig_count = eig_count
+        self.colors = color_dimension(normalized_group)
+        self.total_modes = self.sites * self.colors
+        self.filling = resolve_total_filling(filling, self.sites, self.colors)
+        if self.filling < 0 or self.filling > self.total_modes:
+            raise ValueError("filling must lie between 0 and total_modes")
+        if color_filling is not None:
+            if len(color_filling) != self.colors:
+                raise ValueError("color_filling length must match the number of colors")
+            if any(count < 0 or count > self.sites for count in color_filling):
+                raise ValueError("each color filling must lie between 0 and sites")
+            if sum(color_filling) != self.filling:
+                raise ValueError("sum(color_filling) must equal filling")
+            self.color_filling = tuple(int(count) for count in color_filling)
+        else:
+            self.color_filling = None
         self.rng = np.random.default_rng(seed)
-        self.dimension = 2**sites
-        self._operator_cache: dict[tuple[str, int], np.ndarray] = {}
+        self.dimension = 2**self.total_modes
 
     def run(self) -> EmergentSummary:
         return self.analyze().summary
 
     def analyze(self) -> EmergentArtifacts:
-        couplings, fields, chiral_terms = self._build_algebraic_locality()
-        hamiltonian = self._build_hamiltonian(couplings, fields, chiral_terms)
-        eigenvalues, eigenvectors = np.linalg.eigh(hamiltonian)
-        density = self._thermal_density_matrix(eigenvalues, eigenvectors)
-        z_expectation, connected = self._connected_correlations(density)
+        links = neighbors(self.sites)
+        link_phases = self._build_link_phases(links)
+        sector_bases = self._build_sector_bases()
+        if not sector_bases:
+            raise RuntimeError("no projected basis sectors were generated")
+
+        block_results = [self._solve_sector(sector, links, link_phases) for sector in sector_bases]
+        low_states = select_low_energy_states(block_results, self.eig_count)
+        if not low_states:
+            raise RuntimeError("no eigenstates were found in the projected sectors")
+
+        energies = np.array([state.energy for state in low_states], dtype=float)
+        weights = thermal_weights(energies, self.temperature)
+        occupancies, connected = aggregate_correlations(low_states, weights, self.sites)
         distances = self._effective_distance_matrix(connected)
         embedding_stress = self._embedding_stress(distances)
         preferred_dimension = min(embedding_stress, key=embedding_stress.get)
         coordinates = self._classical_mds(distances, min(3, self.sites - 1))
         spectral_dimension = self._estimate_spectral_dimension(distances)
+        symmetry_score = average_block_symmetry(block_results)
+        generations = detect_generations(energies)
+        mass_gaps, mass_ratios = mass_spectrum(energies)
+
+        source = int(np.argmax(occupancies))
+        perturbed_results = [self._solve_sector(sector, links, link_phases, perturbation_site=source) for sector in sector_bases]
+        perturbed_states = select_low_energy_states(perturbed_results, self.eig_count)
+        perturbed_weights = thermal_weights(np.array([state.energy for state in perturbed_states], dtype=float), self.temperature)
+        perturbed_occupancies, _ = aggregate_correlations(perturbed_states, perturbed_weights, self.sites)
         gravity_profile, gravity_coupling, gravity_r2, gravity_mae = self._fit_effective_gravity(
-            hamiltonian,
             coordinates,
-            z_expectation,
-            density,
+            occupancies,
+            perturbed_occupancies,
+            source,
         )
-        theta_order, matter_weight, antimatter_weight, asymmetry = self._phase_bias(
-            density,
-            chiral_terms,
-        )
+
+        mean_link_trace = float(np.mean(np.abs(np.mean(link_phases, axis=1)))) if len(link_phases) > 0 else 1.0
+        wilson_loop = self._wilson_loop(link_phases)
+        theta_order = abs(float(np.angle(wilson_loop))) / np.pi
+        matter_weight, antimatter_weight, asymmetry = self._matter_asymmetry(low_states, weights, theta_order)
         correlation_scale = self._correlation_length(coordinates, connected)
-        gap = float(np.real(eigenvalues[1] - eigenvalues[0])) if len(eigenvalues) > 1 else 0.0
+        gap = float(np.real(energies[1] - energies[0])) if len(energies) > 1 else 0.0
 
         summary = EmergentSummary(
             seed=self.seed,
             sites=self.sites,
+            colors=self.colors,
+            total_modes=self.total_modes,
             hilbert_dimension=self.dimension,
-            ground_energy=float(np.real(eigenvalues[0])),
+            projected_dimension=int(sum(len(sector.basis_states) for sector in sector_bases)),
+            filling=self.filling,
+            color_filling=list(self.color_filling) if self.color_filling is not None else None,
+            block_count=len(sector_bases),
+            largest_block_dimension=max(len(sector.basis_states) for sector in sector_bases),
+            ground_energy=float(np.real(energies[0])),
             energy_gap=gap,
             spectral_dimension=spectral_dimension,
             preferred_dimension=int(preferred_dimension),
-            embedding_stress={str(k): float(v) for k, v in embedding_stress.items()},
+            embedding_stress={str(key): float(value) for key, value in embedding_stress.items()},
             gravity_coupling=gravity_coupling,
             gravity_r2=gravity_r2,
             gravity_mae=gravity_mae,
@@ -126,6 +215,16 @@ class OperatorNetworkSimulation:
             matter_antimatter_asymmetry=asymmetry,
             mean_correlation=float(np.mean(connected[np.triu_indices(self.sites, k=1)])),
             correlation_length=correlation_scale,
+            gauge_group=self.gauge_group,
+            eigensolved=int(len(energies)),
+            symmetry_score=float(symmetry_score),
+            generation_count=len(generations),
+            generations=generations,
+            mass_gaps=mass_gaps,
+            mass_ratios=mass_ratios,
+            mean_link_trace=mean_link_trace,
+            wilson_loop=float(np.real(wilson_loop)),
+            solved_sector_fillings=[list(state.color_counts) for state in low_states],
         )
         return EmergentArtifacts(
             summary=summary,
@@ -134,102 +233,49 @@ class OperatorNetworkSimulation:
             gravity_profile=gravity_profile,
         )
 
-    def _build_algebraic_locality(self) -> tuple[np.ndarray, np.ndarray, list[tuple[int, int, int, float]]]:
-        couplings = self.rng.normal(0.0, self.coupling_scale, size=(self.sites, self.sites))
-        couplings = 0.5 * (couplings + couplings.T)
-        np.fill_diagonal(couplings, 0.0)
+    def _build_link_phases(self, links: list[tuple[int, int]]) -> np.ndarray:
+        if self.gauge_group == "none":
+            return np.ones((len(links), 1), dtype=np.complex128)
+        if self.gauge_group == "su2":
+            angles = self.rng.normal(0.0, 0.55 / np.sqrt(self.rg_steps), size=len(links))
+            phases = np.stack([np.exp(1.0j * angles), np.exp(-1.0j * angles)], axis=1)
+            return phases.astype(np.complex128)
+        angles = self.rng.normal(0.0, 0.45 / np.sqrt(self.rg_steps), size=(len(links), 2))
+        phases = np.empty((len(links), 3), dtype=np.complex128)
+        phases[:, 0] = np.exp(1.0j * angles[:, 0])
+        phases[:, 1] = np.exp(1.0j * angles[:, 1])
+        phases[:, 2] = np.exp(-1.0j * (angles[:, 0] + angles[:, 1]))
+        return phases
 
-        adjacency = self.rng.uniform(0.0, 1.0, size=(self.sites, self.sites))
-        adjacency = 0.5 * (adjacency + adjacency.T)
-        locality_mask = (adjacency > 0.48).astype(float)
-        locality_mask = np.maximum(locality_mask, np.eye(self.sites))
-        couplings *= locality_mask
-        couplings = self._rg_flow(couplings)
+    def _build_sector_bases(self) -> list[SectorBasis]:
+        sector_counts = enumerate_color_blocks(self.filling, self.colors, self.sites, self.color_filling)
+        return [build_sector_basis(self.sites, counts) for counts in sector_counts]
 
-        fields = self.rng.normal(0.0, self.field_scale, size=self.sites)
-        triplets = list(combinations(range(self.sites), 3))
-        self.rng.shuffle(triplets)
-        selected_triplets = triplets[: max(self.sites, len(triplets) // 4)]
-        chiral_terms: list[tuple[int, int, int, float]] = []
-        for i, j, k in selected_triplets:
-            orientation = np.sign(couplings[i, j] * couplings[j, k] * couplings[i, k])
-            if orientation == 0:
-                orientation = 1.0
-            bias = 0.75 + 0.25 * orientation
-            strength = float(self.chiral_scale * bias * (1.0 + 0.1 * self.rng.normal()))
-            chiral_terms.append((i, j, k, strength))
-        return couplings, fields, chiral_terms
-
-    def _rg_flow(self, couplings: np.ndarray) -> np.ndarray:
-        renormalized = couplings.copy()
-        for _ in range(self.rg_steps):
-            triadic = renormalized @ renormalized
-            triadic -= np.diag(np.diag(triadic))
-            degree = np.sum(np.abs(renormalized), axis=1, keepdims=True)
-            mean_degree = 0.5 * (degree + degree.T)
-            renormalized = np.tanh(0.85 * renormalized + 0.35 * triadic - 0.08 * mean_degree)
-            renormalized = 0.5 * (renormalized + renormalized.T)
-            np.fill_diagonal(renormalized, 0.0)
-        return renormalized
-
-    def _build_hamiltonian(
+    def _solve_sector(
         self,
-        couplings: np.ndarray,
-        fields: np.ndarray,
-        chiral_terms: Iterable[tuple[int, int, int, float]],
-    ) -> np.ndarray:
-        hamiltonian = np.zeros((self.dimension, self.dimension), dtype=complex)
-        for i, j in combinations(range(self.sites), 2):
-            if abs(couplings[i, j]) < 1e-10:
-                continue
-            hamiltonian += couplings[i, j] * self._site_operator("Z", i) @ self._site_operator("Z", j)
-        for i, field in enumerate(fields):
-            hamiltonian += field * self._site_operator("X", i)
-        for i, j, k, strength in chiral_terms:
-            term = self._site_operator("X", i) @ self._site_operator("Y", j) @ self._site_operator("Z", k)
-            hamiltonian += strength * term
-        return 0.5 * (hamiltonian + hamiltonian.conj().T)
-
-    def _site_operator(self, axis: str, site: int) -> np.ndarray:
-        key = (axis, site)
-        if key in self._operator_cache:
-            return self._operator_cache[key]
-        local = {
-            "X": PAULI_X,
-            "Y": PAULI_Y,
-            "Z": PAULI_Z,
-        }[axis]
-        operator = np.array([[1.0]], dtype=complex)
-        for index in range(self.sites):
-            operator = np.kron(operator, local if index == site else IDENTITY_2)
-        self._operator_cache[key] = operator
-        return operator
-
-    def _thermal_density_matrix(self, eigenvalues: np.ndarray, eigenvectors: np.ndarray) -> np.ndarray:
-        shifted = np.real(eigenvalues - np.min(eigenvalues))
-        weights = np.exp(-shifted / max(self.temperature, 1e-9))
-        weights /= np.sum(weights)
-        density = np.zeros((self.dimension, self.dimension), dtype=complex)
-        for index, weight in enumerate(weights):
-            state = eigenvectors[:, index : index + 1]
-            density += weight * (state @ state.conj().T)
-        return density
-
-    def _connected_correlations(self, density: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        z_expectation = np.zeros(self.sites, dtype=float)
-        for i in range(self.sites):
-            z_expectation[i] = float(np.real(np.trace(density @ self._site_operator("Z", i))))
-
-        connected = np.zeros((self.sites, self.sites), dtype=float)
-        for i in range(self.sites):
-            connected[i, i] = 1.0
-            for j in range(i + 1, self.sites):
-                pair = self._site_operator("Z", i) @ self._site_operator("Z", j)
-                raw = float(np.real(np.trace(density @ pair)))
-                value = abs(raw - z_expectation[i] * z_expectation[j])
-                connected[i, j] = value
-                connected[j, i] = value
-        return z_expectation, connected
+        sector: SectorBasis,
+        links: list[tuple[int, int]],
+        link_phases: np.ndarray,
+        perturbation_site: int | None = None,
+    ) -> BlockSolveResult:
+        hamiltonian = build_sector_hamiltonian(
+            sites=self.sites,
+            colors=self.colors,
+            links=links,
+            link_phases=link_phases,
+            sector=sector,
+            coupling_scale=self.coupling_scale,
+            field_scale=self.field_scale,
+            interaction_scale=self.chiral_scale,
+            perturbation_site=perturbation_site,
+        )
+        energies, vectors = solve_spectrum(hamiltonian, self.eig_count)
+        symmetry = detect_symmetry(hamiltonian, sector.occupancy_diag)
+        states = [
+            build_eigenstate_record(sector, energies[index], vectors[:, index], self.sites)
+            for index in range(vectors.shape[1])
+        ]
+        return BlockSolveResult(sector=sector, hamiltonian=hamiltonian, symmetry_score=symmetry, states=states)
 
     def _effective_distance_matrix(self, connected: np.ndarray) -> np.ndarray:
         upper = connected[np.triu_indices(self.sites, k=1)]
@@ -279,26 +325,13 @@ class OperatorNetworkSimulation:
 
     def _fit_effective_gravity(
         self,
-        hamiltonian: np.ndarray,
         coordinates: np.ndarray,
-        z_expectation: np.ndarray,
-        density: np.ndarray,
+        occupancies: np.ndarray,
+        perturbed_occupancies: np.ndarray,
+        source: int,
     ) -> tuple[GravityProfile, float, float, float]:
-        mass = np.abs(z_expectation)
-        source = int(np.argmax(mass))
-        epsilon = 0.025
-        perturbation = epsilon * self._site_operator("Z", source)
-        eigenvalues, eigenvectors = np.linalg.eigh(0.5 * (hamiltonian + perturbation + (hamiltonian + perturbation).conj().T))
-        perturbed_density = self._thermal_density_matrix(eigenvalues, eigenvectors)
-        baseline = np.array(
-            [float(np.real(np.trace(density @ self._site_operator("Z", site)))) for site in range(self.sites)],
-            dtype=float,
-        )
-        perturbed = np.array(
-            [float(np.real(np.trace(perturbed_density @ self._site_operator("Z", site)))) for site in range(self.sites)],
-            dtype=float,
-        )
-        response = np.abs(perturbed - baseline) / epsilon
+        epsilon = 0.03
+        response = np.abs(perturbed_occupancies - occupancies) / epsilon
         embedded_distances = self._pairwise_distances(coordinates)
         radius = np.array([embedded_distances[source, site] for site in range(self.sites) if site != source], dtype=float)
         observed = np.array([response[site] for site in range(self.sites) if site != source], dtype=float)
@@ -309,7 +342,7 @@ class OperatorNetworkSimulation:
         best_predicted = np.zeros_like(observed)
         for xi in (0.6, 1.0, 1.6, 2.5, 4.0, 6.0):
             predictor = np.exp(-radius / xi) / np.clip(radius, 1e-3, None)
-            predictor *= max(mass[source], 1e-6)
+            predictor *= max(occupancies[source], 1e-6)
             coupling = float(np.max(observed) / (np.max(predictor) + 1e-12))
             predicted = coupling * predictor
             observed_norm = observed / (np.max(observed) + 1e-12)
@@ -332,45 +365,37 @@ class OperatorNetworkSimulation:
         )
         return profile, best_coupling, best_r2, best_mae
 
-    def _phase_bias(
+    def _matter_asymmetry(
         self,
-        density: np.ndarray,
-        chiral_terms: Iterable[tuple[int, int, int, float]],
-    ) -> tuple[float, float, float, float]:
-        theta_values: list[float] = []
-        for i, j, k, strength in chiral_terms:
-            operator = self._site_operator("X", i) @ self._site_operator("Y", j) @ self._site_operator("Z", k)
-            theta_values.append(float(np.real(np.trace(density @ operator))) * np.sign(strength))
-        theta_order = abs(float(np.mean(theta_values)) if theta_values else 0.0)
-
-        diagonal = np.real(np.diag(density))
-        charges = np.array([self._basis_charge(index) for index in range(self.dimension)], dtype=float)
-        reweighted = diagonal * np.exp(0.35 * theta_order * charges)
+        states: list[EigenStateRecord],
+        weights: np.ndarray,
+        theta_order: float,
+    ) -> tuple[float, float, float]:
+        charges = np.array([state.charge for state in states], dtype=float)
+        reweighted = weights * np.exp(0.35 * theta_order * charges / max(self.colors, 1))
         matter_weight = float(np.sum(reweighted[charges > 0]))
         antimatter_weight = float(np.sum(reweighted[charges < 0]))
         total = matter_weight + antimatter_weight + 1e-12
         asymmetry = float((matter_weight - antimatter_weight) / total)
-        return theta_order, matter_weight, antimatter_weight, asymmetry
+        return matter_weight, antimatter_weight, asymmetry
 
-    def _basis_charge(self, basis_index: int) -> int:
-        charge = 0
-        for site in range(self.sites):
-            bit = (basis_index >> (self.sites - site - 1)) & 1
-            charge += 1 if bit == 0 else -1
-        return charge
+    def _wilson_loop(self, link_phases: np.ndarray) -> complex:
+        per_color = np.prod(link_phases, axis=0)
+        return np.mean(per_color)
 
     def _correlation_length(self, coordinates: np.ndarray, connected: np.ndarray) -> float:
         distances = self._pairwise_distances(coordinates)
         radial = []
         logs = []
-        for i, j in combinations(range(self.sites), 2):
-            if connected[i, j] <= 1e-9:
-                continue
-            radial.append(distances[i, j])
-            logs.append(np.log(connected[i, j]))
+        for i in range(self.sites):
+            for j in range(i + 1, self.sites):
+                if connected[i, j] <= 1e-9:
+                    continue
+                radial.append(distances[i, j])
+                logs.append(np.log(connected[i, j]))
         if len(radial) < 2:
             return 0.0
-        slope, _ = np.polyfit(np.array(radial), np.array(logs), deg=1)
+        slope, _ = np.polyfit(np.asarray(radial), np.asarray(logs), deg=1)
         if slope >= 0.0:
             return float("inf")
         return float(-1.0 / slope)
@@ -381,17 +406,361 @@ class OperatorNetworkSimulation:
         return np.sqrt(np.sum(delta**2, axis=-1))
 
 
+def color_dimension(gauge_group: str) -> int:
+    return {"none": 1, "su2": 2, "su3": 3}[gauge_group]
+
+
+def resolve_total_filling(filling: int | None, sites: int, colors: int) -> int:
+    if filling is not None:
+        return int(filling)
+    return min(sites * colors, max(1, colors))
+
+
+def enumerate_color_blocks(
+    filling: int,
+    colors: int,
+    sites: int,
+    explicit_color_filling: tuple[int, ...] | None,
+) -> list[tuple[int, ...]]:
+    if explicit_color_filling is not None:
+        return [explicit_color_filling]
+    counts: list[tuple[int, ...]] = []
+
+    def recurse(prefix: list[int], remaining_colors: int, remaining_filling: int) -> None:
+        if remaining_colors == 1:
+            if remaining_filling <= sites:
+                counts.append(tuple(prefix + [remaining_filling]))
+            return
+        lower = max(0, remaining_filling - sites * (remaining_colors - 1))
+        upper = min(sites, remaining_filling)
+        for count in range(lower, upper + 1):
+            recurse(prefix + [count], remaining_colors - 1, remaining_filling - count)
+
+    recurse([], colors, filling)
+    return counts
+
+
+def build_sector_basis(sites: int, color_counts: tuple[int, ...]) -> SectorBasis:
+    basis_states: list[int] = []
+    occupancy_diag: list[np.ndarray] = []
+    charge_diag: list[float] = []
+    color_charges = color_charge_weights(len(color_counts))
+    choices_per_color = [list(combinations(range(sites), count)) for count in color_counts]
+    for selection in product(*choices_per_color):
+        state = 0
+        occupancy = np.zeros(sites, dtype=np.float32)
+        charge = 0.0
+        for color, sites_for_color in enumerate(selection):
+            base = color * sites
+            for site in sites_for_color:
+                state |= 1 << (base + site)
+                occupancy[site] += 1.0
+                charge += color_charges[color]
+        basis_states.append(state)
+        occupancy_diag.append(occupancy)
+        charge_diag.append(charge)
+    index = {state: idx for idx, state in enumerate(basis_states)}
+    occupancy_matrix = np.asarray(occupancy_diag, dtype=np.float32).T
+    charge_array = np.asarray(charge_diag, dtype=np.float32)
+    return SectorBasis(
+        color_counts=color_counts,
+        basis_states=tuple(basis_states),
+        occupancy_diag=occupancy_matrix,
+        charge_diag=charge_array,
+        state_index=index,
+    )
+
+
+def color_charge_weights(colors: int) -> np.ndarray:
+    if colors == 1:
+        return np.array([1.0], dtype=np.float32)
+    if colors == 2:
+        return np.array([-1.0, 1.0], dtype=np.float32)
+    return np.array([-1.0, 0.0, 1.0], dtype=np.float32)
+
+
+def build_sector_hamiltonian(
+    sites: int,
+    colors: int,
+    links: list[tuple[int, int]],
+    link_phases: np.ndarray,
+    sector: SectorBasis,
+    coupling_scale: float,
+    field_scale: float,
+    interaction_scale: float,
+    perturbation_site: int | None = None,
+) -> sp.csr_matrix:
+    dimension = len(sector.basis_states)
+    diagonal = np.zeros(dimension, dtype=np.complex128)
+    rows: list[int] = []
+    cols: list[int] = []
+    data: list[complex] = []
+    basis_states = sector.basis_states
+    occupancy_diag = sector.occupancy_diag
+
+    site_mass = field_scale * (1.0 + 0.1 * np.cos(2.0 * np.pi * np.arange(sites) / sites))
+    if perturbation_site is not None:
+        site_mass = site_mass.copy()
+        site_mass[perturbation_site] += 0.03
+
+    for state_index, bitstate in enumerate(basis_states):
+        occupancy = occupancy_diag[:, state_index]
+        diagonal[state_index] += state_diagonal_energy(occupancy, links, site_mass, interaction_scale)
+        append_state_hoppings(
+            rows=rows,
+            cols=cols,
+            data=data,
+            basis_index=state_index,
+            bitstate=bitstate,
+            sites=sites,
+            colors=colors,
+            links=links,
+            link_phases=link_phases,
+            coupling_scale=coupling_scale,
+            state_index_map=sector.state_index,
+        )
+
+    if dimension == 0:
+        return sp.csr_matrix((0, 0), dtype=np.complex128)
+    rows.extend(range(dimension))
+    cols.extend(range(dimension))
+    data.extend(diagonal.tolist())
+    hamiltonian = sp.csr_matrix((data, (rows, cols)), shape=(dimension, dimension), dtype=np.complex128)
+    return 0.5 * (hamiltonian + hamiltonian.getH())
+
+
+def apply_hop(state: int, source_mode: int, target_mode: int) -> tuple[int, float] | None:
+    source_mask = 1 << source_mode
+    target_mask = 1 << target_mode
+    if state & source_mask == 0 or state & target_mask != 0:
+        return None
+    intermediate, annihilation_sign = apply_annihilation(state, source_mode)
+    new_state, creation_sign = apply_creation(intermediate, target_mode)
+    return new_state, annihilation_sign * creation_sign
+
+
+def state_diagonal_energy(
+    occupancy: np.ndarray,
+    links: list[tuple[int, int]],
+    site_mass: np.ndarray,
+    interaction_scale: float,
+) -> complex:
+    energy = np.dot(site_mass, occupancy)
+    for left, right in links:
+        energy += interaction_scale * occupancy[left] * occupancy[right]
+    return complex(energy)
+
+
+def append_state_hoppings(
+    rows: list[int],
+    cols: list[int],
+    data: list[complex],
+    basis_index: int,
+    bitstate: int,
+    sites: int,
+    colors: int,
+    links: list[tuple[int, int]],
+    link_phases: np.ndarray,
+    coupling_scale: float,
+    state_index_map: dict[int, int],
+) -> None:
+    for link_index, (left, right) in enumerate(links):
+        for color in range(colors):
+            phase = link_phases[link_index, color]
+            source_mode = color * sites + right
+            target_mode = color * sites + left
+            append_single_hop(rows, cols, data, basis_index, bitstate, source_mode, target_mode, -coupling_scale * phase, state_index_map)
+            append_single_hop(rows, cols, data, basis_index, bitstate, target_mode, source_mode, -coupling_scale * np.conjugate(phase), state_index_map)
+
+
+def append_single_hop(
+    rows: list[int],
+    cols: list[int],
+    data: list[complex],
+    basis_index: int,
+    bitstate: int,
+    source_mode: int,
+    target_mode: int,
+    amplitude: complex,
+    state_index_map: dict[int, int],
+) -> None:
+    hopped = apply_hop(bitstate, source_mode, target_mode)
+    if hopped is None:
+        return
+    new_state, sign = hopped
+    rows.append(state_index_map[new_state])
+    cols.append(basis_index)
+    data.append(amplitude * sign)
+
+
+def apply_annihilation(state: int, mode: int) -> tuple[int, float]:
+    mask = 1 << mode
+    if state & mask == 0:
+        raise ValueError("cannot annihilate an empty mode")
+    parity = (state & (mask - 1)).bit_count()
+    sign = -1.0 if parity % 2 else 1.0
+    return state ^ mask, sign
+
+
+def apply_creation(state: int, mode: int) -> tuple[int, float]:
+    mask = 1 << mode
+    if state & mask != 0:
+        raise ValueError("cannot create into an occupied mode")
+    parity = (state & (mask - 1)).bit_count()
+    sign = -1.0 if parity % 2 else 1.0
+    return state | mask, sign
+
+
+def solve_spectrum(hamiltonian: sp.csr_matrix, k: int = 10) -> tuple[np.ndarray, np.ndarray]:
+    dimension = hamiltonian.shape[0]
+    if dimension == 0:
+        return np.empty(0, dtype=float), np.empty((0, 0), dtype=np.complex128)
+    if dimension == 1:
+        value = np.real(hamiltonian[0, 0])
+        return np.array([value], dtype=float), np.array([[1.0]], dtype=np.complex128)
+    target = min(max(k, 2), dimension - 1)
+    if dimension <= 128 or target >= dimension - 1:
+        dense = hamiltonian.toarray()
+        eigenvalues, eigenvectors = np.linalg.eigh(dense)
+        return np.real(eigenvalues[:k]), eigenvectors[:, :k]
+    eigenvalues, eigenvectors = spla.eigsh(hamiltonian, k=target, which="SA")
+    order = np.argsort(np.real(eigenvalues))
+    return np.real(eigenvalues[order]), eigenvectors[:, order]
+
+
+def build_eigenstate_record(sector: SectorBasis, energy: float, vector: np.ndarray, sites: int) -> EigenStateRecord:
+    probabilities = np.abs(vector) ** 2
+    occupancies = sector.occupancy_diag @ probabilities
+    pairs = np.zeros((sites, sites), dtype=float)
+    for i in range(sites):
+        pairs[i, i] = float(np.dot(sector.occupancy_diag[i], probabilities))
+        for j in range(i + 1, sites):
+            pair_diag = sector.occupancy_diag[i] * sector.occupancy_diag[j]
+            pairs[i, j] = float(np.dot(pair_diag, probabilities))
+            pairs[j, i] = pairs[i, j]
+    charge = float(np.dot(sector.charge_diag, probabilities))
+    return EigenStateRecord(
+        energy=float(np.real(energy)),
+        color_counts=sector.color_counts,
+        occupancies=occupancies.astype(float),
+        pairs=pairs,
+        charge=charge,
+    )
+
+
+def select_low_energy_states(results: list[BlockSolveResult], eig_count: int) -> list[EigenStateRecord]:
+    states: list[EigenStateRecord] = []
+    for result in results:
+        states.extend(result.states)
+    states.sort(key=lambda state: state.energy)
+    return states[:eig_count]
+
+
+def thermal_weights(energies: np.ndarray, temperature: float) -> np.ndarray:
+    if len(energies) == 0:
+        return np.empty(0, dtype=float)
+    shifted = np.real(energies - np.min(energies))
+    weights = np.exp(-shifted / max(temperature, 1e-9))
+    weights /= np.sum(weights)
+    return weights
+
+
+def aggregate_correlations(states: list[EigenStateRecord], weights: np.ndarray, sites: int) -> tuple[np.ndarray, np.ndarray]:
+    occupancies = np.zeros(sites, dtype=float)
+    pair_expectations = np.zeros((sites, sites), dtype=float)
+    for weight, state in zip(weights, states):
+        occupancies += weight * state.occupancies
+        pair_expectations += weight * state.pairs
+    connected = np.zeros((sites, sites), dtype=float)
+    for i in range(sites):
+        connected[i, i] = 1.0
+        for j in range(i + 1, sites):
+            value = abs(pair_expectations[i, j] - occupancies[i] * occupancies[j])
+            connected[i, j] = value
+            connected[j, i] = value
+    return occupancies, connected
+
+
+def detect_symmetry(hamiltonian: sp.csr_matrix, occupancy_diag: np.ndarray) -> float:
+    coo = hamiltonian.tocoo()
+    errors: list[float] = []
+    for site_occupancy in occupancy_diag:
+        diff = site_occupancy[coo.col] - site_occupancy[coo.row]
+        norm = np.sqrt(np.sum(np.abs(coo.data * diff) ** 2))
+        errors.append(float(norm))
+    return float(np.mean(errors)) if errors else 0.0
+
+
+def average_block_symmetry(results: list[BlockSolveResult]) -> float:
+    if not results:
+        return 0.0
+    weights = np.array([len(result.sector.basis_states) for result in results], dtype=float)
+    values = np.array([result.symmetry_score for result in results], dtype=float)
+    return float(np.average(values, weights=weights))
+
+
+def detect_generations(energies: np.ndarray, tol: float = 1e-3) -> list[list[int]]:
+    groups: list[list[int]] = []
+    used: set[int] = set()
+    for i, energy_i in enumerate(energies):
+        if i in used:
+            continue
+        group = [i]
+        for j in range(i + 1, len(energies)):
+            if abs(energies[j] - energy_i) < tol:
+                group.append(j)
+                used.add(j)
+        if len(group) > 1:
+            groups.append(group)
+    return groups
+
+
+def mass_spectrum(energies: np.ndarray) -> tuple[list[float], list[float]]:
+    masses = np.real(energies - energies[0])
+    selected = masses[1:10]
+    ratios = selected[1:] / np.clip(selected[:-1], 1e-12, None)
+    return selected.tolist(), ratios.tolist()
+
+
+def neighbors(sites: int) -> list[tuple[int, int]]:
+    return [(index, (index + 1) % sites) for index in range(sites)]
+
+
+def projected_dimension_estimate(sites: int, color_counts: tuple[int, ...]) -> int:
+    size = 1
+    for count in color_counts:
+        size *= comb(sites, count)
+    return size
+
+
 def render_report(summary: EmergentSummary) -> str:
     lines = [
         "Emergent Operator-Network Report",
         "=" * 32,
         f"seed: {summary.seed}",
         f"sites: {summary.sites}",
-        f"Hilbert dimension: {summary.hilbert_dimension}",
+        f"colors: {summary.colors}",
+        f"total modes: {summary.total_modes}",
+        f"full Hilbert dimension: {summary.hilbert_dimension}",
+        f"projected dimension: {summary.projected_dimension}",
+        f"filling: {summary.filling}",
+        f"requested color filling: {summary.color_filling}",
+        f"gauge group: {summary.gauge_group}",
+        f"block count: {summary.block_count}",
+        f"largest block dimension: {summary.largest_block_dimension}",
+        f"eigensolved: {summary.eigensolved}",
         f"ground energy: {summary.ground_energy:.6f}",
         f"energy gap: {summary.energy_gap:.6f}",
+        f"symmetry score: {summary.symmetry_score:.6f}",
         f"spectral dimension estimate: {summary.spectral_dimension:.3f}",
         f"preferred embedding dimension: {summary.preferred_dimension}",
+        f"mean link trace: {summary.mean_link_trace:.6f}",
+        f"Wilson loop proxy: {summary.wilson_loop:.6f}",
+        f"solved sector fillings: {summary.solved_sector_fillings}",
+        f"generation count: {summary.generation_count}",
+        f"generation groups: {summary.generations}",
+        f"mass gaps: {[round(value, 6) for value in summary.mass_gaps]}",
+        f"mass ratios: {[round(value, 6) for value in summary.mass_ratios]}",
         "embedding stress:",
     ]
     for dims, value in summary.embedding_stress.items():
@@ -421,6 +790,10 @@ def scan_parameter_regime(
     field_scale: float,
     chiral_scale: float,
     rg_steps: int,
+    gauge_group: str = "su2",
+    eig_count: int = 10,
+    filling: int | None = None,
+    color_filling: tuple[int, ...] | None = None,
 ) -> list[EmergentSummary]:
     results: list[EmergentSummary] = []
     for offset in range(trials):
@@ -432,6 +805,10 @@ def scan_parameter_regime(
             field_scale=field_scale,
             chiral_scale=chiral_scale,
             rg_steps=rg_steps,
+            gauge_group=gauge_group,
+            eig_count=eig_count,
+            filling=filling,
+            color_filling=color_filling,
         )
         results.append(simulation.run())
     return sorted(results, key=_score_summary, reverse=True)
@@ -442,7 +819,9 @@ def _score_summary(summary: EmergentSummary) -> float:
     spectral_score = -abs(summary.spectral_dimension - 3.0)
     gravity_score = 2.0 * summary.gravity_r2 - 2.0 * summary.gravity_mae
     asymmetry_score = 2.0 * summary.matter_antimatter_asymmetry
-    return dimension_score + spectral_score + gravity_score + asymmetry_score
+    symmetry_bonus = -0.02 * summary.symmetry_score
+    block_bonus = 0.03 * np.log1p(summary.projected_dimension)
+    return dimension_score + spectral_score + gravity_score + asymmetry_score + symmetry_bonus + block_bonus
 
 
 def write_scan_json(path: Path, results: list[EmergentSummary]) -> None:
@@ -469,17 +848,18 @@ def save_visualizations(artifacts: EmergentArtifacts, output_dir: Path, prefix: 
     embedding_path = output_dir / f"{prefix}_embedding_3d.png"
     figure = plt.figure(figsize=(8, 6))
     axis = figure.add_subplot(111, projection="3d")
-    for i, j in combinations(range(coordinates.shape[0]), 2):
-        if connected[i, j] < edge_threshold:
-            continue
-        axis.plot(
-            [coordinates[i, 0], coordinates[j, 0]],
-            [coordinates[i, 1], coordinates[j, 1]],
-            [coordinates[i, 2], coordinates[j, 2]],
-            color="#9bb0c8",
-            alpha=0.35,
-            linewidth=1.0 + 1.5 * connected[i, j],
-        )
+    for i in range(coordinates.shape[0]):
+        for j in range(i + 1, coordinates.shape[0]):
+            if connected[i, j] < edge_threshold:
+                continue
+            axis.plot(
+                [coordinates[i, 0], coordinates[j, 0]],
+                [coordinates[i, 1], coordinates[j, 1]],
+                [coordinates[i, 2], coordinates[j, 2]],
+                color="#9bb0c8",
+                alpha=0.35,
+                linewidth=1.0 + 1.5 * connected[i, j],
+            )
     scatter = axis.scatter(
         coordinates[:, 0],
         coordinates[:, 1],
@@ -518,20 +898,7 @@ def save_visualizations(artifacts: EmergentArtifacts, output_dir: Path, prefix: 
     axis.set_ylabel("Normalized response")
     axis.grid(True, alpha=0.25)
     axis.legend()
-    axis.text(
-        0.04,
-        0.96,
-        (
-            f"source site = {profile.source_site}\n"
-            f"screening length = {profile.screening_length:.2f}\n"
-            f"R^2 = {artifacts.summary.gravity_r2:.3f}"
-        ),
-        transform=axis.transAxes,
-        va="top",
-        bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "#bbbbbb"},
-    )
     figure.tight_layout()
     figure.savefig(gravity_path, dpi=180)
     plt.close(figure)
-
     return [embedding_path, gravity_path]

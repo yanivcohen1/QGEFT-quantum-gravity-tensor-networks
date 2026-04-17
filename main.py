@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate an emergent operator network toy model.")
     parser.add_argument("--mode", choices=["exact", "monte-carlo"], default="exact", help="Choose the exact small-N solver or the scalable Monte Carlo surrogate.")
     parser.add_argument("--sites", type=int, default=8, help="Number of operator sites / qubits.")
+    parser.add_argument("--gauge-group", choices=["none", "su2", "su3"], default="su2", help="Classical gauge background carried by link matrices in exact mode.")
+    parser.add_argument("--eig-count", type=int, default=10, help="Number of low-energy eigenpairs to compute in exact mode.")
+    parser.add_argument("--filling", type=int, default=None, help="Fixed total particle number for exact-mode block projection. Defaults to a dilute sector based on the color count.")
+    parser.add_argument("--color-filling", type=str, default="", help="Optional comma-separated per-color fillings for exact mode, for example 2,1 for SU(2) or 2,1,1 for SU(3).")
+    parser.add_argument("--tensor-bond-dim", type=int, default=2, help="Bond dimension for the SU(3) tensor-network-assisted Monte Carlo surrogate.")
     parser.add_argument("--seed", type=int, default=7, help="Random seed.")
     parser.add_argument("--temperature", type=float, default=0.35, help="Effective temperature.")
     parser.add_argument("--coupling-scale", type=float, default=0.55, help="Scale for pair couplings.")
@@ -57,12 +62,24 @@ def parse_size_scan(raw: str) -> list[int]:
     return unique_sorted
 
 
+def parse_color_filling(raw: str) -> tuple[int, ...] | None:
+    if not raw.strip():
+        return None
+    values = tuple(int(token.strip()) for token in raw.split(",") if token.strip())
+    if not values:
+        return None
+    return values
+
+
 def run_monte_carlo_mode(args: argparse.Namespace) -> None:
     sizes = parse_size_scan(args.size_scan)
     target_sizes = sizes if sizes else [args.sites]
     progress_mode = "off" if args.no_progress else args.progress_mode
     config = MonteCarloConfig(
         degree=args.degree,
+        gauge_group=args.gauge_group,
+        color_count=3 if args.gauge_group == "su3" else 1,
+        tensor_bond_dim=args.tensor_bond_dim,
         coupling_scale=args.coupling_scale,
         field_scale=args.field_scale,
         chiral_scale=args.chiral_scale,
@@ -90,6 +107,7 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
+    color_filling = parse_color_filling(args.color_filling)
     if args.mode == "monte-carlo":
         run_monte_carlo_mode(args)
         return
@@ -104,6 +122,10 @@ def main() -> None:
             field_scale=args.field_scale,
             chiral_scale=args.chiral_scale,
             rg_steps=args.rg_steps,
+            gauge_group=args.gauge_group,
+            eig_count=args.eig_count,
+            filling=args.filling,
+            color_filling=color_filling,
         )
         best = results[0]
         print("Top emergent regime across scanned seeds")
@@ -120,6 +142,10 @@ def main() -> None:
                 field_scale=args.field_scale,
                 chiral_scale=args.chiral_scale,
                 rg_steps=args.rg_steps,
+                gauge_group=args.gauge_group,
+                eig_count=args.eig_count,
+                filling=args.filling,
+                color_filling=color_filling,
             )
             artifacts = best_simulation.analyze()
             save_visualizations(artifacts, args.plot_dir, prefix=f"seed_{best.seed}")
@@ -133,6 +159,10 @@ def main() -> None:
         field_scale=args.field_scale,
         chiral_scale=args.chiral_scale,
         rg_steps=args.rg_steps,
+        gauge_group=args.gauge_group,
+        eig_count=args.eig_count,
+        filling=args.filling,
+        color_filling=color_filling,
     )
     artifacts = simulation.analyze()
     summary = artifacts.summary
