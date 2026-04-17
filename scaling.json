@@ -1,0 +1,46 @@
+{
+  "mode": "monte-carlo",
+  "degree": 8,
+  "points": [
+    {
+      "sites": 64,
+      "spectral_dimension": 0.9756470064803062,
+      "spectral_dimension_std": 0.8987532953955673,
+      "mean_return_error": 0.00807517872767261,
+      "mean_energy": -125.0428853537753,
+      "mean_magnetization": 0.9848214285714286,
+      "samples_collected": 70,
+      "seed": 7
+    },
+    {
+      "sites": 128,
+      "spectral_dimension": 1.7547856307130452,
+      "spectral_dimension_std": 0.8044980397091224,
+      "mean_return_error": 0.006063045702910189,
+      "mean_energy": -306.6349681169206,
+      "mean_magnetization": 0.9948660714285714,
+      "samples_collected": 70,
+      "seed": 44
+    },
+    {
+      "sites": 256,
+      "spectral_dimension": 2.3204128717621137,
+      "spectral_dimension_std": 0.6254972959340956,
+      "mean_return_error": 0.003963655648885665,
+      "mean_energy": -701.0675400640863,
+      "mean_magnetization": 0.99765625,
+      "samples_collected": 70,
+      "seed": 81
+    },
+    {
+      "sites": 512,
+      "spectral_dimension": 2.8773504883382186,
+      "spectral_dimension_std": 0.5120605108401804,
+      "mean_return_error": 0.0025808995165742545,
+      "mean_energy": -1612.5015632745021,
+      "mean_magnetization": 0.998828125,
+      "samples_collected": 70,
+      "seed": 118
+    }
+  ]
+}

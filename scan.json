@@ -1,0 +1,98 @@
+[
+  {
+    "seed": 9,
+    "sites": 8,
+    "hilbert_dimension": 256,
+    "ground_energy": -7.677633944570778,
+    "energy_gap": 7.3380502856323915e-06,
+    "spectral_dimension": 2.361337559829892,
+    "preferred_dimension": 3,
+    "embedding_stress": {
+      "1": 0.4262825130484036,
+      "2": 0.11757384765016526,
+      "3": 0.08155078927506164,
+      "4": 0.12489762202532181
+    },
+    "gravity_coupling": 21770.763899379188,
+    "gravity_r2": 0.8765925784372354,
+    "gravity_mae": 0.37584943530189335,
+    "theta_order": 0.05949410723544862,
+    "matter_weight": 0.5894836167265607,
+    "antimatter_weight": 0.4241207347521533,
+    "matter_antimatter_asymmetry": 0.16314342152635963,
+    "mean_correlation": 0.9778184445691148,
+    "correlation_length": 0.9522058016501858
+  },
+  {
+    "seed": 10,
+    "sites": 8,
+    "hilbert_dimension": 256,
+    "ground_energy": -6.902813821443299,
+    "energy_gap": 0.0017405522287159414,
+    "spectral_dimension": 3.277448628902529,
+    "preferred_dimension": 3,
+    "embedding_stress": {
+      "1": 0.5420411143318637,
+      "2": 0.30578666619773465,
+      "3": 0.14328228546804223,
+      "4": 0.16616810601774487
+    },
+    "gravity_coupling": 19639.291725399733,
+    "gravity_r2": 0.7449888962385641,
+    "gravity_mae": 0.6186073738000893,
+    "theta_order": 0.08069494055056799,
+    "matter_weight": 0.6132020028536568,
+    "antimatter_weight": 0.40725515864428513,
+    "matter_antimatter_asymmetry": 0.20181821636378922,
+    "mean_correlation": 0.8200889216096366,
+    "correlation_length": 1.0909406143340916
+  },
+  {
+    "seed": 7,
+    "sites": 8,
+    "hilbert_dimension": 256,
+    "ground_energy": -6.276871807453963,
+    "energy_gap": 0.00010150337282066602,
+    "spectral_dimension": 3.136183587171721,
+    "preferred_dimension": 3,
+    "embedding_stress": {
+      "1": 0.496816396374026,
+      "2": 0.27935073113815495,
+      "3": 0.11579141666583388,
+      "4": 0.1558643089529453
+    },
+    "gravity_coupling": 14429.6139747863,
+    "gravity_r2": 0.6337091266890117,
+    "gravity_mae": 0.6586194138546245,
+    "theta_order": 0.06748272599378626,
+    "matter_weight": 0.5980152047801066,
+    "antimatter_weight": 0.41787365177544156,
+    "matter_antimatter_asymmetry": 0.1773240761939962,
+    "mean_correlation": 0.9019865471394343,
+    "correlation_length": 1.0366124154818812
+  },
+  {
+    "seed": 8,
+    "sites": 8,
+    "hilbert_dimension": 256,
+    "ground_energy": -6.6737399908787,
+    "energy_gap": 8.967037880847073e-05,
+    "spectral_dimension": 2.625849395084476,
+    "preferred_dimension": 3,
+    "embedding_stress": {
+      "1": 0.36493552284557945,
+      "2": 0.24322100432322016,
+      "3": 0.163048397103787,
+      "4": 0.19946925188391396
+    },
+    "gravity_coupling": 36720.184886883995,
+    "gravity_r2": 0.4328045509597038,
+    "gravity_mae": 0.44950291357470185,
+    "theta_order": 0.08217791117082916,
+    "matter_weight": 0.6253544540768083,
+    "antimatter_weight": 0.3998427578363225,
+    "matter_antimatter_asymmetry": 0.21996908850291952,
+    "mean_correlation": 0.9469892041172824,
+    "correlation_length": 0.9926691235211541
+  }
+]
