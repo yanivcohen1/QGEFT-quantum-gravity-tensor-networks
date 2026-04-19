@@ -1,10 +1,10 @@
 # A Toy Model for Emergent Geometry in Discrete Quantum Operator Systems
 
 ## Abstract
-We investigate the emergence of low-dimensional geometric structures from quantum correlations in a discrete fermionic operator system. By utilizing a multi-scale computational approach—combining Exact Diagonalization for small-scale validation and GPU-accelerated Monte Carlo simulations for the thermodynamic limit—we extract an effective distance metric derived from entanglement dynamics. We demonstrate that the system exhibits a dimensional reduction crossover, with the spectral dimension $D_s$ being consistent with an asymptotic approach toward a stable value of approximately $3$. This study provides a computational framework for exploring background-independent spatial emergence, while explicitly addressing algorithmic limitations and the robustness of these geometric attractors against microscopic parameter variations and tensor truncation.
+This paper presents a toy model where geometry is inferred from observables derived from an operator algebra $\mathcal{A}$ acting on a Hilbert space $\mathcal{H}$. We test whether low-dimensional geometric diagnostics can be recovered from the correlation structure of low-energy states under a specific correlation-to-distance prescription. In the scalable surrogate, this analysis is further conditioned on a sparse locality prior, so the results should be interpreted as evidence for 3D-like organization within the chosen construction rather than geometry emerging from fully assumption-free data.
 
 ## 1. Introduction
-A fundamental challenge in quantum gravity is the derivation of a continuous spacetime background from discrete, pre-geometric quantum degrees of freedom. Approaches such as Causal Dynamical Triangulations (CDT) [1] suggest that macroscopic geometry is an emergent phenomenon, a notion supported by the spontaneous dimensional reduction observed in various short-distance quantum gravity models [2, 3]. Recent work in quantum information theory further proposes that spatial connectivity can be fundamentally tied to entanglement and tensor network structures [4, 5]. This paper presents a toy model where geometry is defined purely through an operator algebra $\mathcal{A}$ acting on a Hilbert space $\mathcal{H}$. We test the hypothesis that spatial properties, such as dimensionality, can be recovered from the correlation structure of the ground state without a-priori geometric assumptions.
+A fundamental challenge in quantum gravity is the derivation of a continuous spacetime background from discrete, pre-geometric quantum degrees of freedom. Approaches such as Causal Dynamical Triangulations (CDT) [1] suggest that macroscopic geometry is an emergent phenomenon, a notion supported by the spontaneous dimensional reduction observed in various short-distance quantum gravity models [2, 3]. Recent work in quantum information theory further proposes that spatial connectivity can be fundamentally tied to entanglement and tensor network structures [4, 5]. This paper presents a toy model where geometry is inferred from observables derived from an operator algebra $\mathcal{A}$ acting on a Hilbert space $\mathcal{H}$. We test whether low-dimensional geometric diagnostics can be recovered from the correlation structure of low-energy states under a specific correlation-to-distance prescription. In the scalable surrogate, this analysis is further conditioned on a sparse locality prior, so the results should be interpreted as evidence for 3D-like organization within the chosen construction rather than geometry emerging from fully assumption-free data.
 
 ## 2. Theoretical Formalism
 
@@ -25,33 +25,32 @@ We emphasize that this logarithmic mapping is a heuristic choice. While standard
 For small systems ($N \le 16$), we employ sparse Jordan-Wigner fermion solvers and Lanczos algorithms to resolve the exact low-energy spectrum, providing a non-perturbative baseline.
 
 ### 3.2 Monte Carlo Surrogate and Tensor Truncation
-To access large-scale thermodynamic limits ($N \le 4096$), we utilize a GPU-accelerated Monte Carlo surrogate, projecting the system onto an effective spin-sector representation to circumvent the fermion sign problem. The spatial updates are governed by a Metropolis-Hastings algorithm utilizing a belief-propagation-inspired tensor truncation scheme. We typically use $10^4$ thermalization sweeps before sampling the primary observable, the density-density correlator $\langle n_i n_j \rangle$. To ensure rigorous statistical significance, all large-scale data points are averaged over 20 independent runs (seeds). Sampling was performed after sufficient decorrelation sweeps to ensure statistical independence between measurements. Furthermore, to verify the emergent geometry is not an artifact of truncation, we confirmed that results remain stable for bond dimensions $D \in [8, 16]$ within numerical uncertainty, as extending beyond $D=16$ becomes computationally prohibitive for our lattice sizes.
+To access larger system sizes ($N \le 4096$ in the included workflows), we use a Monte Carlo surrogate rather than a controlled fermionic large-$N$ limit. In the current implementation, sites are first placed on a balanced periodic 3D grid and connected through a sparse nearest-neighbor-style construction; Monte Carlo sampling is then performed on the resulting graph. The default CPU/CUDA configuration uses a configurable Metropolis-Hastings sweep schedule (`--burn-in-sweeps`, `--measurement-sweeps`, `--sample-interval`) rather than a fixed production protocol, so any quoted large-$N$ numbers should be read as run-dependent diagnostics, not finalized statistical estimates. In `SU(3)` mode, the code additionally uses a low-rank edge-kernel truncation and belief-propagation-inspired updates to retain some color-sector structure while remaining computationally tractable.
+These design choices make the scalable engine useful for exploratory scaling studies, but they also impose strong modeling assumptions. In particular, the sparse 3D locality prior, the finite sampling budget, and the tensor truncation all influence the reported observables. As a result, the Monte Carlo results should be interpreted as properties of the surrogate model and its diagnostics, not as controlled evidence that the underlying fermionic theory has a unique thermodynamic continuum limit.
 However, we must note that any tensor truncation scheme inherently restricts the accessible entanglement phase space. It remains an open question whether the resulting thermodynamic limit and its associated scaling exponents are partially constrained by the fixed bond dimension approximation itself.
 
 ## 4. Results
 
 ### 4.1 Spectral Dimension and Scaling
-The spectral dimension $D_s$ is determined by measuring the return probability $P(T)$ of a simulated random walk on the emergent correlation graph. It is extracted via the logarithmic derivative:
+In the scalable surrogate, the spectral dimension $D_s$ is estimated from the return probability $P(T)$ of a random walk on the weighted graph. It is extracted via the logarithmic derivative:
 $$D_s = -2 \frac{d \log P(T)}{d \log T}$$
-evaluated over an intermediate time window ($t_{min} \ll t \ll t_{max}$) (**Figure 1a**). We verified the stability of the extracted slope under variations of the fitting window within a factor of $2$. Our results indicate a crossover:
-* **Small scales:** $D_s \approx 2.2$, indicating a fractal-like UV behavior.
-* **Large scales ($N \to 4096$):** $D_s \to 3.04 \pm 0.08$.
+evaluated over an intermediate time window ($t_{min} \ll t \ll t_{max}$) (**Figure 1a**). In the exact solver, the reported "spectral dimension" is instead an entropy-rank proxy computed from the embedded distance matrix, so the two modes should not be treated as measuring identical observables. Representative size sweeps in this repository show a crossover from lower effective dimension at smaller sizes toward values near $3$ at larger sizes.
 
-Error bars are derived from ensemble averaging across multiple random initial configurations and statistical fluctuations. The scaling function $D_s(N)$ is consistent with an asymptotic approach to this spatial dimension (**Figure 1b**). Crucially, the emergence of $D_s \approx 3$ indicates that the specific diffusion process defined on this weighted graph exhibits transient scaling mathematically similar to a 3D lattice. We stress that this spectral dimension is a property of the random walk operator under our chosen logarithmic metric, rather than a definitive proof of an emergent physical 3D manifold. The scaling is sensitive to finite-size effects and the chosen intermediate fitting window. Establishing true geometric universality requires proving that these diffusion exponents remain invariant across different classes of correlation-to-distance mappings.
+This is evidence that the chosen diffusion process on the chosen weighted graph can display 3D-like scaling over the sampled window. It is not, by itself, evidence for an emergent physical 3D manifold. The result is sensitive to finite-size effects, fitting choices, graph construction, and the correlation-to-distance map. Establishing any stronger universality claim would require null-model tests and demonstrations that the same scaling survives under materially different graph-building and distance-assignment procedures.
 
 ### 4.2 Effective Interactions
-We analyze the macroscopic "response" between nodes across the emergent distance $d(i,j)$. Rather than following a pure scale-free $1/r^2$ power law, the data is consistent within fitting uncertainty with a screened interaction profile (**Figure 2**). This suggests that the emergent geometry natively supports localized correlations that decay rapidly in the deep IR limit.
+We analyze the macroscopic "response" between nodes across the emergent distance $d(i,j)$ using a perturb-and-refit procedure in the exact solver and edge-weight fits in the scalable surrogate. Rather than claiming a derived force law, we treat these curves as phenomenological summaries of how correlation strength or occupancy response depends on the chosen notion of distance. In representative runs the data is often better described by a screened interaction profile than by a strict scale-free $1/r^2$ law (**Figure 2**), but this should be interpreted as a fit quality statement inside the model, not as evidence that gravity has emerged.
 
 ## 5. Robustness Analysis
-To verify that the $D_s \approx 3$ limit is a robust attractor, we performed systematic parameter scans and checked two complementary geometric observables extracted from the correlation network: the spectral dimension from diffusion and the volume-growth exponent from correlation balls.
+The repository includes exploratory parameter scans and complementary geometric diagnostics extracted from the correlation network, most notably diffusion-based spectral estimates and volume-growth exponents from correlation balls. At present these checks should be interpreted as qualitative robustness probes rather than a completed universality analysis.
 
 ![Spectral Dimension Scaling](plots/monte_carlo_spectral_dimension_scaling.png)
 
-The spectral dimension remains stable within numerical uncertainty under variations of the hopping-to-interaction ratio ($t/U \in [0.5, 2.0]$) and upon the introduction of moderate off-diagonal disorder (random noise in $u_{ij}$ up to $15\%$). Furthermore, altering the initial average degree of the underlying graph did not shift the asymptotic $D_s$ value, suggesting—but not establishing—the existence of a possible universality class within this model.
+In the current codebase, moderate variations of couplings, graph degree, gauge/background settings, and tensor truncation can be explored, and many such runs still display broadly similar 3D-like diffusion diagnostics. That said, this does not yet establish a universality class. In particular, because the scalable surrogate is built on a sparse 3D locality prior, robustness against small parameter changes is weaker evidence than robustness against alternative graph priors or distance mappings.
 
 ![Correlation-Network Volume Scaling](plots/seed_7_volume_scaling.png)
 
-The volume-scaling plot provides an independent consistency check: if the emergent graph is approaching a stable low-dimensional manifold, then the mean enclosed node count $V(r)$ should grow approximately as a power law in the emergent radius, $V(r) \sim r^{d_H}$, over an intermediate scaling window. Agreement between the diffusion-based observable $D_s$ and the volume-growth behavior strengthens the interpretation that the correlation network is not merely sparse, but geometrically organized.
+The volume-scaling plot provides an independent consistency check: if the emergent graph is approximately organized by a low-dimensional metric, then the mean enclosed node count $V(r)$ should grow roughly as a power law in the emergent radius, $V(r) \sim r^{d_H}$, over an intermediate scaling window. Agreement between the diffusion-based observable $D_s$ and the volume-growth behavior strengthens the interpretation that the correlation network is structured rather than arbitrary, but it still falls short of proving a continuum geometric manifold.
 
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
@@ -89,9 +88,9 @@ The exact solver constructs a finite-dimensional operator algebra, solves for a
 low-energy quantum state, derives an effective correlation graph, and reports
 whether that state exhibits:
 
-- an effective 3D geometric embedding,
-- a weak Newton-like long-range potential in the emergent geometry,
-- a phase-sector bias between matter-like and antimatter-like excitations.
+- a low-stress low-dimensional embedding under classical MDS,
+- distance-response profiles that can be compared against Yukawa/Newton-like fit families,
+- a phase-sector bias between positive and negative charge-like sectors.
 
 ## Model Summary
 
@@ -121,9 +120,9 @@ $$
 d(i,j) = -\log\left(\frac{E_{ij}}{E_0 + \varepsilon}\right)
 $$
 
-The simulation then embeds the distance matrix with classical MDS, estimates the
-best effective dimension, fits a weak inverse-distance potential, and measures a
-chiral phase observable that biases positive versus negative charge sectors.
+The simulation then embeds the distance matrix with classical MDS, estimates an
+effective low-dimensionality proxy, fits phenomenological response profiles, and
+measures a chiral phase observable that biases positive versus negative charge sectors.
 
 ## Files
 
@@ -133,7 +132,7 @@ chiral phase observable that biases positive versus negative charge sectors.
 
 ## Example Experiments & Results
 
-The `main.py` CLI allows you to run various simulated experiments. Below is a guide to the key commands and the physical phenomena they demonstrate.
+The `main.py` CLI allows you to run various simulated experiments. The descriptions below are intentionally conservative: they summarize what each run probes inside the toy model, not what it proves about nature.
 
 ### 1. The "Free Space" Baseline (No Gauge Fields)
 **Command:**
@@ -141,10 +140,10 @@ The `main.py` CLI allows you to run various simulated experiments. Below is a gu
 python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy
 ```
 **What it demonstrates:**
-This serves as the control experiment of the QGEFT model. By disabling the gauge group (`gauge-group none`), we simulate an operator network with pure kinetic entanglement and no internal forces. 
-* **Zero Interactions:** The effective fine-structure constant ($\alpha_{\text{eff}}$) is exactly `0.00000000`, as expected without gauge fields.
-* **Emergent 3D Space:** Despite having no forces, the network successfully undergoes a phase transition, with the spectral dimension ($D_s$) climbing from $\sim 2.2$ at $N=256$ and locking firmly at **$3.04$** at $N=4096$.
-* **Lorentz Symmetry:** The light-cone metrics show `cone_leak = 0.00000` with high linearity ($R^2 \to 0.96$), proving that a maximum cosmic speed limit (effective $c$) and causality emerge purely from network topology.
+This serves as a control experiment for the Monte Carlo surrogate with no gauge-sector structure.
+* **No gauge-driven proxy:** The effective fine-structure-like proxy $\alpha_{\text{eff}}$ is expected to be small or zero in this setting because the corresponding phase/gauge observables are absent by construction.
+* **3D-like diffusion on the surrogate graph:** In representative sweeps, the spectral-dimension diagnostic rises from lower values at small $N$ toward values near $3$ at larger $N$. This indicates that the chosen sparse graph and weighting scheme support diffusion behavior similar to a 3D network over the sampled range.
+* **Bounded-speed propagation proxy:** The light-cone diagnostics quantify approximately linear front propagation and out-of-cone leakage on the weighted graph. They are useful consistency checks for finite-speed spreading, not proofs of Lorentz symmetry or relativistic causality.
 
 ### 2. Exact Diagonalization: Weak Force & Particle Generations
 **Command:**
@@ -152,21 +151,21 @@ This serves as the control experiment of the QGEFT model. By disabling the gauge
 python main.py --mode exact --sites 12 --gauge-group su2 --filling 2 --eig-count 6
 ```
 **What it demonstrates:**
-Using exact sparse matrix diagonalization on $N=12$ sites with an `SU(2)` gauge group (resembling the weak nuclear force).
-* **Emergence of Generations:** The spectrum shows degenerate energy states (`generation count: 1`), simulating how particle "flavors" (like electron/muon) emerge organically from the network's internal symmetries.
-* **Matter Asymmetry:** The topological terms induce a local chiral bias, resulting in a spontaneous matter-antimatter asymmetry (e.g., `0.316`).
-* **Inverse-Distance Potential:** As the system grows from $N=6$ to $N=12$, the fit to a screened inverse-distance profile significantly improves ($R^2 \approx 0.43$), showing how long-range effective interactions require sufficient spatial degrees of freedom to emerge from the correlation network.
+Using exact sparse matrix diagonalization on $N=12$ sites with an `SU(2)` gauge background.
+* **Near-degenerate low-energy structure:** The code groups nearly degenerate eigenstates into coarse "generation" clusters. These are bookkeeping labels for low-energy spectral structure, not evidence for Standard Model flavor physics.
+* **Charge-sector bias proxy:** The chiral/topological diagnostics can favor positive over negative charge-like sectors in the reweighted low-energy ensemble.
+* **Distance-response fitting:** The run reports how well the induced response profile matches screened inverse-distance fit families inside the emergent correlation geometry. This is a model diagnostic, not a derived weak-force law.
 
-### 3. Exact SU(3): Color Confinement & The Strong CP Problem
+### 3. Exact SU(3): Color-Balanced Sectors and Asymmetry Diagnostics
 **Command:**
 ```bash
 python main.py --mode exact --sites 12 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 6
 ```
 **What it demonstrates:**
-This runs an exact solver on a massive Hilbert space (effectively 68 Billion states, projected down via block diagonalization) using `SU(3)` quantum chromodynamics logic.
-* **Baryon-like Confinement:** By enforcing a `[1,1,1]` color-filling (a perfect color singlet), the network simulates a neutral composite particle (like a proton or neutron). 
-* **Protection from Asymmetry:** Even though a strong topological vacuum phase forms (`theta order: 0.19`), the matter-antimatter asymmetry remains exactly `0.000000`. This beautifully mimics the real-world behavior of strict color-singlets being protected from certain chiral symmetries.
-* **Glueball Excitations:** Running this setup produces entirely neutral, balanced excitation channels representing collective field oscillations.
+This runs the exact solver in an explicit `SU(3)`-colored filling sector.
+* **Color-balanced sector study:** Enforcing `[1,1,1]` isolates a color-balanced subspace that is useful for testing how the diagnostics behave in singlet-like configurations.
+* **Sector-dependent asymmetry suppression:** In some runs, the asymmetry proxy is reduced or vanishes in these balanced sectors. That is an interesting model feature, but it should not be oversold as a solution to the strong CP problem.
+* **Excitation-channel organization:** The code classifies low excitations into coarse sector labels based on charge, color balance, and localization. These labels are descriptive diagnostics, not particle identifications.
 
 ### 4. The Thermodynamic Limit: Tensor Networks & Scaling Parameters
 **Command:**
@@ -174,43 +173,43 @@ This runs an exact solver on a massive Hilbert space (effectively 68 Billion sta
 python main.py --mode monte-carlo --size-scan 256,512,1024 --gauge-group su3 --tensor-bond-dim 2 --degree 8
 ```
 **What it demonstrates:**
-The ultimate test of the model using Tensor Network (PEPS-like) Monte Carlo to bypass the exponential Hilbert space explosion.
-* **Stable Dimensionless Parameters:** At $N=1024$, the model extracts stable continuum-limit ratios. It produces an effective interaction constant $\alpha_{\text{eff}} \approx 0.0058$ and a stable mass-ratio proxy. While we do not claim physical identification, the stability of these dimensionless numbers indicates convergence.
-* **Global Chiral Bias:** The dynamic `SU(3)` topology undergoes spontaneous symmetry breaking, dropping into a vacuum state that favors absolute chirality (`asym = -1.0`), demonstrating how network topology can restrict certain excitation sectors globally.
-* **Stable Continuum:** The spectral dimension converges beautifully to $D_s = 2.998 \pm 0.12$, confirming that 3D macroscopic space is the thermodynamic attractor of the SU(3) operator graph.
+This probes the `SU(3)` tensor-network-assisted surrogate at larger sizes.
+* **Model-dependent proxies:** The run reports `alpha_eff` and `m_p/m_e`-like quantities derived from transfer-sector observables. They are internal proxies designed to track scaling trends, not candidate predictions of measured constants.
+* **Global chiral-bias diagnostics:** The sampled color configurations can show strong preference for one charge-like sector over another, which is best interpreted as a property of the surrogate ensemble.
+* **Large-$N$ scaling behavior:** Size sweeps can be used to test whether the diffusion and transfer diagnostics stabilize as $N$ increases. Any apparent convergence should still be read through the caveats about locality priors and truncation.
 
 ***
 
 ## Visualizations & Analysis
 
-The following plots provide empirical evidence for the emergent properties of the QGEFT model, as extracted from the simulation engines.
+The following plots illustrate the main geometric and response diagnostics extracted from the simulation engines.
 
 ### 1. Dimensional Convergence (Spectral Dimension)
 ![Spectral Dimension Scaling](plots/monte_carlo_spectral_dimension_scaling.png)
 * **Description**: This plot tracks the evolution of the Hausdorff-like spectral dimension ($D_s$) as a function of the system size ($N$).
-* **Key Finding**: We observe a clear **Dimensional Reduction** phenomenon. At small scales (UV/small N), the universe appears lower-dimensional ($\approx 2$), while at larger scales (IR/large N), it converges to a stable value of **3.04**. This confirms that 3D space is a thermodynamic attractor of the operator network.
+* **Key Finding**: Representative runs show a **dimensional-crossover diagnostic**: the fitted diffusion dimension is lower at small scales and approaches values near $3$ at larger $N$. This supports the narrower claim that the chosen weighted graph exhibits 3D-like diffusion scaling over the sampled range.
 
 ### 2. Emergent 3D Topology
 ![3D Embedding](plots/seed_7_embedding_3d.png)
 * **Description**: A 3D Force-Directed visualization of the operator network's ground state. The coordinates are derived via Multi-Dimensional Scaling (MDS) from the entanglement-distance matrix.
-* **Key Finding**: The network naturally clusters into a manifold that can be embedded in a 3-dimensional Euclidean space. Colors represent connectivity density, showing a well-defined, non-random spatial structure. We explicitly caution that MDS inherently assumes an underlying Euclidean target space. While the low-stress embedding demonstrates structural consistency with 3D Euclidean space, it does not rule out non-Euclidean or fractal underlying topologies, as the projection algorithm itself enforces Euclidean geometric properties.
+* **Key Finding**: The network admits a comparatively low-stress 3D embedding under MDS. This is evidence that the distance matrix is compatible with a low-dimensional Euclidean visualization, not proof that the underlying state defines a unique 3D manifold.
 
 ### 3. Effective Weak-Gravity Profile
 ![Gravity Profile](plots/seed_7_gravity_profile.png)
 * **Description**: This graph measures the "response" (effective force) between sites as a function of their emergent distance.
-* **Key Finding**: The data (blue dots) aligns with a **Yukawa/Newtonian potential** (orange line). This proves that while gravity is not an input in our Hamiltonian, a force following the inverse-distance law emerges purely from the correlation structure.
+* **Key Finding**: In representative runs, the data (blue dots) can be fit reasonably well by a **Yukawa/Newton-like family** (orange line). This should be read as a compact phenomenological summary of the response curve, not as proof that gravity emerges from the model.
 
 ### 4. Random Walk Return Probabilities
 ![Return Profile N=512](plots/monte_carlo_return_profile_512.png)
 * **Description**: A log-log plot of the return probability vs. time for random walkers on the graph (N=512).
-* **Key Finding**: The high linearity ($R^2 > 0.99$) of the fit confirms that the emergent geometry is statistically uniform and follows a well-defined power law, which is the basis for our spectral dimension calculations.
+* **Key Finding**: High linearity over an intermediate window indicates that the chosen return-probability diagnostic is reasonably described by a power law on that window. This supports the use of a fitted diffusion dimension, but does not by itself establish statistical homogeneity or continuum geometry.
 
 ### 5. Correlation-Network Volume Scaling
 ![Volume Scaling](plots/seed_7_volume_scaling.png)
 ![Spectral Dimension Scaling](plots/monte_carlo_spectral_dimension_scaling.png)
 
 * **Description**: The first plot shows the average enclosed node count $V(r)$ inside correlation balls of radius $r$, measured directly from the emergent correlation network. The second plot shows the corresponding spectral-dimension scaling extracted from diffusion on the same class of emergent graphs.
-* **Key Finding**: Together, the two figures provide a complementary geometric test. The volume-growth slope estimates a Hausdorff-like exponent $d_H$, while the spectral plot measures $D_s$ from return probabilities. Their joint stability supports the interpretation that the correlation network exhibits approximately polynomial volume growth and an emergent low-dimensional continuum regime.
+* **Key Finding**: Together, the two figures provide a complementary geometric test. The volume-growth slope estimates a Hausdorff-like exponent $d_H$, while the spectral plot measures $D_s$ from return probabilities. Their joint stability supports the narrower interpretation that the correlation network is geometrically structured under the chosen metric prescription.
 
 
 ## Run
@@ -298,8 +297,8 @@ The program prints:
 - Hamiltonian energy diagnostics
 - connected-correlation graph statistics
 - embedding stress for dimensions 1 through 4
-- entropy-rank spectral-dimension estimate
-- weak-field response fit to a Yukawa/Newton-like profile
+- an entropy-rank low-dimensionality proxy in exact mode
+- response-profile fits to Yukawa/Newton-like families
 - matter/antimatter asymmetry observables
 
 In Monte Carlo mode, the program instead reports:
@@ -313,8 +312,8 @@ In Monte Carlo mode, the program instead reports:
 
 If `--plot-dir` is provided, the program also writes:
 
-- `*_embedding_3d.png`: node embedding in the emergent 3D geometry, with stronger edges drawn between highly correlated sites
-- `*_gravity_profile.png`: normalized response versus emergent distance, together with the best Yukawa/Newton-like fit
+- `*_embedding_3d.png`: node embedding in a 3D MDS visualization of the correlation geometry, with stronger edges drawn between highly correlated sites
+- `*_gravity_profile.png`: normalized response versus emergent distance, together with the best Yukawa/Newton-like phenomenological fit
 - `*_volume_scaling.png` or `*_volume_scaling_<N>.png`: log-log volume-growth curves extracted from the correlation network, with a fitted Hausdorff-like slope `d_H`
 
 ## Interpretation
