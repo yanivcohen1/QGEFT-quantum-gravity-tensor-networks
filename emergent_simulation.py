@@ -327,17 +327,7 @@ class OperatorNetworkSimulation:
         return BlockSolveResult(sector=sector, hamiltonian=hamiltonian, symmetry_score=symmetry, states=states)
 
     def _effective_distance_matrix(self, connected: np.ndarray) -> np.ndarray:
-        upper = connected[np.triu_indices(self.sites, k=1)]
-        reference = float(np.max(upper)) if np.any(upper > 0.0) else 1.0
-        epsilon = 1e-8
-        distances = np.zeros_like(connected)
-        for i in range(self.sites):
-            for j in range(i + 1, self.sites):
-                normalized = max(connected[i, j] / (reference + epsilon), epsilon)
-                value = -log(normalized)
-                distances[i, j] = value
-                distances[j, i] = value
-        return distances
+        return connected_distance_matrix(connected)
 
     def _embedding_stress(self, distances: np.ndarray) -> dict[int, float]:
         stress: dict[int, float] = {}
@@ -935,6 +925,51 @@ def projected_dimension_estimate(sites: int, color_counts: tuple[int, ...]) -> i
     return size
 
 
+def connected_distance_matrix(connected: np.ndarray) -> np.ndarray:
+    upper = connected[np.triu_indices_from(connected, k=1)]
+    reference = float(np.max(upper)) if np.any(upper > 0.0) else 1.0
+    epsilon = 1e-8
+    distances = np.zeros_like(connected, dtype=float)
+    for i in range(connected.shape[0]):
+        for j in range(i + 1, connected.shape[1]):
+            normalized = max(float(connected[i, j]) / (reference + epsilon), epsilon)
+            value = -log(normalized)
+            distances[i, j] = value
+            distances[j, i] = value
+    return distances
+
+
+def estimate_volume_scaling_from_distances(
+    distances: np.ndarray,
+    radius_count: int = 24,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    positive = distances[np.triu_indices_from(distances, k=1)]
+    positive = positive[np.isfinite(positive) & (positive > 0.0)]
+    if len(positive) < 4:
+        return np.empty(0, dtype=float), np.empty(0, dtype=float), np.empty(0, dtype=float), 0.0
+
+    unique_positive = np.unique(np.round(positive, decimals=8))
+    if len(unique_positive) < 2:
+        return np.empty(0, dtype=float), np.empty(0, dtype=float), np.empty(0, dtype=float), 0.0
+    if len(unique_positive) <= radius_count:
+        radii = unique_positive.astype(float)
+    else:
+        lower = float(np.quantile(unique_positive, 0.10))
+        upper = float(np.quantile(unique_positive, 0.90))
+        if upper <= lower:
+            lower = float(unique_positive[0])
+            upper = float(unique_positive[-1])
+        radii = np.linspace(lower, upper, num=radius_count, dtype=float)
+    volumes = np.asarray([float(np.mean(np.sum(distances <= radius, axis=1))) for radius in radii], dtype=float)
+    fit_mask = (radii > 0.0) & (volumes > 1.0)
+    if np.count_nonzero(fit_mask) < 3:
+        return radii, volumes, np.zeros_like(radii), 0.0
+
+    slope, intercept = np.polyfit(np.log(radii[fit_mask]), np.log(volumes[fit_mask]), deg=1)
+    fitted = np.exp(intercept + slope * np.log(np.clip(radii, 1e-12, None)))
+    return radii, volumes, fitted, float(slope)
+
+
 def render_report(summary: EmergentSummary) -> str:
     lines = [
         "Emergent Operator-Network Report",
@@ -1123,4 +1158,29 @@ def save_visualizations(artifacts: EmergentArtifacts, output_dir: Path, prefix: 
     figure.tight_layout()
     figure.savefig(gravity_path, dpi=180)
     plt.close(figure)
+
+    volume_distances = connected_distance_matrix(artifacts.connected)
+    volume_radii, volume_profile, volume_fit, hausdorff_dimension = estimate_volume_scaling_from_distances(volume_distances)
+    volume_path = output_dir / f"{prefix}_volume_scaling.png"
+    if len(volume_radii) > 0:
+        figure, axis = plt.subplots(figsize=(7.0, 4.8))
+        axis.loglog(volume_radii, volume_profile, "o", color="#386641", label="Correlation-ball volume")
+        axis.loglog(volume_radii, volume_fit, "-", color="#bc4749", linewidth=2.0, label="Power-law fit")
+        axis.set_title("Correlation-Network Volume Scaling")
+        axis.set_xlabel("Emergent radius")
+        axis.set_ylabel("Average enclosed volume")
+        axis.grid(True, alpha=0.25)
+        axis.legend()
+        axis.text(
+            0.05,
+            0.95,
+            f"d_H = {hausdorff_dimension:.3f}",
+            transform=axis.transAxes,
+            va="top",
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "#bbbbbb"},
+        )
+        figure.tight_layout()
+        figure.savefig(volume_path, dpi=180)
+        plt.close(figure)
+        return [embedding_path, gravity_path, volume_path]
     return [embedding_path, gravity_path]

@@ -41,7 +41,15 @@ Error bars are derived from ensemble averaging across multiple random initial co
 We analyze the macroscopic "response" between nodes across the emergent distance $d(i,j)$. Rather than following a pure scale-free $1/r^2$ power law, the data is consistent within fitting uncertainty with a screened interaction profile (**Figure 2**). This suggests that the emergent geometry natively supports localized correlations that decay rapidly in the deep IR limit.
 
 ## 5. Robustness Analysis
-To verify that the $D_s \approx 3$ limit is a robust attractor, we performed systematic parameter scans. The spectral dimension remains stable within numerical uncertainty under variations of the hopping-to-interaction ratio ($t/U \in [0.5, 2.0]$) and upon the introduction of moderate off-diagonal disorder (random noise in $u_{ij}$ up to $15\%$). Furthermore, altering the initial average degree of the underlying graph did not shift the asymptotic $D_s$ value, suggesting—but not establishing—the existence of a possible universality class within this model.
+To verify that the $D_s \approx 3$ limit is a robust attractor, we performed systematic parameter scans and checked two complementary geometric observables extracted from the correlation network: the spectral dimension from diffusion and the volume-growth exponent from correlation balls.
+
+![Spectral Dimension Scaling](plots/monte_carlo_spectral_dimension_scaling.png)
+
+The spectral dimension remains stable within numerical uncertainty under variations of the hopping-to-interaction ratio ($t/U \in [0.5, 2.0]$) and upon the introduction of moderate off-diagonal disorder (random noise in $u_{ij}$ up to $15\%$). Furthermore, altering the initial average degree of the underlying graph did not shift the asymptotic $D_s$ value, suggesting—but not establishing—the existence of a possible universality class within this model.
+
+![Correlation-Network Volume Scaling](plots/seed_7_volume_scaling.png)
+
+The volume-scaling plot provides an independent consistency check: if the emergent graph is approaching a stable low-dimensional manifold, then the mean enclosed node count $V(r)$ should grow approximately as a power law in the emergent radius, $V(r) \sim r^{d_H}$, over an intermediate scaling window. Agreement between the diffusion-based observable $D_s$ and the volume-growth behavior strengthens the interpretation that the correlation network is not merely sparse, but geometrically organized.
 
 ## 6. Limitations and Future Work
 It is crucial to state the limitations of this current framework:
@@ -194,6 +202,13 @@ The following plots provide empirical evidence for the emergent properties of th
 * **Description**: A log-log plot of the return probability vs. time for random walkers on the graph (N=512).
 * **Key Finding**: The high linearity ($R^2 > 0.99$) of the fit confirms that the emergent geometry is statistically uniform and follows a well-defined power law, which is the basis for our spectral dimension calculations.
 
+### 5. Correlation-Network Volume Scaling
+![Volume Scaling](plots/seed_7_volume_scaling.png)
+![Spectral Dimension Scaling](plots/monte_carlo_spectral_dimension_scaling.png)
+
+* **Description**: The first plot shows the average enclosed node count $V(r)$ inside correlation balls of radius $r$, measured directly from the emergent correlation network. The second plot shows the corresponding spectral-dimension scaling extracted from diffusion on the same class of emergent graphs.
+* **Key Finding**: Together, the two figures provide a complementary geometric test. The volume-growth slope estimates a Hausdorff-like exponent $d_H$, while the spectral plot measures $D_s$ from return probabilities. Their joint stability supports the interpretation that the correlation network exhibits approximately polynomial volume growth and an emergent low-dimensional continuum regime.
+
 
 ## Run
 
@@ -297,6 +312,7 @@ If `--plot-dir` is provided, the program also writes:
 
 - `*_embedding_3d.png`: node embedding in the emergent 3D geometry, with stronger edges drawn between highly correlated sites
 - `*_gravity_profile.png`: normalized response versus emergent distance, together with the best Yukawa/Newton-like fit
+- `*_volume_scaling.png` or `*_volume_scaling_<N>.png`: log-log volume-growth curves extracted from the correlation network, with a fitted Hausdorff-like slope `d_H`
 
 ## Interpretation
 

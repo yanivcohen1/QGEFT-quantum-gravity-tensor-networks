@@ -9,6 +9,8 @@ import sys
 import time
 
 import numpy as np
+import scipy.sparse as sp
+import scipy.sparse.csgraph as csgraph
 
 
 STAGE_MONTE_CARLO = "monte carlo"
@@ -1210,6 +1212,51 @@ def extrapolate_inverse_size_limit(sizes: list[int], values: list[float]) -> flo
     return float(intercept)
 
 
+def estimate_sparse_volume_scaling(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+    source_cap: int = 64,
+    radius_count: int = 24,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    if sites < 2 or len(edge_weights) == 0:
+        return np.empty(0, dtype=float), np.empty(0, dtype=float), np.empty(0, dtype=float), 0.0
+
+    reference = float(np.max(edge_weights)) if np.any(edge_weights > 0.0) else 1.0
+    lengths = -np.log(np.clip(edge_weights.astype(float) / (reference + 1e-12), 1e-8, None))
+    graph = sp.csr_matrix((lengths, (edge_i, edge_j)), shape=(sites, sites), dtype=np.float64)
+    graph = graph + graph.T
+
+    source_count = min(max(1, source_cap), sites)
+    sources = np.linspace(0, sites - 1, num=source_count, dtype=np.int32)
+    distances = csgraph.dijkstra(graph, directed=False, indices=sources)
+    positive = distances[np.isfinite(distances) & (distances > 0.0)]
+    if len(positive) < 4:
+        return np.empty(0, dtype=float), np.empty(0, dtype=float), np.empty(0, dtype=float), 0.0
+
+    unique_positive = np.unique(np.round(positive, decimals=8))
+    if len(unique_positive) < 2:
+        return np.empty(0, dtype=float), np.empty(0, dtype=float), np.empty(0, dtype=float), 0.0
+    if len(unique_positive) <= radius_count:
+        radii = unique_positive.astype(float)
+    else:
+        lower = float(np.quantile(unique_positive, 0.10))
+        upper = float(np.quantile(unique_positive, 0.90))
+        if upper <= lower:
+            lower = float(unique_positive[0])
+            upper = float(unique_positive[-1])
+        radii = np.linspace(lower, upper, num=radius_count, dtype=float)
+    volumes = np.asarray([float(np.mean(np.sum(distances <= radius, axis=1))) for radius in radii], dtype=float)
+    fit_mask = (radii > 0.0) & (volumes > 1.0)
+    if np.count_nonzero(fit_mask) < 3:
+        return radii, volumes, np.zeros_like(radii), 0.0
+
+    slope, intercept = np.polyfit(np.log(radii[fit_mask]), np.log(volumes[fit_mask]), deg=1)
+    fitted = np.exp(intercept + slope * np.log(np.clip(radii, 1e-12, None)))
+    return radii, volumes, fitted, float(slope)
+
+
 def run_scaling_sweep(
     sizes: list[int],
     seed: int,
@@ -1416,6 +1463,35 @@ def save_scaling_visualizations(
         figure.savefig(path, dpi=180)
         plt.close(figure)
         paths.append(path)
+
+        volume_radii, volume_profile, volume_fit, hausdorff_dimension = estimate_sparse_volume_scaling(
+            sites=artifact.summary.sites,
+            edge_i=artifact.edge_i,
+            edge_j=artifact.edge_j,
+            edge_weights=artifact.edge_weights,
+        )
+        if len(volume_radii) > 0:
+            path = output_dir / f"{prefix}_volume_scaling_{artifact.summary.sites}.png"
+            figure, axis = plt.subplots(figsize=(7.0, 4.8))
+            axis.loglog(volume_radii, volume_profile, "o", color="#386641", label="Correlation-ball volume")
+            axis.loglog(volume_radii, volume_fit, "-", color="#bc4749", linewidth=2.0, label="Power-law fit")
+            axis.set_title(f"Correlation-Network Volume Scaling (N={artifact.summary.sites})")
+            axis.set_xlabel("Emergent radius")
+            axis.set_ylabel("Average enclosed volume")
+            axis.grid(True, alpha=0.25)
+            axis.legend()
+            axis.text(
+                0.05,
+                0.95,
+                f"d_H = {hausdorff_dimension:.3f}",
+                transform=axis.transAxes,
+                va="top",
+                bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "#bbbbbb"},
+            )
+            figure.tight_layout()
+            figure.savefig(path, dpi=180)
+            plt.close(figure)
+            paths.append(path)
 
         path = output_dir / f"{prefix}_light_cone_{artifact.summary.sites}.png"
         figure, axis = plt.subplots(figsize=(7.0, 4.8))
