@@ -236,6 +236,8 @@ python main.py --mode monte-carlo --size-scan 256,512,1024 --distance-powers 0.5
 
 This reports how the diffusion, gravity-fit, Hausdorff-style volume growth, and light-cone diagnostics shift when the edge weights are remapped as $E_{ij}^\alpha$. When null models are enabled, the report and JSON output also include randomized baselines built from weight shuffling and degree-preserving rewiring, so the observed geometry can be compared against controls rather than interpreted in isolation.
 
+The scalable surrogate also supports explicit graph priors via `--graph-prior 3d-local|random-regular|small-world`, so the same observables can be stress-tested against non-Euclidean or weakly geometric sparse backbones rather than only against randomized edge weights.
+
 Run the block-projected exact solver in a fixed filling sector:
 
 ```powershell

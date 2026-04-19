@@ -185,6 +185,7 @@ class MonteCarloSummary:
     seed: int
     backend: str
     gauge_group: str
+    graph_prior: str
     tensor_bond_dim: int
     color_count: int
     degree: int
@@ -224,6 +225,7 @@ class MonteCarloSummary:
 class MonteCarloConfig:
     degree: int = 8
     gauge_group: str = "none"
+    graph_prior: str = "3d-local"
     color_count: int = 1
     tensor_bond_dim: int = 2
     coupling_scale: float = 0.9
@@ -265,6 +267,7 @@ class MonteCarloArtifacts:
 class ScalingPoint:
     sites: int
     gauge_group: str
+    graph_prior: str
     distance_model: str
     distance_alpha: float
     spectral_dimension: float
@@ -297,6 +300,7 @@ class ScalingSweepResult:
     mode: str
     backend: str
     gauge_group: str
+    graph_prior: str
     tensor_bond_dim: int
     degree: int
     distance_powers: tuple[float, ...]
@@ -313,6 +317,7 @@ class ScalingSweepResult:
                 "mode": self.mode,
                 "backend": self.backend,
                 "gauge_group": self.gauge_group,
+                "graph_prior": self.graph_prior,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
                 "distance_powers": list(self.distance_powers),
@@ -344,6 +349,132 @@ def normalize_null_model_types(values: tuple[str, ...] | list[str]) -> tuple[str
         if token not in normalized:
             normalized.append(token)
     return tuple(normalized)
+
+
+def normalize_graph_prior(value: str) -> str:
+    normalized = value.strip().lower()
+    allowed = {"3d-local", "random-regular", "small-world"}
+    if normalized not in allowed:
+        raise ValueError("graph prior must be one of: 3d-local, random-regular, small-world")
+    return normalized
+
+
+def make_position_cloud(sites: int, rng: np.random.Generator, graph_prior: str) -> np.ndarray:
+    if graph_prior == "3d-local":
+        dims = balanced_lattice_dims(sites)
+        coordinates = np.asarray(np.unravel_index(np.arange(sites), dims), dtype=np.float32).T
+        spacing = np.asarray(dims, dtype=np.float32)
+        jitter = 0.035 * rng.normal(size=(sites, 3)).astype(np.float32)
+        return ((coordinates + 0.5) / spacing + jitter / spacing).astype(np.float32)
+    return rng.uniform(0.0, 1.0, size=(sites, 3)).astype(np.float32)
+
+
+def pairwise_periodic_distances(positions: np.ndarray) -> np.ndarray:
+    deltas = positions[:, None, :] - positions[None, :, :]
+    wrapped = np.abs(deltas)
+    wrapped = np.minimum(wrapped, 1.0 - wrapped)
+    distances = np.sqrt(np.sum(wrapped**2, axis=-1)).astype(np.float32)
+    np.fill_diagonal(distances, np.inf)
+    return distances
+
+
+def build_nearest_neighbor_adjacency(distances: np.ndarray, degree: int) -> np.ndarray:
+    sites = distances.shape[0]
+    neighbor_count = min(max(1, degree), sites - 1)
+    adjacency = np.zeros((sites, sites), dtype=bool)
+    for site in range(sites):
+        nearest = np.argpartition(distances[site], neighbor_count)[:neighbor_count]
+        adjacency[site, nearest] = True
+    return np.logical_or(adjacency, adjacency.T)
+
+
+def try_build_random_regular_adjacency(sites: int, degree: int, rng: np.random.Generator) -> np.ndarray | None:
+    adjacency = np.zeros((sites, sites), dtype=bool)
+    remaining = np.full(sites, degree, dtype=np.int16)
+    while np.any(remaining > 0):
+        active = np.flatnonzero(remaining > 0)
+        src = int(active[np.argmax(remaining[active])])
+        candidates = active[(active != src) & (~adjacency[src, active])]
+        if len(candidates) < remaining[src]:
+            return None
+        picked = rng.choice(candidates, size=int(remaining[src]), replace=False)
+        for dst in np.asarray(picked, dtype=np.int32):
+            if remaining[dst] <= 0 or adjacency[src, dst]:
+                return None
+            adjacency[src, dst] = True
+            adjacency[dst, src] = True
+            remaining[dst] -= 1
+        if np.any(remaining < 0):
+            return None
+        remaining[src] = 0
+    return adjacency if np.all(np.sum(adjacency, axis=1) == degree) else None
+
+
+def build_random_regular_adjacency(sites: int, degree: int, rng: np.random.Generator) -> np.ndarray:
+    if degree >= sites:
+        raise ValueError("random-regular prior requires degree < sites")
+    if (sites * degree) % 2 != 0:
+        raise ValueError("random-regular prior requires sites * degree to be even")
+    for _ in range(128):
+        adjacency = try_build_random_regular_adjacency(sites, degree, rng)
+        if adjacency is not None:
+            return adjacency
+    raise RuntimeError("failed to sample a simple random-regular graph; try a different degree or seed")
+
+
+def build_small_world_adjacency(sites: int, degree: int, rng: np.random.Generator, rewiring_probability: float = 0.18) -> np.ndarray:
+    if degree >= sites:
+        raise ValueError("small-world prior requires degree < sites")
+    if degree < 2:
+        raise ValueError("small-world prior requires degree >= 2")
+    adjacency = np.zeros((sites, sites), dtype=bool)
+    half_degree = degree // 2
+    for offset in range(1, half_degree + 1):
+        targets = (np.arange(sites) + offset) % sites
+        adjacency[np.arange(sites), targets] = True
+        adjacency[targets, np.arange(sites)] = True
+    if degree % 2 == 1:
+        if sites % 2 != 0:
+            raise ValueError("small-world prior with odd degree requires an even number of sites")
+        offset = sites // 2
+        for site in range(offset):
+            target = site + offset
+            adjacency[site, target] = True
+            adjacency[target, site] = True
+
+    upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
+    for src, dst in zip(upper_i.tolist(), upper_j.tolist()):
+        if rng.random() >= rewiring_probability:
+            continue
+        adjacency[src, dst] = False
+        adjacency[dst, src] = False
+        candidates = np.setdiff1d(np.arange(sites), np.flatnonzero(adjacency[src] | (np.arange(sites) == src)), assume_unique=False)
+        if len(candidates) == 0:
+            adjacency[src, dst] = True
+            adjacency[dst, src] = True
+            continue
+        new_dst = int(rng.choice(candidates))
+        adjacency[src, new_dst] = True
+        adjacency[new_dst, src] = True
+    return adjacency
+
+
+def build_graph_prior_adjacency(
+    graph_prior: str,
+    positions: np.ndarray,
+    degree: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    distances = pairwise_periodic_distances(positions)
+    if graph_prior == "3d-local":
+        adjacency = build_nearest_neighbor_adjacency(distances, degree)
+    elif graph_prior == "random-regular":
+        adjacency = build_random_regular_adjacency(len(positions), degree, rng)
+    elif graph_prior == "small-world":
+        adjacency = build_small_world_adjacency(len(positions), degree, rng)
+    else:
+        raise ValueError("unsupported graph prior")
+    return adjacency, distances
 
 
 def build_distance_model_label(alpha: float) -> str:
@@ -552,6 +683,7 @@ class MonteCarloOperatorNetwork:
         self.config = config
         self.degree = config.degree
         self.gauge_group = config.gauge_group
+        self.graph_prior = normalize_graph_prior(config.graph_prior)
         self.color_count = max(1, config.color_count)
         self.tensor_bond_dim = max(1, config.tensor_bond_dim)
         self.coupling_scale = config.coupling_scale
@@ -635,6 +767,7 @@ class MonteCarloOperatorNetwork:
             seed=self.seed,
             backend=self.backend_name,
             gauge_group=self.gauge_group,
+            graph_prior=self.graph_prior,
             tensor_bond_dim=self.tensor_bond_dim,
             color_count=self.color_count,
             degree=self.degree,
@@ -693,48 +826,31 @@ class MonteCarloOperatorNetwork:
         self.progress_reporter.update(current, total, stage)
 
     def _build_sparse_algebraic_locality(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        dims = self._balanced_lattice_dims(self.sites)
-        coordinates = np.asarray(np.unravel_index(np.arange(self.sites), dims), dtype=np.float32).T
-        spacing = np.asarray(dims, dtype=np.float32)
-        jitter = 0.035 * self.rng.normal(size=(self.sites, 3)).astype(np.float32)
-        positions_np = (coordinates + 0.5) / spacing
-        features_np = 2.0 * pi * (positions_np + jitter / spacing)
+        positions_np = make_position_cloud(self.sites, self.rng, self.graph_prior)
+        features_np = 2.0 * pi * positions_np
+        adjacency, distances = build_graph_prior_adjacency(self.graph_prior, positions_np, self.degree, self.rng)
+        neighbor_count = min(max(1, self.degree), self.sites - 1)
 
-        xp = self.xp
-        positions = xp.asarray(positions_np, dtype=xp.float32)
-        deltas = positions[:, None, :] - positions[None, :, :]
-        wrapped = xp.abs(deltas)
-        wrapped = xp.minimum(wrapped, 1.0 - wrapped)
-        distances = xp.sqrt(xp.sum(wrapped**2, axis=-1))
-        xp.fill_diagonal(distances, xp.inf)
-
-        neighbor_count = min(self.degree, self.sites - 1)
-        adjacency = xp.zeros((self.sites, self.sites), dtype=bool)
-        for site in range(self.sites):
-            nearest = xp.argpartition(distances[site], neighbor_count)[:neighbor_count]
-            adjacency[site, nearest] = True
-        adjacency = xp.logical_or(adjacency, adjacency.T)
-
-        common_neighbors = adjacency.astype(xp.int16) @ adjacency.astype(xp.int16)
+        common_neighbors = adjacency.astype(np.int16) @ adjacency.astype(np.int16)
         closure_score = common_neighbors / max(neighbor_count, 1)
-        coupling_matrix = xp.zeros((self.sites, self.sites), dtype=xp.float32)
-        upper_i, upper_j = xp.nonzero(xp.triu(adjacency, k=1))
+        coupling_matrix = np.zeros((self.sites, self.sites), dtype=np.float32)
+        upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
         base = np.exp(-(distances[upper_i, upper_j] ** 2) / (2.0 * 0.22**2))
         reinforcement = 1.0 + 0.18 * closure_score[upper_i, upper_j]
-        noise = xp.asarray(1.0 + 0.05 * self.rng.normal(size=int(base.shape[0])), dtype=xp.float32)
+        noise = (1.0 + 0.05 * self.rng.normal(size=int(base.shape[0]))).astype(np.float32)
         values = self.coupling_scale * base * reinforcement * noise
         coupling_matrix[upper_i, upper_j] = values
         coupling_matrix[upper_j, upper_i] = values
 
-        edge_i, edge_j = xp.nonzero(xp.triu(adjacency, k=1))
+        edge_i, edge_j = np.nonzero(np.triu(adjacency, k=1))
         couplings = coupling_matrix[edge_i, edge_j]
         local_fields = self.rng.normal(0.0, self.field_scale, size=self.sites)
         return (
             np.asarray(features_np, dtype=np.float32),
-            to_numpy(positions).astype(np.float32),
-            to_numpy(edge_i).astype(np.int32),
-            to_numpy(edge_j).astype(np.int32),
-            to_numpy(couplings).astype(np.float32),
+            positions_np.astype(np.float32),
+            edge_i.astype(np.int32),
+            edge_j.astype(np.int32),
+            couplings.astype(np.float32),
             local_fields.astype(np.float32),
         )
 
@@ -990,6 +1106,7 @@ class SU3TensorNetworkMonteCarlo:
         self.seed = seed
         self.config = config
         self.degree = config.degree
+        self.graph_prior = normalize_graph_prior(config.graph_prior)
         self.coupling_scale = config.coupling_scale
         self.field_scale = config.field_scale
         self.chiral_scale = config.chiral_scale
@@ -1081,6 +1198,7 @@ class SU3TensorNetworkMonteCarlo:
             seed=self.seed,
             backend="cpu",
             gauge_group="su3",
+            graph_prior=self.graph_prior,
             tensor_bond_dim=self.tensor_bond_dim,
             color_count=self.color_count,
             degree=self.degree,
@@ -1140,22 +1258,9 @@ class SU3TensorNetworkMonteCarlo:
         self.progress_reporter.update(current, total, stage)
 
     def _build_su3_locality(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        dims = balanced_lattice_dims(self.sites)
-        coordinates = np.asarray(np.unravel_index(np.arange(self.sites), dims), dtype=np.float32).T
-        spacing = np.asarray(dims, dtype=np.float32)
-        positions = (coordinates + 0.5) / spacing
-        deltas = positions[:, None, :] - positions[None, :, :]
-        wrapped = np.abs(deltas)
-        wrapped = np.minimum(wrapped, 1.0 - wrapped)
-        distances = np.sqrt(np.sum(wrapped**2, axis=-1))
-        np.fill_diagonal(distances, np.inf)
-
-        neighbor_count = min(self.degree, self.sites - 1)
-        adjacency = np.zeros((self.sites, self.sites), dtype=bool)
-        for site in range(self.sites):
-            nearest = np.argpartition(distances[site], neighbor_count)[:neighbor_count]
-            adjacency[site, nearest] = True
-        adjacency = np.logical_or(adjacency, adjacency.T)
+        positions = make_position_cloud(self.sites, self.rng, self.graph_prior)
+        adjacency, distances = build_graph_prior_adjacency(self.graph_prior, positions, self.degree, self.rng)
+        neighbor_count = min(max(1, self.degree), self.sites - 1)
         common_neighbors = adjacency.astype(np.int16) @ adjacency.astype(np.int16)
         closure_score = common_neighbors / max(neighbor_count, 1)
         upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
@@ -1635,6 +1740,7 @@ def run_scaling_sweep(
             ScalingPoint(
                 sites=size,
                 gauge_group=summary.gauge_group,
+                graph_prior=summary.graph_prior,
                 distance_model=summary.distance_model,
                 distance_alpha=summary.distance_alpha,
                 spectral_dimension=summary.spectral_dimension,
@@ -1669,6 +1775,7 @@ def run_scaling_sweep(
         mode="monte-carlo",
         backend=artifacts[0].summary.backend if artifacts else config.backend,
         gauge_group=config.gauge_group,
+        graph_prior=config.graph_prior,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
         distance_powers=config.distance_powers,
@@ -1688,6 +1795,7 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         "=" * 26,
         f"backend: {result.backend}",
         f"gauge group: {result.gauge_group}",
+        f"graph prior: {result.graph_prior}",
         f"tensor bond dim: {result.tensor_bond_dim}",
         f"degree: {result.degree}",
         f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
@@ -1703,7 +1811,7 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
             f"{point.mean_return_error:16.5f} | {point.mean_magnetization:3.3f} | {point.samples_collected:7d} | {point.seed}"
         )
         lines.append(
-            f"      gauge={point.gauge_group} theta={point.theta_order:.5f} asym={point.matter_antimatter_asymmetry:.5f} "
+            f"      gauge={point.gauge_group} prior={point.graph_prior} theta={point.theta_order:.5f} asym={point.matter_antimatter_asymmetry:.5f} "
             f"entropy={point.color_entropy:.5f} tn_res={point.tensor_residual:.5f} "
             f"alpha_eff={point.fine_structure_proxy:.8f} m_e={point.electron_gap:.6f} m_p={point.proton_gap:.6f} m_p/m_e={point.proton_electron_mass_ratio_proxy:.6f} "
             f"c_eff={point.effective_light_cone_speed:.6f} cone_R2={point.light_cone_fit_r2:.5f} cone_leak={point.light_cone_leakage:.5f} "

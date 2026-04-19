@@ -44,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scan-seeds", type=int, default=0, help="If > 0, run this many consecutive seeds and rank the emergent regimes.")
     parser.add_argument("--plot-dir", type=Path, default=None, help="Optional directory for visualization PNG files.")
     parser.add_argument("--degree", type=int, default=8, help="Sparse algebraic degree for Monte Carlo mode.")
+    parser.add_argument("--graph-prior", choices=["3d-local", "random-regular", "small-world"], default="3d-local", help="Graph prior for Monte Carlo locality construction.")
     parser.add_argument("--backend", choices=["auto", "cpu", "cupy"], default="auto", help="Array backend for Monte Carlo mode. 'auto' prefers CuPy on a CUDA GPU when available.")
     parser.add_argument("--burn-in-sweeps", type=int, default=180, help="Burn-in sweeps for Monte Carlo mode.")
     parser.add_argument("--measurement-sweeps", type=int, default=420, help="Measurement sweeps for Monte Carlo mode.")
@@ -101,6 +102,7 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
     config = MonteCarloConfig(
         degree=args.degree,
         gauge_group=args.gauge_group,
+        graph_prior=args.graph_prior,
         color_count=3 if args.gauge_group == "su3" else 1,
         tensor_bond_dim=args.tensor_bond_dim,
         coupling_scale=args.coupling_scale,
