@@ -74,23 +74,23 @@ While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelli
 
 
 
-# Emergent Operator Network
+# Implementation Notes
 
-This project implements a toy quantum-algebra simulation inspired by the framework
+This repository implements a toy quantum-algebra simulation inspired by the framework
 
 $$
 (\mathcal{H}, \mathcal{A}, H)
 $$
 
 with no fundamental spacetime. The code does not claim a derivation of real-world
-gravity or baryogenesis. It now includes two complementary engines:
+gravity, baryogenesis, or a complete microscopic theory of emergent spacetime. It includes two complementary computational engines:
 
 - an exact sparse Jordan-Wigner fermion solver with Lanczos diagonalization and optional `SU(2)` / `SU(3)` link backgrounds,
 - a large-`N` Monte Carlo surrogate for scaling studies.
 
 The exact solver constructs a finite-dimensional operator algebra, solves for a
-low-energy quantum state, derives an effective correlation graph, and reports
-whether that state exhibits:
+low-energy quantum state, derives an effective correlation graph, and reports a
+set of diagnostic observables:
 
 - a low-stress low-dimensional embedding under classical MDS,
 - distance-response profiles that can be compared against Yukawa/Newton-like fit families,
@@ -134,49 +134,49 @@ measures a chiral phase observable that biases positive versus negative charge s
 - `scalable_simulation.py`: sparse Monte Carlo surrogate for hundreds to thousands of sites
 - `main.py`: CLI entrypoint
 
-## Example Experiments & Results
+## Representative Runs
 
-The `main.py` CLI allows you to run various simulated experiments. The descriptions below are intentionally conservative: they summarize what each run probes inside the toy model, not what it proves about nature.
+The `main.py` CLI supports several representative runs. The descriptions below are intentionally conservative: they summarize what each run probes inside the toy model, not what it proves about nature.
 
-### 1. The "Free Space" Baseline (No Gauge Fields)
+### 1. Baseline Monte Carlo Run Without Gauge Structure
 **Command:**
 ```bash
 python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy
 ```
-**What it demonstrates:**
-This serves as a control experiment for the Monte Carlo surrogate with no gauge-sector structure.
+**Interpretation:**
+This run acts as a control configuration for the Monte Carlo surrogate with no gauge-sector structure.
 * **No gauge-driven proxy:** The effective fine-structure-like proxy $\alpha_{\text{eff}}$ is expected to be small or zero in this setting because the corresponding phase/gauge observables are absent by construction.
 * **3D-like diffusion on the surrogate graph:** In representative sweeps, the spectral-dimension diagnostic rises from lower values at small $N$ toward values near $3$ at larger $N$. This indicates that the chosen sparse graph and weighting scheme support diffusion behavior similar to a 3D network over the sampled range.
 * **Bounded-speed propagation proxy:** The light-cone diagnostics quantify approximately linear front propagation and out-of-cone leakage on the weighted graph. They are useful consistency checks for finite-speed spreading, not proofs of Lorentz symmetry or relativistic causality.
 
-### 2. Exact Diagonalization: Weak Force & Particle Generations
+### 2. Exact Diagonalization in an `SU(2)` Background
 **Command:**
 ```bash
 python main.py --mode exact --sites 12 --gauge-group su2 --filling 2 --eig-count 6
 ```
-**What it demonstrates:**
+**Interpretation:**
 Using exact sparse matrix diagonalization on $N=12$ sites with an `SU(2)` gauge background.
 * **Near-degenerate low-energy structure:** The code groups nearly degenerate eigenstates into coarse "generation" clusters. These are bookkeeping labels for low-energy spectral structure, not evidence for Standard Model flavor physics.
 * **Charge-sector bias proxy:** The chiral/topological diagnostics can favor positive over negative charge-like sectors in the reweighted low-energy ensemble.
 * **Distance-response fitting:** The run reports how well the induced response profile matches screened inverse-distance fit families inside the emergent correlation geometry. This is a model diagnostic, not a derived weak-force law.
 
-### 3. Exact SU(3): Color-Balanced Sectors and Asymmetry Diagnostics
+### 3. Exact Diagonalization in a Color-Balanced `SU(3)` Sector
 **Command:**
 ```bash
 python main.py --mode exact --sites 12 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 6
 ```
-**What it demonstrates:**
+**Interpretation:**
 This runs the exact solver in an explicit `SU(3)`-colored filling sector.
 * **Color-balanced sector study:** Enforcing `[1,1,1]` isolates a color-balanced subspace that is useful for testing how the diagnostics behave in singlet-like configurations.
 * **Sector-dependent asymmetry suppression:** In some runs, the asymmetry proxy is reduced or vanishes in these balanced sectors. That is an interesting model feature, but it should not be oversold as a solution to the strong CP problem.
 * **Excitation-channel organization:** The code classifies low excitations into coarse sector labels based on charge, color balance, and localization. These labels are descriptive diagnostics, not particle identifications.
 
-### 4. The Thermodynamic Limit: Tensor Networks & Scaling Parameters
+### 4. Large-$N$ `SU(3)` Surrogate Run
 **Command:**
 ```bash
 python main.py --mode monte-carlo --size-scan 256,512,1024 --gauge-group su3 --tensor-bond-dim 2 --degree 8
 ```
-**What it demonstrates:**
+**Interpretation:**
 This probes the `SU(3)` tensor-network-assisted surrogate at larger sizes.
 * **Model-dependent proxies:** The run reports `alpha_eff` and `m_p/m_e`-like quantities derived from transfer-sector observables. They are internal proxies designed to track scaling trends, not candidate predictions of measured constants.
 * **Global chiral-bias diagnostics:** The sampled color configurations can show strong preference for one charge-like sector over another, which is best interpreted as a property of the surrogate ensemble.
@@ -184,7 +184,7 @@ This probes the `SU(3)` tensor-network-assisted surrogate at larger sizes.
 
 ***
 
-## Visualizations & Analysis
+## Diagnostic Visualizations
 
 The following plots illustrate the main geometric and response diagnostics extracted from the simulation engines.
 
@@ -216,7 +216,7 @@ The following plots illustrate the main geometric and response diagnostics extra
 * **Key Finding**: Together, the two figures provide a complementary geometric test. The volume-growth slope estimates a Hausdorff-like exponent $d_H$, while the spectral plot measures $D_s$ from return probabilities. Their joint stability supports the narrower interpretation that the correlation network is geometrically structured under the chosen metric prescription.
 
 
-## Run
+## Command-Line Usage
 
 ```powershell
 python main.py --sites 8 --seed 7
@@ -234,25 +234,25 @@ Run the block-projected exact solver in a fixed filling sector:
 python main.py --mode exact --sites 12 --gauge-group su2 --filling 2 --eig-count 8
 ```
 
-Pin the exact solver to an explicit per-color block:
+Restrict the exact solver to an explicit per-color block:
 
 ```powershell
 python main.py --mode exact --sites 10 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 8
 ```
 
-Turn on the toy domain-wall Higgs/Yukawa extension in exact mode:
+Enable the toy domain-wall Higgs/Yukawa extension in exact mode:
 
 ```powershell
 python main.py --mode exact --sites 10 --gauge-group su3 --filling 2 --eig-count 10 --yukawa-scale 0.6 --domain-wall-height 2.2 --domain-wall-width 0.12
 ```
 
-Optional:
+Optional output:
 
 ```powershell
 python main.py --sites 8 --seed 7 --json-out result.json
 ```
 
-Generate PNG visualizations of the emergent 3D embedding and weak-gravity profile:
+Write PNG visualizations of the correlation-geometry embedding and response profile:
 
 ```powershell
 python main.py --sites 8 --seed 7 --plot-dir plots
@@ -270,19 +270,19 @@ Run the `SU(3)` tensor-network-assisted Monte Carlo surrogate at large `N`:
 python main.py --mode monte-carlo --sites 1024 --gauge-group su3 --tensor-bond-dim 2 --degree 8 --progress-mode log
 ```
 
-Use the GPU with CuPy when available:
+Use the GPU via CuPy when available:
 
 ```powershell
 python main.py --mode monte-carlo --sites 2048 --backend cupy
 ```
 
-If you want CUDA progress without the interactive bar, use log mode:
+For CUDA progress without the interactive bar, use log mode:
 
 ```powershell
 python main.py --mode monte-carlo --sites 2048 --backend cupy --progress-mode log
 ```
 
-Sweep across increasing system sizes and save a scaling plot:
+Run a size sweep and save a scaling plot:
 
 ```powershell
 python main.py --mode monte-carlo --size-scan 64,128,256,512 --plot-dir plots --json-out scaling.json
@@ -294,9 +294,9 @@ Scan several nearby seeds and rank the most geometric regime:
 python main.py --sites 8 --seed 7 --scan-seeds 12 --json-out scan.json
 ```
 
-## Output
+## Reported Outputs
 
-The program prints:
+In exact mode, the program reports:
 
 - Hamiltonian energy diagnostics
 - connected-correlation graph statistics
@@ -320,16 +320,16 @@ If `--plot-dir` is provided, the program also writes:
 - `*_gravity_profile.png`: normalized response versus emergent distance, together with the best Yukawa/Newton-like phenomenological fit
 - `*_volume_scaling.png` or `*_volume_scaling_<N>.png`: log-log volume-growth curves extracted from the correlation network, with a fitted Hausdorff-like slope `d_H`
 
-## Interpretation
+## Interpretation of Outputs
 
 The results of this simulation must be interpreted by strictly separating three distinct conceptual layers:
 1. **The Correlation Network:** The raw output is purely topological: a weighted graph of quantum correlations ($E_{ij}$) generated by the Hamiltonian dynamics.
 2. **The Geometric Embedding:** Tools like MDS and spectral diffusion force a geometric interpretation onto this graph. The fact that the graph *can* be embedded in 3D with low stress, or diffuses like a 3D lattice, is a fascinating structural property of the state, but it is an imposed mathematical lens.
 3. **The Physical Interpretation:** Leaping from a 3D-like correlation graph to "physical spacetime" remains entirely speculative.
 
-Therefore, the emergent structure must be viewed strictly as a **correlation geometry** rather than a physical spatial background. Future theoretical work must focus on analytical universality proofs, specifically showing that the observed dimensionality is an invariant topological feature of the quantum state, and not merely an artifact of the chosen $E_{ij} \to d(i,j)$ mapping protocol.
+Therefore, the emergent structure must be viewed strictly as a **correlation geometry** rather than a physical spatial background. Future theoretical work should focus on analytical universality tests, specifically showing that the observed dimensionality is an invariant topological feature of the quantum state, and not merely an artifact of the chosen $E_{ij} \to d(i,j)$ mapping protocol.
 
-## SU(3) Tensor Monte Carlo
+## `SU(3)` Tensor Monte Carlo Surrogate
 
 When `--mode monte-carlo --gauge-group su3` is selected, the scalable engine uses
 an `SU(3)` surrogate with:
@@ -340,7 +340,7 @@ an `SU(3)` surrogate with:
 - belief-propagation updates to build local tensor environments before Gibbs-style Monte Carlo sweeps.
 
 This is a tensor-network-assisted Monte Carlo toy model, not a full non-Abelian
-tensor-network simulation. It is meant to probe scaling behavior at sizes such as
+tensor-network simulation. Its purpose is to probe scaling behavior at sizes such as
 `N=1024` while preserving some color-sector structure.
 
 For `SU(3)` sweeps, the Monte Carlo report now derives two asymptotic observables
@@ -357,9 +357,9 @@ propagation diagnostic extracted from transfer-matrix spreading on the emergent
 graph. It is a necessary consistency check for causal emergence, not a proof of
 Lorentz invariance, relativistic kinematics, or the Einstein equations.
 
-## Exact Sparse Mode
+## Exact Sparse Solver
 
-The exact mode is designed for approximately `N ~= 12-16` depending on available
+The exact mode is practical for approximately `N ~= 12-16`, depending on available
 RAM and how many low-energy eigenpairs you request with `--eig-count`.
 
 - `--gauge-group none`: plain ring hopping with no link matrices
@@ -369,7 +369,7 @@ RAM and how many low-energy eigenpairs you request with `--eig-count`.
 - `--filling`: project onto a fixed total particle-number block before diagonalization
 - `--color-filling`: optionally restrict to a single per-color block instead of merging all compatible color sectors
 
-The reported diagnostics now include a symmetry score from number-operator
+The reported diagnostics include a symmetry score from number-operator
 commutators, near-degenerate generation groups, mass-gap ratios, mean normalized
 link trace, and a Wilson-loop proxy around the ring.
 
@@ -383,11 +383,11 @@ diagonal background in exact mode. This is intended only as a controllable way t
 test whether a larger mass hierarchy can emerge between charged and color-balanced
 channels. It is not a faithful lattice Standard Model implementation.
 
-The exact engine no longer collapses each gauge link to `Tr(U_ij)`. Instead, it
+The exact engine does not collapse each gauge link to `Tr(U_ij)`. Instead, it
 propagates explicit color channels and solves the low-energy spectrum block by
 block in fixed-filling sectors. This is what makes the larger exact runs feasible.
 
-## GPU Acceleration
+## GPU Backend
 
 The Monte Carlo surrogate supports an optional `CuPy` backend for CUDA GPUs.
 
