@@ -316,15 +316,10 @@ If `--plot-dir` is provided, the program also writes:
 
 ## Interpretation
 
-This is a computational toy model. A positive result means the chosen algebraic
-dynamics produced observables consistent with an emergent low-dimensional geometry
-and a weak chiral bias. It is evidence about this toy system, not a proof of a
-fundamental theory of nature.
-
-The scalable Monte Carlo mode is a coarse-grained surrogate of the original exact
-quantum model. It replaces the full `2^N` Hilbert-space evolution with sparse
-pair and triadic interactions in an effective low-energy spin sector, which makes
-large-`N` scaling studies computationally feasible.
+The emergent structure should be viewed as a **correlation geometry** rather than a physical spatial background. The primary findings indicate that:
+* The system naturally organizes into low-dimensional topologies under specific entanglement-minimizing dynamics.
+* The perceived "dimensionality" is a feature of the diffusion properties on the emergent graph.
+* Future work must focus on **universality proofs** and invariance under re-parameterization of the distance function to move beyond the toy-model stage.
 
 ## SU(3) Tensor Monte Carlo
 
