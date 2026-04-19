@@ -51,6 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--walker-count", type=int, default=512, help="Number of random walkers for spectral-dimension estimation.")
     parser.add_argument("--max-walk-steps", type=int, default=24, help="Maximum random-walk time for spectral-dimension estimation.")
     parser.add_argument("--size-scan", type=str, default="", help="Comma-separated system sizes for a Monte Carlo scaling sweep, for example 64,128,256,512.")
+    parser.add_argument("--distance-powers", type=str, default="1.0", help="Comma-separated exponents for alternative distance prescriptions based on E_ij^alpha, for example 0.5,1.0,2.0.")
+    parser.add_argument("--null-models", type=str, default="", help="Optional comma-separated null models to compare against: shuffle, rewired.")
+    parser.add_argument("--null-model-samples", type=int, default=0, help="Number of randomized realizations per null model in Monte Carlo mode.")
+    parser.add_argument("--null-rewire-swaps", type=int, default=4, help="Approximate number of degree-preserving swap attempts per edge for the rewired null model.")
     parser.add_argument("--no-progress", action="store_true", help="Disable the live terminal progress bar for long Monte Carlo runs.")
     parser.add_argument("--progress-mode", choices=["bar", "log", "off"], default="bar", help="Progress display mode for Monte Carlo runs. 'log' is often more stable for CUDA/CuPy runs.")
     return parser
@@ -75,10 +79,25 @@ def parse_color_filling(raw: str) -> tuple[int, ...] | None:
     return values
 
 
+def parse_float_list(raw: str, default: tuple[float, ...]) -> tuple[float, ...]:
+    if not raw.strip():
+        return default
+    values = tuple(float(token.strip()) for token in raw.split(",") if token.strip())
+    return values if values else default
+
+
+def parse_string_list(raw: str) -> tuple[str, ...]:
+    if not raw.strip():
+        return ()
+    return tuple(token.strip().lower() for token in raw.split(",") if token.strip())
+
+
 def run_monte_carlo_mode(args: argparse.Namespace) -> None:
     sizes = parse_size_scan(args.size_scan)
     target_sizes = sizes if sizes else [args.sites]
     progress_mode = "off" if args.no_progress else args.progress_mode
+    distance_powers = parse_float_list(args.distance_powers, default=(1.0,))
+    null_models = parse_string_list(args.null_models)
     config = MonteCarloConfig(
         degree=args.degree,
         gauge_group=args.gauge_group,
@@ -94,6 +113,10 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         walker_count=args.walker_count,
         max_walk_steps=args.max_walk_steps,
         backend=args.backend,
+        distance_powers=distance_powers,
+        null_model_types=null_models,
+        null_model_samples=args.null_model_samples,
+        null_rewire_swaps=args.null_rewire_swaps,
     )
     sweep, artifacts = run_scaling_sweep(
         sizes=target_sizes,

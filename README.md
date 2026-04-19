@@ -228,6 +228,14 @@ Run the sparse exact solver with `SU(3)` link matrices and 12 Lanczos eigenpairs
 python main.py --mode exact --sites 10 --gauge-group su3 --eig-count 12
 ```
 
+Run a Monte Carlo sweep with alternative distance prescriptions and explicit null-model controls:
+
+```powershell
+python main.py --mode monte-carlo --size-scan 256,512,1024 --distance-powers 0.5,1.0,2.0 --null-models shuffle,rewired --null-model-samples 6 --progress-mode log
+```
+
+This reports how the diffusion, gravity-fit, Hausdorff-style volume growth, and light-cone diagnostics shift when the edge weights are remapped as $E_{ij}^\alpha$. When null models are enabled, the report and JSON output also include randomized baselines built from weight shuffling and degree-preserving rewiring, so the observed geometry can be compared against controls rather than interpreted in isolation.
+
 Run the block-projected exact solver in a fixed filling sector:
 
 ```powershell

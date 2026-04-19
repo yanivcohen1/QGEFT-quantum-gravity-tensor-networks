@@ -7,6 +7,7 @@ from math import pi
 from pathlib import Path
 import sys
 import time
+from typing import Callable
 
 import numpy as np
 import scipy.sparse as sp
@@ -123,6 +124,62 @@ def softmax_from_log(log_values: np.ndarray) -> np.ndarray:
 
 
 @dataclass
+class DistanceModelDiagnostics:
+    label: str
+    alpha: float
+    spectral_dimension: float
+    spectral_dimension_std: float
+    mean_return_error: float
+    gravity_power_exponent: float
+    gravity_inverse_square_r2: float
+    gravity_inverse_square_mae: float
+    hausdorff_dimension: float
+    effective_light_cone_speed: float
+    light_cone_fit_r2: float
+    light_cone_leakage: float
+
+
+@dataclass
+class DistanceModelArtifacts:
+    summary: DistanceModelDiagnostics
+    edge_weights: np.ndarray
+    return_times: np.ndarray
+    return_probabilities: np.ndarray
+    return_fit: np.ndarray
+    edge_distances: np.ndarray
+    signal_times: np.ndarray
+    signal_frontier: np.ndarray
+    signal_frontier_fit: np.ndarray
+
+
+@dataclass
+class NullModelAggregate:
+    model: str
+    samples: int
+    spectral_dimension_mean: float
+    spectral_dimension_std: float
+    gravity_inverse_square_r2_mean: float
+    gravity_inverse_square_r2_std: float
+    hausdorff_dimension_mean: float
+    hausdorff_dimension_std: float
+    effective_light_cone_speed_mean: float
+    effective_light_cone_speed_std: float
+
+
+@dataclass(frozen=True)
+class DistanceEvaluationContext:
+    positions: np.ndarray
+    edge_i: np.ndarray
+    edge_j: np.ndarray
+    sites: int
+    max_walk_steps: int
+    source_count: int
+    xp: object
+    spectral_estimator: Callable[[np.ndarray, np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float]]
+    gravity_estimator: Callable[[np.ndarray, np.ndarray, np.ndarray, np.ndarray], tuple[np.ndarray, float, float, float]]
+
+
+@dataclass
 class MonteCarloSummary:
     sites: int
     seed: int
@@ -157,6 +214,10 @@ class MonteCarloSummary:
     effective_light_cone_speed: float
     light_cone_fit_r2: float
     light_cone_leakage: float
+    distance_model: str
+    distance_alpha: float
+    alternative_distance_models: list[DistanceModelDiagnostics]
+    null_model_summaries: list[NullModelAggregate]
 
 
 @dataclass(frozen=True)
@@ -175,6 +236,10 @@ class MonteCarloConfig:
     walker_count: int = 512
     max_walk_steps: int = 24
     backend: str = "auto"
+    distance_powers: tuple[float, ...] = (1.0,)
+    null_model_types: tuple[str, ...] = ()
+    null_model_samples: int = 0
+    null_rewire_swaps: int = 4
 
 
 @dataclass
@@ -185,6 +250,8 @@ class MonteCarloArtifacts:
     edge_i: np.ndarray
     edge_j: np.ndarray
     edge_weights: np.ndarray
+    distance_model_artifacts: list[DistanceModelArtifacts]
+    null_model_summaries: list[NullModelAggregate]
     return_times: np.ndarray
     return_probabilities: np.ndarray
     return_fit: np.ndarray
@@ -198,6 +265,8 @@ class MonteCarloArtifacts:
 class ScalingPoint:
     sites: int
     gauge_group: str
+    distance_model: str
+    distance_alpha: float
     spectral_dimension: float
     spectral_dimension_std: float
     mean_return_error: float
@@ -217,6 +286,8 @@ class ScalingPoint:
     effective_light_cone_speed: float
     light_cone_fit_r2: float
     light_cone_leakage: float
+    alternative_distance_models: list[DistanceModelDiagnostics]
+    null_model_summaries: list[NullModelAggregate]
     samples_collected: int
     seed: int
 
@@ -228,6 +299,9 @@ class ScalingSweepResult:
     gauge_group: str
     tensor_bond_dim: int
     degree: int
+    distance_powers: tuple[float, ...]
+    null_model_types: tuple[str, ...]
+    null_model_samples: int
     asymptotic_fine_structure_proxy: float | None
     asymptotic_proton_electron_mass_ratio_proxy: float | None
     asymptotic_light_cone_speed: float | None
@@ -241,6 +315,9 @@ class ScalingSweepResult:
                 "gauge_group": self.gauge_group,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
+                "distance_powers": list(self.distance_powers),
+                "null_model_types": list(self.null_model_types),
+                "null_model_samples": self.null_model_samples,
                 "asymptotic_fine_structure_proxy": self.asymptotic_fine_structure_proxy,
                 "asymptotic_proton_electron_mass_ratio_proxy": self.asymptotic_proton_electron_mass_ratio_proxy,
                 "asymptotic_light_cone_speed": self.asymptotic_light_cone_speed,
@@ -248,6 +325,210 @@ class ScalingSweepResult:
             },
             indent=2,
         )
+
+
+def normalize_distance_powers(values: tuple[float, ...] | list[float]) -> tuple[float, ...]:
+    normalized = sorted({round(float(value), 8) for value in values if float(value) > 0.0})
+    return tuple(normalized) if normalized else (1.0,)
+
+
+def normalize_null_model_types(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    allowed = {"shuffle", "rewired"}
+    normalized: list[str] = []
+    for raw in values:
+        token = raw.strip().lower()
+        if not token:
+            continue
+        if token not in allowed:
+            raise ValueError("null model types must use only: shuffle, rewired")
+        if token not in normalized:
+            normalized.append(token)
+    return tuple(normalized)
+
+
+def build_distance_model_label(alpha: float) -> str:
+    return f"E^{alpha:.2f}"
+
+
+def transform_edge_weights(edge_weights: np.ndarray, alpha: float) -> np.ndarray:
+    safe = np.clip(np.asarray(edge_weights, dtype=np.float64), 1e-9, None)
+    transformed = safe**alpha
+    scale = float(np.max(transformed)) if len(transformed) > 0 else 1.0
+    if scale <= 1e-12:
+        return np.full_like(safe, 1e-6, dtype=np.float32)
+    return np.clip(transformed / scale, 1e-6, None).astype(np.float32)
+
+
+def degree_preserving_edge_rewire(
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    rng: np.random.Generator,
+    swaps_per_edge: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    edges = [tuple(sorted((int(src), int(dst)))) for src, dst in zip(edge_i.tolist(), edge_j.tolist())]
+    edge_set = set(edges)
+    target_swaps = max(len(edges) * max(swaps_per_edge, 1), 1)
+    max_attempts = target_swaps * 16 + 64
+    successes = 0
+    attempts = 0
+    while successes < target_swaps and attempts < max_attempts and len(edges) >= 2:
+        attempts += 1
+        first, second = rng.choice(len(edges), size=2, replace=False)
+        a, b = edges[first]
+        c, d = edges[second]
+        if len({a, b, c, d}) < 4:
+            continue
+        if rng.random() < 0.5:
+            candidate_one = tuple(sorted((a, d)))
+            candidate_two = tuple(sorted((c, b)))
+        else:
+            candidate_one = tuple(sorted((a, c)))
+            candidate_two = tuple(sorted((b, d)))
+        if candidate_one[0] == candidate_one[1] or candidate_two[0] == candidate_two[1]:
+            continue
+        if candidate_one in edge_set or candidate_two in edge_set:
+            continue
+        edge_set.remove((a, b))
+        edge_set.remove((c, d))
+        edge_set.add(candidate_one)
+        edge_set.add(candidate_two)
+        edges[first] = candidate_one
+        edges[second] = candidate_two
+        successes += 1
+    rewired = np.asarray(sorted(edges), dtype=np.int32)
+    return rewired[:, 0], rewired[:, 1]
+
+
+def evaluate_distance_model(
+    label: str,
+    alpha: float,
+    transformed_weights: np.ndarray,
+    context: DistanceEvaluationContext,
+) -> DistanceModelArtifacts:
+    times, returns, fitted, spectral_dimension, spectral_std, fit_error = context.spectral_estimator(
+        context.edge_i,
+        context.edge_j,
+        transformed_weights,
+    )
+    edge_distances, gravity_exponent, gravity_r2, gravity_mae = context.gravity_estimator(
+        context.positions,
+        context.edge_i,
+        context.edge_j,
+        transformed_weights,
+    )
+    signal_times, signal_frontier, signal_fit, light_cone_speed, light_cone_fit_r2, light_cone_leakage = estimate_light_cone_diagnostics(
+        sites=context.sites,
+        positions=context.positions,
+        edge_i=context.edge_i,
+        edge_j=context.edge_j,
+        edge_weights=transformed_weights,
+        max_walk_steps=context.max_walk_steps,
+        source_count=context.source_count,
+        xp=context.xp,
+    )
+    _, _, _, hausdorff_dimension = estimate_sparse_volume_scaling(
+        sites=context.sites,
+        edge_i=context.edge_i,
+        edge_j=context.edge_j,
+        edge_weights=transformed_weights,
+    )
+    return DistanceModelArtifacts(
+        summary=DistanceModelDiagnostics(
+            label=label,
+            alpha=float(alpha),
+            spectral_dimension=float(spectral_dimension),
+            spectral_dimension_std=float(spectral_std),
+            mean_return_error=float(fit_error),
+            gravity_power_exponent=float(gravity_exponent),
+            gravity_inverse_square_r2=float(gravity_r2),
+            gravity_inverse_square_mae=float(gravity_mae),
+            hausdorff_dimension=float(hausdorff_dimension),
+            effective_light_cone_speed=float(light_cone_speed),
+            light_cone_fit_r2=float(light_cone_fit_r2),
+            light_cone_leakage=float(light_cone_leakage),
+        ),
+        edge_weights=transformed_weights.astype(np.float32),
+        return_times=times,
+        return_probabilities=returns,
+        return_fit=fitted,
+        edge_distances=edge_distances,
+        signal_times=signal_times,
+        signal_frontier=signal_frontier,
+        signal_frontier_fit=signal_fit,
+    )
+
+
+def aggregate_null_model_metrics(model: str, diagnostics: list[DistanceModelArtifacts]) -> NullModelAggregate:
+    spectral = np.asarray([artifact.summary.spectral_dimension for artifact in diagnostics], dtype=float)
+    gravity = np.asarray([artifact.summary.gravity_inverse_square_r2 for artifact in diagnostics], dtype=float)
+    hausdorff = np.asarray([artifact.summary.hausdorff_dimension for artifact in diagnostics], dtype=float)
+    light_cone = np.asarray([artifact.summary.effective_light_cone_speed for artifact in diagnostics], dtype=float)
+    return NullModelAggregate(
+        model=model,
+        samples=len(diagnostics),
+        spectral_dimension_mean=float(np.mean(spectral)),
+        spectral_dimension_std=float(np.std(spectral)),
+        gravity_inverse_square_r2_mean=float(np.mean(gravity)),
+        gravity_inverse_square_r2_std=float(np.std(gravity)),
+        hausdorff_dimension_mean=float(np.mean(hausdorff)),
+        hausdorff_dimension_std=float(np.std(hausdorff)),
+        effective_light_cone_speed_mean=float(np.mean(light_cone)),
+        effective_light_cone_speed_std=float(np.std(light_cone)),
+    )
+
+
+def build_distance_model_suite(
+    base_edge_weights: np.ndarray,
+    distance_powers: tuple[float, ...],
+    null_model_types: tuple[str, ...],
+    null_model_samples: int,
+    null_rewire_swaps: int,
+    context: DistanceEvaluationContext,
+    rng: np.random.Generator,
+) -> tuple[DistanceModelArtifacts, list[DistanceModelArtifacts], list[NullModelAggregate]]:
+    alphas = normalize_distance_powers(distance_powers)
+    distance_artifacts = [
+        evaluate_distance_model(
+            label=build_distance_model_label(alpha),
+            alpha=alpha,
+            transformed_weights=transform_edge_weights(base_edge_weights, alpha),
+            context=context,
+        )
+        for alpha in alphas
+    ]
+    primary_index = next((index for index, alpha in enumerate(alphas) if abs(alpha - 1.0) <= 1e-8), 0)
+    primary_artifact = distance_artifacts[primary_index]
+    null_summaries: list[NullModelAggregate] = []
+    model_types = normalize_null_model_types(null_model_types)
+    if model_types and null_model_samples > 0:
+        for model in model_types:
+            diagnostics: list[DistanceModelArtifacts] = []
+            for _ in range(null_model_samples):
+                rewired_i = context.edge_i
+                rewired_j = context.edge_j
+                rewired_weights = rng.permutation(primary_artifact.edge_weights)
+                if model == "rewired":
+                    rewired_i, rewired_j = degree_preserving_edge_rewire(context.edge_i, context.edge_j, rng, null_rewire_swaps)
+                diagnostics.append(
+                    evaluate_distance_model(
+                        label=f"{primary_artifact.summary.label}:{model}",
+                        alpha=primary_artifact.summary.alpha,
+                        transformed_weights=rewired_weights,
+                        context=DistanceEvaluationContext(
+                            context.positions,
+                            rewired_i,
+                            rewired_j,
+                            context.sites,
+                            context.max_walk_steps,
+                            context.source_count,
+                            context.xp,
+                            context.spectral_estimator,
+                            context.gravity_estimator,
+                        ),
+                    )
+                )
+            null_summaries.append(aggregate_null_model_metrics(model, diagnostics))
+    return primary_artifact, distance_artifacts, null_summaries
 
 
 class MonteCarloOperatorNetwork:
@@ -282,6 +563,10 @@ class MonteCarloOperatorNetwork:
         self.sample_interval = config.sample_interval
         self.walker_count = config.walker_count
         self.max_walk_steps = config.max_walk_steps
+        self.distance_powers = normalize_distance_powers(config.distance_powers)
+        self.null_model_types = normalize_null_model_types(config.null_model_types)
+        self.null_model_samples = max(0, int(config.null_model_samples))
+        self.null_rewire_swaps = max(1, int(config.null_rewire_swaps))
         self.backend_name, self.xp = resolve_array_backend(config.backend)
         self.progress_reporter = progress_reporter
         self.rng = np.random.default_rng(seed)
@@ -293,33 +578,49 @@ class MonteCarloOperatorNetwork:
         triads, unique_triads = self._build_sparse_triads(edge_i, edge_j)
         self._progress(2, 4, STAGE_MONTE_CARLO)
         samples, energies = self._sample_spin_configurations(edge_i, edge_j, couplings, local_fields, triads)
-        edge_weights = self._edge_covariances(samples, edge_i, edge_j, couplings)
-        self._progress(3, 4, "diffusion")
-        times, returns, fitted, spectral_dimension, spectral_std, fit_error = self._estimate_spectral_dimension(
+        raw_edge_weights = self._edge_covariances(samples, edge_i, edge_j, couplings)
+        self._progress(3, 4, "distance tests")
+        evaluation_context = DistanceEvaluationContext(
+            positions,
             edge_i,
             edge_j,
-            edge_weights,
+            self.sites,
+            self.max_walk_steps,
+            self.walker_count,
+            self.xp,
+            self._estimate_spectral_dimension,
+            self._fit_inverse_square_gravity,
         )
+        primary_distance, distance_model_artifacts, null_model_summaries = build_distance_model_suite(
+            base_edge_weights=raw_edge_weights,
+            distance_powers=self.distance_powers,
+            null_model_types=self.null_model_types,
+            null_model_samples=self.null_model_samples,
+            null_rewire_swaps=self.null_rewire_swaps,
+            context=evaluation_context,
+            rng=self.rng,
+        )
+        edge_weights = primary_distance.edge_weights
+        times = primary_distance.return_times
+        returns = primary_distance.return_probabilities
+        fitted = primary_distance.return_fit
+        spectral_dimension = primary_distance.summary.spectral_dimension
+        spectral_std = primary_distance.summary.spectral_dimension_std
+        fit_error = primary_distance.summary.mean_return_error
         theta_order, matter_weight, antimatter_weight, asymmetry = self._estimate_matter_antimatter_asymmetry(
             samples,
             unique_triads,
         )
-        edge_distances, gravity_exponent, gravity_r2, gravity_mae = self._fit_inverse_square_gravity(
-            positions,
-            edge_i,
-            edge_j,
-            edge_weights,
-        )
-        signal_times, signal_frontier, signal_fit, light_cone_speed, light_cone_fit_r2, light_cone_leakage = estimate_light_cone_diagnostics(
-            sites=self.sites,
-            positions=positions,
-            edge_i=edge_i,
-            edge_j=edge_j,
-            edge_weights=edge_weights,
-            max_walk_steps=self.max_walk_steps,
-            source_count=self.walker_count,
-            xp=self.xp,
-        )
+        edge_distances = primary_distance.edge_distances
+        gravity_exponent = primary_distance.summary.gravity_power_exponent
+        gravity_r2 = primary_distance.summary.gravity_inverse_square_r2
+        gravity_mae = primary_distance.summary.gravity_inverse_square_mae
+        signal_times = primary_distance.signal_times
+        signal_frontier = primary_distance.signal_frontier
+        signal_fit = primary_distance.signal_frontier_fit
+        light_cone_speed = primary_distance.summary.effective_light_cone_speed
+        light_cone_fit_r2 = primary_distance.summary.light_cone_fit_r2
+        light_cone_leakage = primary_distance.summary.light_cone_leakage
         fine_structure_proxy, electron_gap, proton_gap, mass_ratio_proxy = estimate_scalar_emergent_constants(
             mean_link_trace=1.0,
             theta_order=theta_order,
@@ -363,6 +664,10 @@ class MonteCarloOperatorNetwork:
             effective_light_cone_speed=light_cone_speed,
             light_cone_fit_r2=light_cone_fit_r2,
             light_cone_leakage=light_cone_leakage,
+            distance_model=primary_distance.summary.label,
+            distance_alpha=primary_distance.summary.alpha,
+            alternative_distance_models=[artifact.summary for artifact in distance_model_artifacts],
+            null_model_summaries=null_model_summaries,
         )
         return MonteCarloArtifacts(
             summary=summary,
@@ -371,6 +676,8 @@ class MonteCarloOperatorNetwork:
             edge_i=edge_i,
             edge_j=edge_j,
             edge_weights=edge_weights,
+            distance_model_artifacts=distance_model_artifacts,
+            null_model_summaries=null_model_summaries,
             return_times=times,
             return_probabilities=returns,
             return_fit=fitted,
@@ -694,6 +1001,10 @@ class SU3TensorNetworkMonteCarlo:
         self.max_walk_steps = config.max_walk_steps
         self.color_count = 3
         self.tensor_bond_dim = int(np.clip(config.tensor_bond_dim, 1, self.color_count))
+        self.distance_powers = normalize_distance_powers(config.distance_powers)
+        self.null_model_types = normalize_null_model_types(config.null_model_types)
+        self.null_model_samples = max(0, int(config.null_model_samples))
+        self.null_rewire_swaps = max(1, int(config.null_rewire_swaps))
         self.progress_reporter = progress_reporter
         self.rng = np.random.default_rng(seed)
 
@@ -714,20 +1025,45 @@ class SU3TensorNetworkMonteCarlo:
             incoming_edges,
             messages,
         )
-        self._progress(4, 5, "diffusion")
-        edge_weights = self._edge_correlations(samples, edge_i, edge_j, couplings)
-        times, returns, fitted, spectral_dimension, spectral_std, fit_error = self._estimate_spectral_dimension(edge_i, edge_j, edge_weights)
-        edge_distances, gravity_exponent, gravity_r2, gravity_mae = self._fit_inverse_square_gravity(positions, edge_i, edge_j, edge_weights)
-        signal_times, signal_frontier, signal_fit, light_cone_speed, light_cone_fit_r2, light_cone_leakage = estimate_light_cone_diagnostics(
-            sites=self.sites,
-            positions=positions,
-            edge_i=edge_i,
-            edge_j=edge_j,
-            edge_weights=edge_weights,
-            max_walk_steps=self.max_walk_steps,
-            source_count=self.walker_count,
-            xp=np,
+        self._progress(4, 5, "distance tests")
+        raw_edge_weights = self._edge_correlations(samples, edge_i, edge_j, couplings)
+        evaluation_context = DistanceEvaluationContext(
+            positions,
+            edge_i,
+            edge_j,
+            self.sites,
+            self.max_walk_steps,
+            self.walker_count,
+            np,
+            self._estimate_spectral_dimension,
+            self._fit_inverse_square_gravity,
         )
+        primary_distance, distance_model_artifacts, null_model_summaries = build_distance_model_suite(
+            base_edge_weights=raw_edge_weights,
+            distance_powers=self.distance_powers,
+            null_model_types=self.null_model_types,
+            null_model_samples=self.null_model_samples,
+            null_rewire_swaps=self.null_rewire_swaps,
+            context=evaluation_context,
+            rng=self.rng,
+        )
+        edge_weights = primary_distance.edge_weights
+        times = primary_distance.return_times
+        returns = primary_distance.return_probabilities
+        fitted = primary_distance.return_fit
+        spectral_dimension = primary_distance.summary.spectral_dimension
+        spectral_std = primary_distance.summary.spectral_dimension_std
+        fit_error = primary_distance.summary.mean_return_error
+        edge_distances = primary_distance.edge_distances
+        gravity_exponent = primary_distance.summary.gravity_power_exponent
+        gravity_r2 = primary_distance.summary.gravity_inverse_square_r2
+        gravity_mae = primary_distance.summary.gravity_inverse_square_mae
+        signal_times = primary_distance.signal_times
+        signal_frontier = primary_distance.signal_frontier
+        signal_fit = primary_distance.signal_frontier_fit
+        light_cone_speed = primary_distance.summary.effective_light_cone_speed
+        light_cone_fit_r2 = primary_distance.summary.light_cone_fit_r2
+        light_cone_leakage = primary_distance.summary.light_cone_leakage
         theta_order, matter_weight, antimatter_weight, asymmetry, wilson_loop = self._estimate_su3_sector_observables(samples, link_phases, edge_i, edge_j)
         color_entropy = self._mean_color_entropy(marginals)
         mean_color_imbalance = self._mean_color_imbalance(samples)
@@ -774,6 +1110,10 @@ class SU3TensorNetworkMonteCarlo:
             effective_light_cone_speed=light_cone_speed,
             light_cone_fit_r2=light_cone_fit_r2,
             light_cone_leakage=light_cone_leakage,
+            distance_model=primary_distance.summary.label,
+            distance_alpha=primary_distance.summary.alpha,
+            alternative_distance_models=[artifact.summary for artifact in distance_model_artifacts],
+            null_model_summaries=null_model_summaries,
         )
         features = marginals.reshape(self.sites, self.color_count)
         return MonteCarloArtifacts(
@@ -783,6 +1123,8 @@ class SU3TensorNetworkMonteCarlo:
             edge_i=edge_i.astype(np.int32),
             edge_j=edge_j.astype(np.int32),
             edge_weights=edge_weights.astype(np.float32),
+            distance_model_artifacts=distance_model_artifacts,
+            null_model_summaries=null_model_summaries,
             return_times=times,
             return_probabilities=returns,
             return_fit=fitted,
@@ -1293,6 +1635,8 @@ def run_scaling_sweep(
             ScalingPoint(
                 sites=size,
                 gauge_group=summary.gauge_group,
+                distance_model=summary.distance_model,
+                distance_alpha=summary.distance_alpha,
                 spectral_dimension=summary.spectral_dimension,
                 spectral_dimension_std=summary.spectral_dimension_std,
                 mean_return_error=summary.mean_return_error,
@@ -1312,6 +1656,8 @@ def run_scaling_sweep(
                 effective_light_cone_speed=summary.effective_light_cone_speed,
                 light_cone_fit_r2=summary.light_cone_fit_r2,
                 light_cone_leakage=summary.light_cone_leakage,
+                alternative_distance_models=summary.alternative_distance_models,
+                null_model_summaries=summary.null_model_summaries,
                 samples_collected=summary.samples_collected,
                 seed=summary.seed,
             )
@@ -1325,6 +1671,9 @@ def run_scaling_sweep(
         gauge_group=config.gauge_group,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
+        distance_powers=config.distance_powers,
+        null_model_types=config.null_model_types,
+        null_model_samples=config.null_model_samples,
         asymptotic_fine_structure_proxy=asymptotic_alpha,
         asymptotic_proton_electron_mass_ratio_proxy=asymptotic_mass_ratio,
         asymptotic_light_cone_speed=asymptotic_light_cone_speed,
@@ -1341,6 +1690,8 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         f"gauge group: {result.gauge_group}",
         f"tensor bond dim: {result.tensor_bond_dim}",
         f"degree: {result.degree}",
+        f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
+        f"null models: {', '.join(result.null_model_types)} x {result.null_model_samples}" if result.null_model_types and result.null_model_samples > 0 else "null models: off",
         f"alpha_eff(N->inf): {result.asymptotic_fine_structure_proxy:.8f}" if result.asymptotic_fine_structure_proxy is not None else "alpha_eff(N->inf): n/a",
         f"m_p/m_e(N->inf): {result.asymptotic_proton_electron_mass_ratio_proxy:.6f}" if result.asymptotic_proton_electron_mass_ratio_proxy is not None else "m_p/m_e(N->inf): n/a",
         f"c_eff(N->inf): {result.asymptotic_light_cone_speed:.6f}" if result.asymptotic_light_cone_speed is not None else "c_eff(N->inf): n/a",
@@ -1359,6 +1710,23 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
             f"gravity p={point.gravity_power_exponent:.3f} R^2={point.gravity_inverse_square_r2:.5f} "
             f"mae={point.gravity_inverse_square_mae:.5f}"
         )
+        if point.alternative_distance_models:
+            alt_spectral = [model.spectral_dimension for model in point.alternative_distance_models]
+            alt_gravity = [model.gravity_inverse_square_r2 for model in point.alternative_distance_models]
+            alt_hausdorff = [model.hausdorff_dimension for model in point.alternative_distance_models]
+            lines.append(
+                f"      distance={point.distance_model} alpha={point.distance_alpha:.2f} "
+                f"alt_d_s=[{min(alt_spectral):.3f},{max(alt_spectral):.3f}] "
+                f"alt_gravity_R2=[{min(alt_gravity):.3f},{max(alt_gravity):.3f}] "
+                f"alt_d_H=[{min(alt_hausdorff):.3f},{max(alt_hausdorff):.3f}]"
+            )
+        for null_model in point.null_model_summaries:
+            lines.append(
+                f"      null[{null_model.model}] d_s={null_model.spectral_dimension_mean:.3f}±{null_model.spectral_dimension_std:.3f} "
+                f"gravity_R2={null_model.gravity_inverse_square_r2_mean:.3f}±{null_model.gravity_inverse_square_r2_std:.3f} "
+                f"d_H={null_model.hausdorff_dimension_mean:.3f}±{null_model.hausdorff_dimension_std:.3f} "
+                f"c_eff={null_model.effective_light_cone_speed_mean:.3f}±{null_model.effective_light_cone_speed_std:.3f}"
+            )
     return "\n".join(lines)
 
 
@@ -1463,6 +1831,53 @@ def save_scaling_visualizations(
         figure.savefig(path, dpi=180)
         plt.close(figure)
         paths.append(path)
+
+        if len(artifact.distance_model_artifacts) > 1:
+            path = output_dir / f"{prefix}_distance_sensitivity_{artifact.summary.sites}.png"
+            figure, axes = plt.subplots(3, 1, figsize=(7.2, 9.0), sharex=True)
+            alphas = np.asarray([entry.summary.alpha for entry in artifact.distance_model_artifacts], dtype=float)
+            spectral_values = np.asarray([entry.summary.spectral_dimension for entry in artifact.distance_model_artifacts], dtype=float)
+            gravity_values = np.asarray([entry.summary.gravity_inverse_square_r2 for entry in artifact.distance_model_artifacts], dtype=float)
+            hausdorff_values = np.asarray([entry.summary.hausdorff_dimension for entry in artifact.distance_model_artifacts], dtype=float)
+            axes[0].plot(alphas, spectral_values, "o-", color="#0a9396", linewidth=2.0)
+            axes[0].set_ylabel("d_s")
+            axes[0].grid(True, alpha=0.25)
+            axes[0].set_title(f"Alternative Distance Prescriptions (N={artifact.summary.sites})")
+            axes[1].plot(alphas, gravity_values, "o-", color="#bb3e03", linewidth=2.0)
+            axes[1].set_ylabel("Gravity R^2")
+            axes[1].grid(True, alpha=0.25)
+            axes[2].plot(alphas, hausdorff_values, "o-", color="#386641", linewidth=2.0)
+            axes[2].set_xlabel(r"Distance exponent $\alpha$ in $E_{ij}^\alpha$")
+            axes[2].set_ylabel("d_H")
+            axes[2].grid(True, alpha=0.25)
+            figure.tight_layout()
+            figure.savefig(path, dpi=180)
+            plt.close(figure)
+            paths.append(path)
+
+        if artifact.null_model_summaries:
+            path = output_dir / f"{prefix}_null_model_comparison_{artifact.summary.sites}.png"
+            figure, axes = plt.subplots(2, 2, figsize=(9.0, 7.0))
+            observed_hausdorff = artifact.summary.alternative_distance_models[0].hausdorff_dimension
+            metric_specs = [
+                ("Spectral dimension", artifact.summary.spectral_dimension, "spectral_dimension_mean", "spectral_dimension_std"),
+                ("Gravity R^2", artifact.summary.gravity_inverse_square_r2, "gravity_inverse_square_r2_mean", "gravity_inverse_square_r2_std"),
+                ("Hausdorff d_H", observed_hausdorff, "hausdorff_dimension_mean", "hausdorff_dimension_std"),
+                ("Light-cone speed", artifact.summary.effective_light_cone_speed, "effective_light_cone_speed_mean", "effective_light_cone_speed_std"),
+            ]
+            labels = ["observed"] + [entry.model for entry in artifact.null_model_summaries]
+            for axis, (title, observed, mean_attr, std_attr) in zip(axes.flat, metric_specs):
+                means = [observed] + [getattr(entry, mean_attr) for entry in artifact.null_model_summaries]
+                errors = [0.0] + [getattr(entry, std_attr) for entry in artifact.null_model_summaries]
+                colors = ["#005f73"] + ["#94d2bd" for _ in artifact.null_model_summaries]
+                axis.bar(labels, means, yerr=errors, color=colors, capsize=4)
+                axis.set_title(title)
+                axis.grid(True, alpha=0.20, axis="y")
+            figure.suptitle(f"Null-Model Comparison (N={artifact.summary.sites}, {artifact.summary.distance_model})")
+            figure.tight_layout()
+            figure.savefig(path, dpi=180)
+            plt.close(figure)
+            paths.append(path)
 
         volume_radii, volume_profile, volume_fit, hausdorff_dimension = estimate_sparse_volume_scaling(
             sites=artifact.summary.sites,
