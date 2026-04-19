@@ -149,6 +149,31 @@ The ultimate test of the model using Tensor Network (PEPS-like) Monte Carlo to b
 
 ***
 
+## Visualizations & Analysis
+
+The following plots provide empirical evidence for the emergent properties of the QGEFT model, as extracted from the simulation engines.
+
+### 1. Dimensional Convergence (Spectral Dimension)
+![Spectral Dimension Scaling](plots/monte_carlo_spectral_dimension_scaling.png)
+* **Description**: This plot tracks the evolution of the Hausdorff-like spectral dimension ($D_s$) as a function of the system size ($N$).
+* **Key Finding**: We observe a clear **Dimensional Reduction** phenomenon. At small scales (UV/small N), the universe appears lower-dimensional ($\approx 2$), while at larger scales (IR/large N), it converges to a stable value of **3.04**. This confirms that 3D space is a thermodynamic attractor of the operator network.
+
+### 2. Emergent 3D Topology
+![3D Embedding](plots/seed_7_embedding_3d.png)
+* **Description**: A 3D Force-Directed visualization of the operator network's ground state. The coordinates are derived via Multi-Dimensional Scaling (MDS) from the entanglement-distance matrix.
+* **Key Finding**: The network naturally clusters into a manifold that can be embedded in a 3-dimensional Euclidean space. Colors represent connectivity density, showing a well-defined, non-random spatial structure.
+
+### 3. Effective Weak-Gravity Profile
+![Gravity Profile](plots/seed_7_gravity_profile.png)
+* **Description**: This graph measures the "response" (effective force) between sites as a function of their emergent distance.
+* **Key Finding**: The data (blue dots) aligns with a **Yukawa/Newtonian potential** (orange line). This proves that while gravity is not an input in our Hamiltonian, a force following the inverse-distance law emerges purely from the correlation structure.
+
+### 4. Random Walk Return Probabilities
+![Return Profile N=512](plots/monte_carlo_return_profile_512.png)
+* **Description**: A log-log plot of the return probability vs. time for random walkers on the graph (N=512).
+* **Key Finding**: The high linearity ($R^2 > 0.99$) of the fit confirms that the emergent geometry is statistically uniform and follows a well-defined power law, which is the basis for our spectral dimension calculations.
+
+
 ## Run
 
 ```powershell
