@@ -1,7 +1,7 @@
 # A Toy Model for Correlation Geometry in Discrete Quantum Operator Systems
 
 ## Overview
-This repository studies whether a discrete fermionic operator model can generate correlation graphs with internally consistent low-dimensional geometric diagnostics. The code combines two complementary engines:
+This repository studies whether a discrete fermionic operator model can generate correlation graphs with internally consistent low-dimensional geometric diagnostics. The code combines two complementary engines: 
 
 - an exact sparse Jordan-Wigner solver for small systems,
 - a scalable Monte Carlo surrogate for larger graph-based scaling studies.
