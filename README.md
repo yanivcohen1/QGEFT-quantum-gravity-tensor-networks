@@ -2,23 +2,24 @@
 # From Quantum Fabric to Classical Geometry: 
 # Emergence of Spacetime and Field Theory from Non-Commutative Operators
 
-**Abstract:** This study presents the Quantum Graph Emergent Field Theory (QGEFT), a theoretical framework in which spacetime, gravity, and the symmetries of the Standard Model are not postulated as fundamental, but rather emerge as macroscopic entities from the entanglement dynamics of discrete operators. By combining Exact Diagonalization and GPU-accelerated Monte Carlo simulations based on Tensor Networks, we demonstrate that the system undergoes a phase transition to a stable geometry with a spectral dimension of $D_s \approx 3$. Furthermore, we illustrate how topological terms in the Hamiltonian lead to spontaneous symmetry breaking and absolute baryogenesis in the emergent universe.
+## Abstract: 
+This study presents the Quantum Graph Emergent Field Theory (QGEFT), a theoretical framework in which spacetime, gravity, and the symmetries of the Standard Model are not postulated as fundamental, but rather emerge as macroscopic entities from the entanglement dynamics of discrete operators. By combining Exact Diagonalization and GPU-accelerated Monte Carlo simulations based on Tensor Networks, we demonstrate that the system undergoes a phase transition to a stable geometry with a spectral dimension of $D_s \approx 3$. Furthermore, we illustrate how topological terms in the Hamiltonian lead to spontaneous symmetry breaking and absolute baryogenesis in the emergent universe.
 
-**1. Introduction**
+## 1. Introduction
 The central difficulty in unifying General Relativity with Quantum Mechanics stems from the fundamental assumption of spacetime as a continuous background (Background Dependence). The QGEFT model proposes a "background-independent" approach, where the fundamental structure is an operator algebra $\mathcal{A}$ acting on a Hilbert space $\mathcal{H}$, without pre-defining distances or coordinates. Space is defined as a byproduct of quantum correlations, and gravity emerges as an expression of information entropy within the network.
 
-**2. Theoretical Formalism**
+## 2. Theoretical Formalism
 The universe is represented as a dynamic graph $G=(V,E)$ where each edge $(i,j)$ is assigned a phase-bearing triplet $w_{ij}^\alpha = r_{ij}^\alpha e^{i\theta_{ij}}$. The dynamics are governed by a complex Hamiltonian:
 $$H = H_{\text{kin}} + H_{\text{phase}} + H_{\text{hol}} + H_{\text{RG}}$$
 The holonomy term $H_{\text{hol}}$ incorporates a Chern-Simons-like topological coupling, inducing chirality on the graph. The effective metric $g_{\mu\nu}$ is derived from the information density $\rho(x)$ and local entropy, allowing a transition to the continuum limit at low energies (IR).
 
-**3. Computational Methodology**
+## 3. Computational Methodology
 The research was conducted across three parallel computational tracks:
 * **Exact Diagonalization (UV Scale):** For $N=8,10$ sites, to calculate the exact energy gap and matter asymmetry.
 * **Monte Carlo Simulations (Thermodynamic Limit):** Scaling the system up to $N=4096$ sites to verify spatial stability.
 * **Tensor Networks:** Utilizing a PEPS approximation with a bond dimension $\chi=2$ to solve the ground state in Hilbert spaces of $2^{1024}$, while preserving the Area Law.
 
-**4. Results and Analysis**
+## 4. Results and Analysis
 
 **A. Dimensional Recovery**
 Measurements of the spectral dimension via a Random Walk showed consistent convergence to a three-dimensional value as the system size increased:
@@ -32,7 +33,7 @@ The evolution of the phase field $\theta$ and the topological term led to sponta
 **C. Emergence of Lorentz Symmetry and Constants of Nature**
 Measurements of information propagation revealed a clear light cone with zero leakage (`cone_leak = 0.0`), proving the emergence of Lorentz symmetry. Additionally, stable constants of nature were extracted at the continuum limit, including an effective fine-structure constant $\alpha_{\text{eff}} \approx 0.0058$ and a stable mass ratio.
 
-**5. Discussion and Conclusions**
+## 5. Discussion and Conclusions
 The model presents a serious candidate for a Theory of Everything (TOE) based on quantum information. Unlike string theories, QGEFT does not require manually inserted extra dimensions, but rather generates geometry natively from entanglement principles. The discrepancy with Newton's law of gravity at short distances indicates that the model provides natural UV regularization, inherently preventing gravitational singularities.
 
 To illustrate the central phenomenon in the article—the transformation of the discrete quantum graph into a continuous 3D space—one can utilize the interactive simulator below, which demonstrates spatial emergence as a function of information density and topological coupling.
@@ -97,6 +98,56 @@ chiral phase observable that biases positive versus negative charge sectors.
 - `emergent_simulation.py`: sparse exact fermion solver and diagnostics
 - `scalable_simulation.py`: sparse Monte Carlo surrogate for hundreds to thousands of sites
 - `main.py`: CLI entrypoint
+
+## Example Experiments & Results
+
+The `main.py` CLI allows you to run various simulated experiments. Below is a guide to the key commands and the physical phenomena they demonstrate.
+
+### 1. The "Free Space" Baseline (No Gauge Fields)
+**Command:**
+```bash
+python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy
+```
+**What it demonstrates:**
+This serves as the control experiment of the QGEFT model. By disabling the gauge group (`gauge-group none`), we simulate an operator network with pure kinetic entanglement and no internal forces. 
+* **Zero Interactions:** The effective fine-structure constant ($\alpha_{\text{eff}}$) is exactly `0.00000000`, as expected without gauge fields.
+* **Emergent 3D Space:** Despite having no forces, the network successfully undergoes a phase transition, with the spectral dimension ($D_s$) climbing from $\sim 2.2$ at $N=256$ and locking firmly at **$3.04$** at $N=4096$.
+* **Lorentz Symmetry:** The light-cone metrics show `cone_leak = 0.00000` with high linearity ($R^2 \to 0.96$), proving that a maximum cosmic speed limit (effective $c$) and causality emerge purely from network topology.
+
+### 2. Exact Diagonalization: Weak Force & Particle Generations
+**Command:**
+```bash
+python main.py --mode exact --sites 12 --gauge-group su2 --filling 2 --eig-count 6
+```
+**What it demonstrates:**
+Using exact sparse matrix diagonalization on $N=12$ sites with an `SU(2)` gauge group (resembling the weak nuclear force).
+* **Emergence of Generations:** The spectrum shows degenerate energy states (`generation count: 1`), simulating how particle "flavors" (like electron/muon) emerge organically from the network's internal symmetries.
+* **Matter Asymmetry:** The topological terms induce a local chiral bias, resulting in a spontaneous matter-antimatter asymmetry (e.g., `0.316`).
+* **Gravity Recovery:** As the system grows from $N=6$ to $N=12$, the emergent Newtonian gravity profile fit significantly improves (up to $R^2 \approx 0.43$), showing how gravity requires sufficient spatial degrees of freedom to operate classically.
+
+### 3. Exact SU(3): Color Confinement & The Strong CP Problem
+**Command:**
+```bash
+python main.py --mode exact --sites 12 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 6
+```
+**What it demonstrates:**
+This runs an exact solver on a massive Hilbert space (effectively 68 Billion states, projected down via block diagonalization) using `SU(3)` quantum chromodynamics logic.
+* **Baryon-like Confinement:** By enforcing a `[1,1,1]` color-filling (a perfect color singlet), the network simulates a neutral composite particle (like a proton or neutron). 
+* **Protection from Asymmetry:** Even though a strong topological vacuum phase forms (`theta order: 0.19`), the matter-antimatter asymmetry remains exactly `0.000000`. This beautifully mimics the real-world behavior of strict color-singlets being protected from certain chiral symmetries.
+* **Glueball Excitations:** Running this setup produces entirely neutral, balanced excitation channels representing collective field oscillations.
+
+### 4. The Thermodynamic Limit: Tensor Networks & Constants of Nature
+**Command:**
+```bash
+python main.py --mode monte-carlo --size-scan 256,512,1024 --gauge-group su3 --tensor-bond-dim 2 --degree 8
+```
+**What it demonstrates:**
+The ultimate test of the model using Tensor Network (PEPS-like) Monte Carlo to bypass the exponential Hilbert space explosion.
+* **Constants of Nature:** At $N=1024$, the model extracts stable continuum-limit constants. It produces an effective interaction constant $\alpha_{\text{eff}} \approx 0.0058$ (remarkably close to the real-world fine-structure constant $\approx 1/137$) and a stable virtual proton-to-electron mass ratio.
+* **Absolute Baryogenesis:** The dynamic `SU(3)` topology undergoes spontaneous symmetry breaking, dropping into a vacuum state that favors absolute chirality (`asym = -1.0`), effectively simulating the birth of a universe dominated entirely by one type of matter.
+* **Stable Continuum:** The spectral dimension converges beautifully to $D_s = 2.998 \pm 0.12$, confirming that 3D macroscopic space is the thermodynamic attractor of the SU(3) operator graph.
+
+***
 
 ## Run
 
@@ -290,52 +341,4 @@ Recommended install in the project virtual environment:
 
 ***
 
-## Example Experiments & Results
 
-The `main.py` CLI allows you to run various simulated experiments. Below is a guide to the key commands and the physical phenomena they demonstrate.
-
-### 1. The "Free Space" Baseline (No Gauge Fields)
-**Command:**
-```bash
-python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy
-```
-**What it demonstrates:**
-This serves as the control experiment of the QGEFT model. By disabling the gauge group (`gauge-group none`), we simulate an operator network with pure kinetic entanglement and no internal forces. 
-* **Zero Interactions:** The effective fine-structure constant ($\alpha_{\text{eff}}$) is exactly `0.00000000`, as expected without gauge fields.
-* **Emergent 3D Space:** Despite having no forces, the network successfully undergoes a phase transition, with the spectral dimension ($D_s$) climbing from $\sim 2.2$ at $N=256$ and locking firmly at **$3.04$** at $N=4096$.
-* **Lorentz Symmetry:** The light-cone metrics show `cone_leak = 0.00000` with high linearity ($R^2 \to 0.96$), proving that a maximum cosmic speed limit (effective $c$) and causality emerge purely from network topology.
-
-### 2. Exact Diagonalization: Weak Force & Particle Generations
-**Command:**
-```bash
-python main.py --mode exact --sites 12 --gauge-group su2 --filling 2 --eig-count 6
-```
-**What it demonstrates:**
-Using exact sparse matrix diagonalization on $N=12$ sites with an `SU(2)` gauge group (resembling the weak nuclear force).
-* **Emergence of Generations:** The spectrum shows degenerate energy states (`generation count: 1`), simulating how particle "flavors" (like electron/muon) emerge organically from the network's internal symmetries.
-* **Matter Asymmetry:** The topological terms induce a local chiral bias, resulting in a spontaneous matter-antimatter asymmetry (e.g., `0.316`).
-* **Gravity Recovery:** As the system grows from $N=6$ to $N=12$, the emergent Newtonian gravity profile fit significantly improves (up to $R^2 \approx 0.43$), showing how gravity requires sufficient spatial degrees of freedom to operate classically.
-
-### 3. Exact SU(3): Color Confinement & The Strong CP Problem
-**Command:**
-```bash
-python main.py --mode exact --sites 12 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 6
-```
-**What it demonstrates:**
-This runs an exact solver on a massive Hilbert space (effectively 68 Billion states, projected down via block diagonalization) using `SU(3)` quantum chromodynamics logic.
-* **Baryon-like Confinement:** By enforcing a `[1,1,1]` color-filling (a perfect color singlet), the network simulates a neutral composite particle (like a proton or neutron). 
-* **Protection from Asymmetry:** Even though a strong topological vacuum phase forms (`theta order: 0.19`), the matter-antimatter asymmetry remains exactly `0.000000`. This beautifully mimics the real-world behavior of strict color-singlets being protected from certain chiral symmetries.
-* **Glueball Excitations:** Running this setup produces entirely neutral, balanced excitation channels representing collective field oscillations.
-
-### 4. The Thermodynamic Limit: Tensor Networks & Constants of Nature
-**Command:**
-```bash
-python main.py --mode monte-carlo --size-scan 256,512,1024 --gauge-group su3 --tensor-bond-dim 2 --degree 8
-```
-**What it demonstrates:**
-The ultimate test of the model using Tensor Network (PEPS-like) Monte Carlo to bypass the exponential Hilbert space explosion.
-* **Constants of Nature:** At $N=1024$, the model extracts stable continuum-limit constants. It produces an effective interaction constant $\alpha_{\text{eff}} \approx 0.0058$ (remarkably close to the real-world fine-structure constant $\approx 1/137$) and a stable virtual proton-to-electron mass ratio.
-* **Absolute Baryogenesis:** The dynamic `SU(3)` topology undergoes spontaneous symmetry breaking, dropping into a vacuum state that favors absolute chirality (`asym = -1.0`), effectively simulating the birth of a universe dominated entirely by one type of matter.
-* **Stable Continuum:** The spectral dimension converges beautifully to $D_s = 2.998 \pm 0.12$, confirming that 3D macroscopic space is the thermodynamic attractor of the SU(3) operator graph.
-
-***
