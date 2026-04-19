@@ -17,6 +17,7 @@ To construct a spatial manifold, we extract an effective distance $d(i,j)$ betwe
 $$E_{ij} = \left| \langle n_i n_j \rangle - \langle n_i \rangle \langle n_j \rangle \right|$$
 While $E_{ij}$ is not a direct measure of entanglement entropy, it serves as a computationally tractable proxy for the entanglement structure. Preliminary checks on small systems (up to $N=16$) indicate consistent spatial behavior when using exact mutual-information-based distances, but we restrict our current large-scale analysis to density correlators to maintain computational feasibility. Following the principle that correlations typically decay exponentially with distance in gapped systems ($E_{ij} \sim e^{-d/\xi}$), we employ a commonly used logarithmic mapping motivated by this exponential decay:
 $$d(i,j) = -\log\left(\frac{E_{ij}}{E_0}\right)$$
+We emphasize that this logarithmic mapping is a heuristic choice. While standard in quantum information approaches, it does not guarantee a strict geometric metric space. The measured geometric properties fundamentally represent the topology of the correlation graph under this specific mapping, rather than physical spacetime. Future work must establish whether the observed scaling is invariant under smooth re-parameterizations of this distance function.
 
 ## 3. Computational Methodology
 
@@ -25,6 +26,7 @@ For small systems ($N \le 16$), we employ sparse Jordan-Wigner fermion solvers a
 
 ### 3.2 Monte Carlo Surrogate and Tensor Truncation
 To access large-scale thermodynamic limits ($N \le 4096$), we utilize a GPU-accelerated Monte Carlo surrogate, projecting the system onto an effective spin-sector representation to circumvent the fermion sign problem. The spatial updates are governed by a Metropolis-Hastings algorithm utilizing a belief-propagation-inspired tensor truncation scheme. We typically use $10^4$ thermalization sweeps before sampling the primary observable, the density-density correlator $\langle n_i n_j \rangle$. To ensure rigorous statistical significance, all large-scale data points are averaged over 20 independent runs (seeds). Sampling was performed after sufficient decorrelation sweeps to ensure statistical independence between measurements. Furthermore, to verify the emergent geometry is not an artifact of truncation, we confirmed that results remain stable for bond dimensions $D \in [8, 16]$ within numerical uncertainty, as extending beyond $D=16$ becomes computationally prohibitive for our lattice sizes.
+However, we must note that any tensor truncation scheme inherently restricts the accessible entanglement phase space. It remains an open question whether the resulting thermodynamic limit and its associated scaling exponents are partially constrained by the fixed bond dimension approximation itself.
 
 ## 4. Results
 
@@ -35,7 +37,7 @@ evaluated over an intermediate time window ($t_{min} \ll t \ll t_{max}$) (**Figu
 * **Small scales:** $D_s \approx 2.2$, indicating a fractal-like UV behavior.
 * **Large scales ($N \to 4096$):** $D_s \to 3.04 \pm 0.08$.
 
-Error bars are derived from ensemble averaging across multiple random initial configurations and statistical fluctuations. The scaling function $D_s(N)$ is consistent with an asymptotic approach to this spatial dimension (**Figure 1b**). Crucially, the emergence of $D_s \approx 3$ suggests that the dynamic correlation graph naturally flows toward a geometry consistent with graphs exhibiting polynomial volume growth characteristic of three-dimensional lattices.
+Error bars are derived from ensemble averaging across multiple random initial configurations and statistical fluctuations. The scaling function $D_s(N)$ is consistent with an asymptotic approach to this spatial dimension (**Figure 1b**). Crucially, the emergence of $D_s \approx 3$ indicates that over intermediate scaling windows, the dynamic correlation graph exhibits diffusion characteristics similar to three-dimensional lattices. However, this intermediate scaling is sensitive to finite-size effects and the choice of the fitting window. Establishing true universality would require analytical derivation of these exponents beyond numerical curve fitting.
 
 ### 4.2 Effective Interactions
 We analyze the macroscopic "response" between nodes across the emergent distance $d(i,j)$. Rather than following a pure scale-free $1/r^2$ power law, the data is consistent within fitting uncertainty with a screened interaction profile (**Figure 2**). This suggests that the emergent geometry natively supports localized correlations that decay rapidly in the deep IR limit.
@@ -56,6 +58,7 @@ It is crucial to state the limitations of this current framework:
 1. **No Lorentzian Signature:** This model is strictly Euclidean/statistical. There is no emergence of a continuous time dimension or causal light cones.
 2. **Surrogate Approximation:** The large-$N$ results rely on an effective Monte Carlo surrogate and tensor truncation; thus, rigorous analytic control over the exact fermionic ground state at the macroscopic limit is absent.
 3. **Absence of Standard Model Physics:** Observed charge-sector biases are toy-model phenomenologies and should not be conflated with true baryogenesis.
+4. **Correlation Graph vs. Physical Space:** The metric analyzed in this study represents the geometry of an emergent correlation graph, constructed via a heuristic distance function. A spectral dimension of $D_s \approx 3$ in this network does not constitute a proof of physical 3D spacetime. The geometric interpretation relies heavily on numerical fitting over intermediate scales, and must be treated as a phenomenological feature of the network dynamics rather than a fundamental cosmological derivation.
 
 Future work will focus on exact finite-size scaling formalisms and introducing complex phase dynamics to search for Lorentzian signatures.
 
@@ -152,7 +155,7 @@ python main.py --mode exact --sites 12 --gauge-group su2 --filling 2 --eig-count
 Using exact sparse matrix diagonalization on $N=12$ sites with an `SU(2)` gauge group (resembling the weak nuclear force).
 * **Emergence of Generations:** The spectrum shows degenerate energy states (`generation count: 1`), simulating how particle "flavors" (like electron/muon) emerge organically from the network's internal symmetries.
 * **Matter Asymmetry:** The topological terms induce a local chiral bias, resulting in a spontaneous matter-antimatter asymmetry (e.g., `0.316`).
-* **Gravity Recovery:** As the system grows from $N=6$ to $N=12$, the emergent Newtonian gravity profile fit significantly improves (up to $R^2 \approx 0.43$), showing how gravity requires sufficient spatial degrees of freedom to operate classically.
+* **Inverse-Distance Potential:** As the system grows from $N=6$ to $N=12$, the fit to a screened inverse-distance profile significantly improves ($R^2 \approx 0.43$), showing how long-range effective interactions require sufficient spatial degrees of freedom to emerge from the correlation network.
 
 ### 3. Exact SU(3): Color Confinement & The Strong CP Problem
 **Command:**
@@ -165,15 +168,15 @@ This runs an exact solver on a massive Hilbert space (effectively 68 Billion sta
 * **Protection from Asymmetry:** Even though a strong topological vacuum phase forms (`theta order: 0.19`), the matter-antimatter asymmetry remains exactly `0.000000`. This beautifully mimics the real-world behavior of strict color-singlets being protected from certain chiral symmetries.
 * **Glueball Excitations:** Running this setup produces entirely neutral, balanced excitation channels representing collective field oscillations.
 
-### 4. The Thermodynamic Limit: Tensor Networks & Constants of Nature
+### 4. The Thermodynamic Limit: Tensor Networks & Scaling Parameters
 **Command:**
 ```bash
 python main.py --mode monte-carlo --size-scan 256,512,1024 --gauge-group su3 --tensor-bond-dim 2 --degree 8
 ```
 **What it demonstrates:**
 The ultimate test of the model using Tensor Network (PEPS-like) Monte Carlo to bypass the exponential Hilbert space explosion.
-* **Constants of Nature:** At $N=1024$, the model extracts stable continuum-limit constants. It produces an effective interaction constant $\alpha_{\text{eff}} \approx 0.0058$ (remarkably close to the real-world fine-structure constant $\approx 1/137$) and a stable virtual proton-to-electron mass ratio.
-* **Absolute Baryogenesis:** The dynamic `SU(3)` topology undergoes spontaneous symmetry breaking, dropping into a vacuum state that favors absolute chirality (`asym = -1.0`), effectively simulating the birth of a universe dominated entirely by one type of matter.
+* **Stable Dimensionless Parameters:** At $N=1024$, the model extracts stable continuum-limit ratios. It produces an effective interaction constant $\alpha_{\text{eff}} \approx 0.0058$ and a stable mass-ratio proxy. While we do not claim physical identification, the stability of these dimensionless numbers indicates convergence.
+* **Global Chiral Bias:** The dynamic `SU(3)` topology undergoes spontaneous symmetry breaking, dropping into a vacuum state that favors absolute chirality (`asym = -1.0`), demonstrating how network topology can restrict certain excitation sectors globally.
 * **Stable Continuum:** The spectral dimension converges beautifully to $D_s = 2.998 \pm 0.12$, confirming that 3D macroscopic space is the thermodynamic attractor of the SU(3) operator graph.
 
 ***
