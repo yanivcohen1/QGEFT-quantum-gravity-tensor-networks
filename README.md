@@ -89,6 +89,21 @@ $$
 
 and noticeably smaller prior-to-prior variation than in earlier runs. That is meaningful evidence that some coarse geometric organization survives changes in the sparse backbone. It is weaker than a full universality claim, because the spectral dimension remains too low and the automatic `3D verdict` still fails. The safest interpretation is therefore that the model reaches a computationally stable thick manifold, not a completed three-dimensional spacetime phase.
 
+There is also a second, more narrowly defined finite-size trend worth recording from the simpler graph-prior baseline runs with null-model controls. In the `3d-local` branch of the topology-only analysis, the discrete Hausdorff-like exponent extracted directly from unweighted graph balls,
+
+$$
+\mathrm{topo}\_d_H,
+$$
+
+shows a steady upward drift with system size:
+
+- `N=512`: $\mathrm{topo}\_d_H \approx 2.04$
+- `N=1024`: $\mathrm{topo}\_d_H \approx 2.16$
+- `N=2048`: $\mathrm{topo}\_d_H \approx 2.24$
+- `N=4096`: $\mathrm{topo}\_d_H \approx 2.48$
+
+This is an encouraging sign that the topology-only volume-growth observable becomes smoother and more manifold-like as the graph is enlarged, even before one appeals to weighted distances. At the same time, this trend remains branch-specific: it refers to the `3d-local` prior in the simpler baseline workflow, not to a prior-independent `SU(3)` universality class. It therefore supports the claim that a topological manifold signal is strengthening with size, but it still falls short of proving that the infinite-size limit is a perfect three-dimensional spacetime.
+
 From a practical computing perspective, these `SU(3)` tests also suggest that `N=1024` is close to the useful limit of the current deep-surrogate workflow when one simultaneously pushes coordination number, burn-in length, measurement depth, and diffusion horizon. Simpler scalar runs can reach larger `N`, but for the heavier `SU(3)` parameter searches the remaining discrepancy looks more structural than merely statistical. Further smoothing of the residual "holes in the sponge" will likely require either substantially more compute or a different growth architecture rather than another small parameter retuning.
 
 ## 6. Methodological Vulnerabilities and Future Directions
