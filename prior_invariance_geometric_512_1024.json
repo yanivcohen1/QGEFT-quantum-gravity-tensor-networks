@@ -1,0 +1,121 @@
+{
+  "mode": "monte-carlo",
+  "backend": "cpu",
+  "gauge_group": "none",
+  "priors": [
+    "3d-local",
+    "small-world"
+  ],
+  "tensor_bond_dim": 2,
+  "degree": 8,
+  "distance_powers": [
+    0.5,
+    1.0,
+    2.0
+  ],
+  "null_model_types": [
+    "shuffle",
+    "rewired"
+  ],
+  "null_model_samples": 16,
+  "points": [
+    {
+      "sites": 512,
+      "priors": [
+        "3d-local",
+        "small-world"
+      ],
+      "spectral_dimension_by_prior": {
+        "3d-local": 3.1551589206685478,
+        "small-world": 2.731376248254681
+      },
+      "hausdorff_dimension_by_prior": {
+        "3d-local": 2.635107656358486,
+        "small-world": 3.2140560412798322
+      },
+      "gravity_r2_by_prior": {
+        "3d-local": -5.114700600075964,
+        "small-world": 0.22155784963265335
+      },
+      "light_cone_speed_by_prior": {
+        "3d-local": 0.018721761203864047,
+        "small-world": 0.006116281931891163
+      },
+      "metric_summaries": [
+        {
+          "metric": "spectral_dimension",
+          "prior_spread": 0.4237826724138669,
+          "internal_sigma": 0.18684652336759994,
+          "invariance_score": 2.268078981486432
+        },
+        {
+          "metric": "hausdorff_dimension",
+          "prior_spread": 0.5789483849213464,
+          "internal_sigma": 0.05224593049239573,
+          "invariance_score": 11.0812149284165
+        },
+        {
+          "metric": "gravity_r2",
+          "prior_spread": 5.336258449708618,
+          "internal_sigma": 0.5563035345757608,
+          "invariance_score": 9.592350431097062
+        },
+        {
+          "metric": "light_cone_speed",
+          "prior_spread": 0.012605479271972884,
+          "internal_sigma": 0.00013163677540026873,
+          "invariance_score": 95.75955680806771
+        }
+      ]
+    },
+    {
+      "sites": 1024,
+      "priors": [
+        "3d-local",
+        "small-world"
+      ],
+      "spectral_dimension_by_prior": {
+        "3d-local": 3.024549515047799,
+        "small-world": 3.0164017714161058
+      },
+      "hausdorff_dimension_by_prior": {
+        "3d-local": 2.5827277659520895,
+        "small-world": 3.858306360572832
+      },
+      "gravity_r2_by_prior": {
+        "3d-local": -10.615772155374508,
+        "small-world": -0.722965687053899
+      },
+      "light_cone_speed_by_prior": {
+        "3d-local": 0.01633218605728711,
+        "small-world": 0.006372305926154651
+      },
+      "metric_summaries": [
+        {
+          "metric": "spectral_dimension",
+          "prior_spread": 0.008147743631693238,
+          "internal_sigma": 0.18698632714659202,
+          "invariance_score": 0.04357400755460391
+        },
+        {
+          "metric": "hausdorff_dimension",
+          "prior_spread": 1.2755785946207423,
+          "internal_sigma": 0.046902856692235914,
+          "invariance_score": 27.196181311316497
+        },
+        {
+          "metric": "gravity_r2",
+          "prior_spread": 9.89280646832061,
+          "internal_sigma": 1.1802476458192313,
+          "invariance_score": 8.38197517560294
+        },
+        {
+          "metric": "light_cone_speed",
+          "prior_spread": 0.00995988013113246,
+          "internal_sigma": 0.00013179040768324007,
+          "invariance_score": 75.57363472970779
+        }
+      ]
+    }
+  ]
+}

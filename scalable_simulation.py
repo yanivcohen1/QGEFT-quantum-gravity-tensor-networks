@@ -332,6 +332,56 @@ class ScalingSweepResult:
         )
 
 
+@dataclass
+class InvarianceMetricSummary:
+    metric: str
+    prior_spread: float
+    internal_sigma: float
+    invariance_score: float
+
+
+@dataclass
+class GraphPriorComparisonPoint:
+    sites: int
+    priors: list[str]
+    spectral_dimension_by_prior: dict[str, float]
+    hausdorff_dimension_by_prior: dict[str, float]
+    gravity_r2_by_prior: dict[str, float]
+    light_cone_speed_by_prior: dict[str, float]
+    metric_summaries: list[InvarianceMetricSummary]
+
+
+@dataclass
+class GraphPriorComparisonResult:
+    mode: str
+    backend: str
+    gauge_group: str
+    priors: tuple[str, ...]
+    tensor_bond_dim: int
+    degree: int
+    distance_powers: tuple[float, ...]
+    null_model_types: tuple[str, ...]
+    null_model_samples: int
+    points: list[GraphPriorComparisonPoint]
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "mode": self.mode,
+                "backend": self.backend,
+                "gauge_group": self.gauge_group,
+                "priors": list(self.priors),
+                "tensor_bond_dim": self.tensor_bond_dim,
+                "degree": self.degree,
+                "distance_powers": list(self.distance_powers),
+                "null_model_types": list(self.null_model_types),
+                "null_model_samples": self.null_model_samples,
+                "points": [asdict(point) for point in self.points],
+            },
+            indent=2,
+        )
+
+
 def normalize_distance_powers(values: tuple[float, ...] | list[float]) -> tuple[float, ...]:
     normalized = sorted({round(float(value), 8) for value in values if float(value) > 0.0})
     return tuple(normalized) if normalized else (1.0,)
@@ -357,6 +407,67 @@ def normalize_graph_prior(value: str) -> str:
     if normalized not in allowed:
         raise ValueError("graph prior must be one of: 3d-local, random-regular, small-world")
     return normalized
+
+
+def normalize_graph_prior_list(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    normalized: list[str] = []
+    for raw in values:
+        prior = normalize_graph_prior(raw)
+        if prior not in normalized:
+            normalized.append(prior)
+    return tuple(normalized)
+
+
+def get_primary_hausdorff_dimension(point: ScalingPoint) -> float:
+    if point.alternative_distance_models:
+        for model in point.alternative_distance_models:
+            if abs(model.alpha - point.distance_alpha) <= 1e-8:
+                return float(model.hausdorff_dimension)
+        return float(point.alternative_distance_models[0].hausdorff_dimension)
+    return 0.0
+
+
+def get_internal_sigma(point: ScalingPoint, metric: str) -> float:
+    if metric == "spectral_dimension":
+        return max(float(point.spectral_dimension_std), 1e-6)
+    if metric == "gravity_r2":
+        if point.null_model_summaries:
+            values = [entry.gravity_inverse_square_r2_std for entry in point.null_model_summaries]
+            return max(float(np.mean(values)), 1e-6)
+        return 1e-6
+    if metric == "hausdorff_dimension":
+        if point.null_model_summaries:
+            values = [entry.hausdorff_dimension_std for entry in point.null_model_summaries]
+            return max(float(np.mean(values)), 1e-6)
+        return 1e-6
+    if metric == "light_cone_speed":
+        if point.null_model_summaries:
+            values = [entry.effective_light_cone_speed_std for entry in point.null_model_summaries]
+            return max(float(np.mean(values)), 1e-6)
+        return 1e-6
+    raise ValueError("unsupported invariance metric")
+
+
+def build_invariance_metric_summaries(points: list[ScalingPoint]) -> list[InvarianceMetricSummary]:
+    metric_values = {
+        "spectral_dimension": [point.spectral_dimension for point in points],
+        "hausdorff_dimension": [get_primary_hausdorff_dimension(point) for point in points],
+        "gravity_r2": [point.gravity_inverse_square_r2 for point in points],
+        "light_cone_speed": [point.effective_light_cone_speed for point in points],
+    }
+    summaries: list[InvarianceMetricSummary] = []
+    for metric, values in metric_values.items():
+        prior_spread = float(max(values) - min(values)) if values else 0.0
+        internal_sigma = float(np.mean([get_internal_sigma(point, metric) for point in points])) if points else 1e-6
+        summaries.append(
+            InvarianceMetricSummary(
+                metric=metric,
+                prior_spread=prior_spread,
+                internal_sigma=internal_sigma,
+                invariance_score=float(prior_spread / max(internal_sigma, 1e-6)),
+            )
+        )
+    return summaries
 
 
 def make_position_cloud(sites: int, rng: np.random.Generator, graph_prior: str) -> np.ndarray:
@@ -1787,6 +1898,99 @@ def run_scaling_sweep(
         points=points,
     )
     return result, artifacts
+
+
+def run_graph_prior_comparison(
+    sizes: list[int],
+    priors: tuple[str, ...],
+    seed: int,
+    config: MonteCarloConfig,
+    progress_mode: str = "bar",
+) -> GraphPriorComparisonResult:
+    normalized_priors = normalize_graph_prior_list(priors)
+    sweep_results: dict[str, ScalingSweepResult] = {}
+    for prior in normalized_priors:
+        sweep_config = MonteCarloConfig(
+            degree=config.degree,
+            gauge_group=config.gauge_group,
+            graph_prior=prior,
+            color_count=config.color_count,
+            tensor_bond_dim=config.tensor_bond_dim,
+            coupling_scale=config.coupling_scale,
+            field_scale=config.field_scale,
+            chiral_scale=config.chiral_scale,
+            temperature=config.temperature,
+            burn_in_sweeps=config.burn_in_sweeps,
+            measurement_sweeps=config.measurement_sweeps,
+            sample_interval=config.sample_interval,
+            walker_count=config.walker_count,
+            max_walk_steps=config.max_walk_steps,
+            backend=config.backend,
+            distance_powers=config.distance_powers,
+            null_model_types=config.null_model_types,
+            null_model_samples=config.null_model_samples,
+            null_rewire_swaps=config.null_rewire_swaps,
+        )
+        sweep_result, _ = run_scaling_sweep(
+            sizes=sizes,
+            seed=seed,
+            config=sweep_config,
+            progress_mode=progress_mode,
+        )
+        sweep_results[prior] = sweep_result
+
+    points: list[GraphPriorComparisonPoint] = []
+    for index, size in enumerate(sizes):
+        size_points = [sweep_results[prior].points[index] for prior in normalized_priors]
+        points.append(
+            GraphPriorComparisonPoint(
+                sites=size,
+                priors=list(normalized_priors),
+                spectral_dimension_by_prior={point.graph_prior: point.spectral_dimension for point in size_points},
+                hausdorff_dimension_by_prior={point.graph_prior: get_primary_hausdorff_dimension(point) for point in size_points},
+                gravity_r2_by_prior={point.graph_prior: point.gravity_inverse_square_r2 for point in size_points},
+                light_cone_speed_by_prior={point.graph_prior: point.effective_light_cone_speed for point in size_points},
+                metric_summaries=build_invariance_metric_summaries(size_points),
+            )
+        )
+
+    first_result = sweep_results[normalized_priors[0]]
+    return GraphPriorComparisonResult(
+        mode="monte-carlo",
+        backend=first_result.backend,
+        gauge_group=config.gauge_group,
+        priors=normalized_priors,
+        tensor_bond_dim=config.tensor_bond_dim,
+        degree=config.degree,
+        distance_powers=config.distance_powers,
+        null_model_types=config.null_model_types,
+        null_model_samples=config.null_model_samples,
+        points=points,
+    )
+
+
+def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> str:
+    lines = [
+        "Graph Prior Invariance Report",
+        "=" * 29,
+        f"backend: {result.backend}",
+        f"gauge group: {result.gauge_group}",
+        f"priors: {', '.join(result.priors)}",
+        f"degree: {result.degree}",
+        f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
+        f"null models: {', '.join(result.null_model_types)} x {result.null_model_samples}" if result.null_model_types and result.null_model_samples > 0 else "null models: off",
+    ]
+    for point in result.points:
+        lines.append(f"N={point.sites}")
+        lines.append(f"  d_s: {point.spectral_dimension_by_prior}")
+        lines.append(f"  d_H: {point.hausdorff_dimension_by_prior}")
+        lines.append(f"  gravity_R2: {point.gravity_r2_by_prior}")
+        lines.append(f"  c_eff: {point.light_cone_speed_by_prior}")
+        for metric in point.metric_summaries:
+            lines.append(
+                f"  invariance[{metric.metric}] spread={metric.prior_spread:.6f} sigma={metric.internal_sigma:.6f} score={metric.invariance_score:.3f}"
+            )
+    return "\n".join(lines)
 
 
 def render_scaling_report(result: ScalingSweepResult) -> str:

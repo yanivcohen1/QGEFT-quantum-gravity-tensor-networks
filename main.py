@@ -15,7 +15,9 @@ from emergent_simulation import (
 )
 from scalable_simulation import (
     MonteCarloConfig,
+    render_graph_prior_comparison_report,
     render_scaling_report,
+    run_graph_prior_comparison,
     run_scaling_sweep,
     save_scaling_visualizations,
     write_scaling_json,
@@ -53,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-walk-steps", type=int, default=24, help="Maximum random-walk time for spectral-dimension estimation.")
     parser.add_argument("--size-scan", type=str, default="", help="Comma-separated system sizes for a Monte Carlo scaling sweep, for example 64,128,256,512.")
     parser.add_argument("--distance-powers", type=str, default="1.0", help="Comma-separated exponents for alternative distance prescriptions based on E_ij^alpha, for example 0.5,1.0,2.0.")
+    parser.add_argument("--graph-prior-scan", type=str, default="", help="Optional comma-separated graph priors to compare in one run, for example 3d-local,small-world,random-regular.")
     parser.add_argument("--null-models", type=str, default="", help="Optional comma-separated null models to compare against: shuffle, rewired.")
     parser.add_argument("--null-model-samples", type=int, default=0, help="Number of randomized realizations per null model in Monte Carlo mode.")
     parser.add_argument("--null-rewire-swaps", type=int, default=4, help="Approximate number of degree-preserving swap attempts per edge for the rewired null model.")
@@ -99,6 +102,7 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
     progress_mode = "off" if args.no_progress else args.progress_mode
     distance_powers = parse_float_list(args.distance_powers, default=(1.0,))
     null_models = parse_string_list(args.null_models)
+    graph_prior_scan = parse_string_list(args.graph_prior_scan)
     config = MonteCarloConfig(
         degree=args.degree,
         gauge_group=args.gauge_group,
@@ -120,6 +124,18 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         null_model_samples=args.null_model_samples,
         null_rewire_swaps=args.null_rewire_swaps,
     )
+    if graph_prior_scan:
+        comparison = run_graph_prior_comparison(
+            sizes=target_sizes,
+            priors=graph_prior_scan,
+            seed=args.seed,
+            config=config,
+            progress_mode=progress_mode,
+        )
+        print(render_graph_prior_comparison_report(comparison))
+        if args.json_out is not None:
+            args.json_out.write_text(comparison.to_json(), encoding="utf-8")
+        return
     sweep, artifacts = run_scaling_sweep(
         sizes=target_sizes,
         seed=args.seed,

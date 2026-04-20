@@ -238,6 +238,14 @@ This reports how the diffusion, gravity-fit, Hausdorff-style volume growth, and 
 
 The scalable surrogate also supports explicit graph priors via `--graph-prior 3d-local|random-regular|small-world`, so the same observables can be stress-tested against non-Euclidean or weakly geometric sparse backbones rather than only against randomized edge weights.
 
+To compare several graph priors in one run and compute a direct invariance stress test, use `--graph-prior-scan`:
+
+```powershell
+python main.py --mode monte-carlo --size-scan 128,256 --gauge-group none --graph-prior-scan 3d-local,small-world,random-regular --degree 8 --distance-powers 0.5,1.0,2.0 --null-models shuffle,rewired --null-model-samples 8 --progress-mode off
+```
+
+This emits a `Graph Prior Invariance Report` with per-size spreads across priors and an `invariance score = prior spread / internal sigma` for `d_s`, `d_H`, gravity-fit `R^2`, and `c_eff`. Scores much larger than `1` indicate that the observable is controlled more by the graph prior than by universal dynamics.
+
 Run the block-projected exact solver in a fixed filling sector:
 
 ```powershell

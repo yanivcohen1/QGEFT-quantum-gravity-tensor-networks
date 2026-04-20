@@ -1,0 +1,132 @@
+{
+  "mode": "monte-carlo",
+  "backend": "cpu",
+  "gauge_group": "none",
+  "priors": [
+    "3d-local",
+    "small-world",
+    "random-regular"
+  ],
+  "tensor_bond_dim": 2,
+  "degree": 8,
+  "distance_powers": [
+    0.5,
+    1.0,
+    2.0
+  ],
+  "null_model_types": [
+    "shuffle",
+    "rewired"
+  ],
+  "null_model_samples": 16,
+  "points": [
+    {
+      "sites": 512,
+      "priors": [
+        "3d-local",
+        "small-world",
+        "random-regular"
+      ],
+      "spectral_dimension_by_prior": {
+        "3d-local": 3.1551589206685478,
+        "small-world": 2.731376248254681,
+        "random-regular": 4.466269689036005
+      },
+      "hausdorff_dimension_by_prior": {
+        "3d-local": 2.635107656358486,
+        "small-world": 3.2140560412798322,
+        "random-regular": 3.561999091280683
+      },
+      "gravity_r2_by_prior": {
+        "3d-local": -5.114700600075964,
+        "small-world": 0.22155784963265335,
+        "random-regular": -0.12442164629567176
+      },
+      "light_cone_speed_by_prior": {
+        "3d-local": 0.018721761203864047,
+        "small-world": 0.006116281931891163,
+        "random-regular": 0.006864114412490065
+      },
+      "metric_summaries": [
+        {
+          "metric": "spectral_dimension",
+          "prior_spread": 1.734893440781324,
+          "internal_sigma": 0.3544394671778366,
+          "invariance_score": 4.894752423016305
+        },
+        {
+          "metric": "hausdorff_dimension",
+          "prior_spread": 0.9268914349221973,
+          "internal_sigma": 0.05663416220365308,
+          "invariance_score": 16.36629551593172
+        },
+        {
+          "metric": "gravity_r2",
+          "prior_spread": 5.336258449708618,
+          "internal_sigma": 0.3835018750882105,
+          "invariance_score": 13.914556345992333
+        },
+        {
+          "metric": "light_cone_speed",
+          "prior_spread": 0.012605479271972884,
+          "internal_sigma": 0.0001541187983844131,
+          "invariance_score": 81.7906667071948
+        }
+      ]
+    },
+    {
+      "sites": 1024,
+      "priors": [
+        "3d-local",
+        "small-world",
+        "random-regular"
+      ],
+      "spectral_dimension_by_prior": {
+        "3d-local": 3.024549515047799,
+        "small-world": 3.0164017714161058,
+        "random-regular": 4.711948318735203
+      },
+      "hausdorff_dimension_by_prior": {
+        "3d-local": 2.5827277659520895,
+        "small-world": 3.858306360572832,
+        "random-regular": 4.006071394596653
+      },
+      "gravity_r2_by_prior": {
+        "3d-local": -10.615772155374508,
+        "small-world": -0.722965687053899,
+        "random-regular": -0.7086513299989867
+      },
+      "light_cone_speed_by_prior": {
+        "3d-local": 0.01633218605728711,
+        "small-world": 0.006372305926154651,
+        "random-regular": 0.008014044340919055
+      },
+      "metric_summaries": [
+        {
+          "metric": "spectral_dimension",
+          "prior_spread": 1.6955465473190974,
+          "internal_sigma": 0.46484364726202676,
+          "invariance_score": 3.647563126453438
+        },
+        {
+          "metric": "hausdorff_dimension",
+          "prior_spread": 1.423343628644563,
+          "internal_sigma": 0.05194046277887835,
+          "invariance_score": 27.403368250761282
+        },
+        {
+          "metric": "gravity_r2",
+          "prior_spread": 9.907120825375522,
+          "internal_sigma": 0.7955618139116424,
+          "invariance_score": 12.452986873092728
+        },
+        {
+          "metric": "light_cone_speed",
+          "prior_spread": 0.00995988013113246,
+          "internal_sigma": 0.00015062485591905845,
+          "invariance_score": 66.12374876882616
+        }
+      ]
+    }
+  ]
+}
