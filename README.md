@@ -189,51 +189,84 @@ measures a chiral phase observable that biases positive versus negative charge s
 
 ## Representative Runs
 
-The `main.py` CLI supports several representative runs. The descriptions below are intentionally conservative: they summarize what each run probes inside the toy model, not what it proves about nature.
+The `main.py` CLI supports several representative runs. The list below is more than a command catalog: it summarizes the main empirical regimes that emerged during the project and what each regime actually established.
 
-### 1. Baseline Monte Carlo Run Without Gauge Structure
+### 1. Baseline Finite-Size Diffusion Sweep Without Gauge Structure
 **Command:**
 ```bash
-python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy
+python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy --progress-mode log
 ```
 **Interpretation:**
-This run acts as a control configuration for the Monte Carlo surrogate with no gauge-sector structure.
-* **No gauge-driven proxy:** The effective fine-structure-like proxy $\alpha_{\text{eff}}$ is expected to be small or zero in this setting because the corresponding phase/gauge observables are absent by construction.
-* **3D-like diffusion on the surrogate graph:** In representative sweeps, the spectral-dimension diagnostic rises from lower values at small $N$ toward values near $3$ at larger $N$. This indicates that the chosen sparse graph and weighting scheme support diffusion behavior similar to a 3D network over the sampled range.
-* **Bounded-speed propagation proxy:** The light-cone diagnostics quantify approximately linear front propagation and out-of-cone leakage on the weighted graph. They are useful consistency checks for finite-speed spreading, not proofs of Lorentz symmetry or relativistic causality.
+This is the cleanest control sweep for the scalable surrogate. It isolates the sparse weighted graph dynamics from the additional `SU(3)` transfer structure.
+* **Diffusion crossover:** In representative runs, the weighted spectral dimension rises from clearly sub-3 values at smaller $N$ toward values near $3$ at larger $N$. This is the strongest simple evidence in the repository that the chosen weighted graph family supports 3D-like diffusion over a finite scaling window.
+* **No physical gauge claim:** Because `--gauge-group none` removes the color-sector dynamics, any nonzero geometric signal here should be read as a property of the graph-and-weight construction, not as evidence for emergent non-Abelian physics.
+* **Useful baseline, not a discovery claim:** This run is valuable because it shows what the locality prior plus correlation-weighted diffusion can already do before any `SU(3)` structure is added.
 
-### 2. Exact Diagonalization in an `SU(2)` Background
+### 2. Graph-Prior and Null-Model Stress Test
+**Command:**
+```bash
+python main.py --mode monte-carlo --size-scan 512,1024,2048,4096 --gauge-group none --graph-prior-scan 3d-local,small-world --degree 8 --walker-count 256 --max-walk-steps 28 --backend cupy --progress-mode log --distance-powers 0.5,1.0,2.0 --null-models shuffle,rewired --null-model-samples 16
+```
+**Interpretation:**
+This is the main robustness test for the simple surrogate. It asks whether the apparent geometry survives changes in graph prior and simple randomization controls.
+* **Topology-only manifold trend:** In the `3d-local` branch, the topology-only Hausdorff-like exponent increases with size, from about $2.04$ at $N=512$ to about $2.16$ at $N=1024$, about $2.24$ at $N=2048$, and about $2.48$ at $N=4096$.
+* **Weighted versus topological split:** The weighted observables often look more geometric than the topology-only ones, which is informative: it suggests that part of the apparent smoothness comes from the weighting prescription, not only from the raw support graph.
+* **Still not universal:** Even in these stronger baseline runs, the automatic `3D verdict` does not pass, because agreement between $d_s$, $d_H$, topology-only diagnostics, prior invariance, and null-model separation remains incomplete.
+
+### 3. Exact Diagonalization in an `SU(2)` Background
 **Command:**
 ```bash
 python main.py --mode exact --sites 12 --gauge-group su2 --filling 2 --eig-count 6
 ```
 **Interpretation:**
 Using exact sparse matrix diagonalization on $N=12$ sites with an `SU(2)` gauge background.
-* **Near-degenerate low-energy structure:** The code groups nearly degenerate eigenstates into coarse "generation" clusters. These are bookkeeping labels for low-energy spectral structure, not evidence for Standard Model flavor physics.
-* **Charge-sector bias proxy:** The chiral/topological diagnostics can favor positive over negative charge-like sectors in the reweighted low-energy ensemble.
-* **Distance-response fitting:** The run reports how well the induced response profile matches screened inverse-distance fit families inside the emergent correlation geometry. This is a model diagnostic, not a derived weak-force law.
+* **Controlled small-system benchmark:** This is one of the more interpretable regimes in the repository because the low-energy spectrum is computed directly rather than through a surrogate graph dynamics.
+* **Near-degenerate structure and sector bias:** The code groups low states into coarse excitation clusters and can display charge-sector asymmetry in the reweighted ensemble. These are internal spectral diagnostics, not particle identifications.
+* **Distance-response summary:** The run also checks how the induced response curves behave under the emergent correlation geometry. This is a phenomenological fit exercise inside the model, not a derivation of a weak or gravitational force law.
 
-### 3. Exact Diagonalization in a Color-Balanced `SU(3)` Sector
+### 4. Exact Diagonalization in a Color-Balanced `SU(3)` Sector
 **Command:**
 ```bash
 python main.py --mode exact --sites 12 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 6
 ```
 **Interpretation:**
-This runs the exact solver in an explicit `SU(3)`-colored filling sector.
-* **Color-balanced sector study:** Enforcing `[1,1,1]` isolates a color-balanced subspace that is useful for testing how the diagnostics behave in singlet-like configurations.
-* **Sector-dependent asymmetry suppression:** In some runs, the asymmetry proxy is reduced or vanishes in these balanced sectors. That is an interesting model feature, but it should not be oversold as a solution to the strong CP problem.
-* **Excitation-channel organization:** The code classifies low excitations into coarse sector labels based on charge, color balance, and localization. These labels are descriptive diagnostics, not particle identifications.
+This run isolates an explicitly color-balanced exact sector.
+* **Singlet-like diagnostic regime:** Enforcing `[1,1,1]` is useful for checking how the observables change when the low-energy sector is forced toward a balanced color content.
+* **Asymmetry suppression test:** In some exact runs the matter/antimatter-style proxy becomes smaller in these balanced sectors, which is an interesting internal pattern but not yet a statement about QCD or the strong CP problem.
+* **Spectrum organization:** The coarse excitation labels remain descriptive bookkeeping tools for the toy model.
 
-### 4. Large-$N$ `SU(3)` Surrogate Run
+### 5. Large-$N$ `SU(3)` Scaling Sweep
 **Command:**
 ```bash
 python main.py --mode monte-carlo --size-scan 256,512,1024 --gauge-group su3 --tensor-bond-dim 2 --degree 8
 ```
 **Interpretation:**
-This probes the `SU(3)` tensor-network-assisted surrogate at larger sizes.
-* **Model-dependent proxies:** The run reports `alpha_eff` and `m_p/m_e`-like quantities derived from transfer-sector observables. They are internal proxies designed to track scaling trends, not candidate predictions of measured constants.
-* **Global chiral-bias diagnostics:** The sampled color configurations can show strong preference for one charge-like sector over another, which is best interpreted as a property of the surrogate ensemble.
-* **Large-$N$ scaling behavior:** Size sweeps can be used to test whether the diffusion and transfer diagnostics stabilize as $N$ increases. Any apparent convergence should still be read through the caveats about locality priors and truncation.
+This is the entry point to the `SU(3)` surrogate regime that motivated most of the later project extensions.
+* **Transfer-sector proxies:** The run reports internal observables such as `alpha_eff` and `m_p/m_e`-like ratios. These are model-dependent scaling probes, not physical predictions.
+* **Matter-biased ensembles:** The sampled color configurations can show strong bias toward one charge-like sector, which is why later parts of the article describe the geometry as matter-biased rather than matter-only.
+* **Why the later campaign was needed:** This sweep alone does not establish a stable large-$N$ geometry; it mainly shows that the `SU(3)` surrogate is rich enough to justify deeper scans over inflation, triads, Ricci flow, and graph priors.
+
+### 6. High-Coordination `SU(3)` Volumetric Branch
+**Command:**
+```bash
+python main.py --mode monte-carlo --size-scan 1024 --gauge-group su3 --graph-prior-scan 3d-local,small-world --degree 16 --burn-in-sweeps 600 --measurement-sweeps 300 --sample-interval 20 --walker-count 128 --max-walk-steps 80 --backend cupy --progress-mode log --inflation-seed-sites 128 --anneal-start-temperature 10.0 --degree-penalty-scale 0.3 --triad-scale 1.0 --ricci-flow-steps 1 --ricci-negative-threshold -0.70
+```
+**Interpretation:**
+This regime is one of the strongest late outcomes of the project.
+* **Stable Hausdorff branch:** In the best runs of this family, the weighted Hausdorff-like dimension settles near $d_H \approx 2.6$ for both `3d-local` and `small-world`, with unusually small prior-to-prior spread.
+* **Not yet a 3D phase:** The spectral dimension does not follow that stabilization; it remains well below $3$, especially outside the most favorable branch. This is the central reason the code still reports `FAIL` on the combined 3D verdict.
+* **Main scientific takeaway:** The large-$N$ surrogate appears able to generate a robust thick manifold in the volume-growth sector, but not yet a fully realized three-dimensional continuum geometry.
+
+### 7. Aggressive `SU(3)` Extensions: Inflation, Ricci, and Holographic Suppression
+**Command pattern:**
+```bash
+python main.py --mode monte-carlo --size-scan 1024 --gauge-group su3 --graph-prior-scan 3d-local,small-world [high-degree / inflation / triad / ricci / holographic options]
+```
+**Interpretation:**
+These runs cover the later exploration campaign: staged inflation, synthetic seed growth, Ricci-flow-like edge evaporation, and ER=EPR-inspired suppression of overloaded long links.
+* **What improved:** Some of these extensions regularized the geometry, reduced prior spread, or improved one observable at a time.
+* **What failed structurally:** Whenever $d_H$ improved substantially, $d_s$ often collapsed; whenever $d_s$ approached $3$, the Hausdorff sector usually became unstable or prior-dominated.
+* **Why this matters:** These failures are scientifically useful. They suggest that the current limitation is not just bad parameter tuning, but a structural shortcoming of the static prebuilt-graph architecture.
 
 ***
 
