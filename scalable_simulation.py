@@ -166,6 +166,52 @@ class NullModelAggregate:
     effective_light_cone_speed_std: float
 
 
+@dataclass
+class TopologyGraphizationDiagnostics:
+    label: str
+    retained_edge_fraction: float
+    spectral_dimension: float
+    spectral_dimension_std: float
+    hausdorff_dimension: float
+
+
+@dataclass
+class TopologyConsensusSummary:
+    spectral_dimension_median: float
+    spectral_dimension_std: float
+    hausdorff_dimension_median: float
+    hausdorff_dimension_std: float
+    three_dimensionality_score: float
+    graphizations: list[TopologyGraphizationDiagnostics]
+
+
+@dataclass(frozen=True)
+class RicciFlowDiagnostics:
+    steps: int
+    mean_curvature: float
+    min_curvature: float
+    negative_edge_fraction: float
+    evaporated_edges: int
+    strengthened_edges: int
+
+
+@dataclass(frozen=True)
+class HolographicDiagnostics:
+    enabled: bool
+    mean_suppression: float
+    overloaded_edge_fraction: float
+    mean_overload_ratio: float
+
+
+@dataclass(frozen=True)
+class LocalitySeedArtifacts:
+    positions: np.ndarray
+    adjacency: np.ndarray
+    distances: np.ndarray
+    edge_bias: np.ndarray
+    ricci: RicciFlowDiagnostics
+
+
 @dataclass(frozen=True)
 class DistanceEvaluationContext:
     positions: np.ndarray
@@ -205,6 +251,14 @@ class MonteCarloSummary:
     spectral_dimension: float
     spectral_dimension_std: float
     mean_return_error: float
+    holographic_enabled: bool
+    holographic_mean_suppression: float
+    holographic_overloaded_edge_fraction: float
+    ricci_flow_steps: int
+    ricci_mean_curvature: float
+    ricci_min_curvature: float
+    ricci_negative_edge_fraction: float
+    ricci_evaporated_edges: int
     gravity_power_exponent: float
     gravity_inverse_square_r2: float
     gravity_inverse_square_mae: float
@@ -215,6 +269,7 @@ class MonteCarloSummary:
     effective_light_cone_speed: float
     light_cone_fit_r2: float
     light_cone_leakage: float
+    topological_consensus: TopologyConsensusSummary
     distance_model: str
     distance_alpha: float
     alternative_distance_models: list[DistanceModelDiagnostics]
@@ -232,6 +287,12 @@ class MonteCarloConfig:
     field_scale: float = 0.06
     chiral_scale: float = 0.04
     temperature: float = 1.35
+    anneal_start_temperature: float | None = None
+    inflation_seed_sites: int | None = None
+    inflation_mode: str = "legacy"
+    inflation_growth_factor: float = 2.0
+    inflation_relax_rounds: int = 2
+    inflation_smoothing_strength: float = 0.20
     burn_in_sweeps: int = 180
     measurement_sweeps: int = 420
     sample_interval: int = 6
@@ -242,6 +303,13 @@ class MonteCarloConfig:
     null_model_types: tuple[str, ...] = ()
     null_model_samples: int = 0
     null_rewire_swaps: int = 4
+    degree_penalty_scale: float = 0.0
+    holographic_bound_scale: float = 0.0
+    holographic_penalty_strength: float = 1.0
+    ricci_flow_steps: int = 0
+    ricci_negative_threshold: float = -0.55
+    ricci_evaporation_rate: float = 0.85
+    ricci_positive_boost: float = 0.35
 
 
 @dataclass
@@ -273,6 +341,11 @@ class ScalingPoint:
     spectral_dimension: float
     spectral_dimension_std: float
     mean_return_error: float
+    holographic_enabled: bool
+    holographic_mean_suppression: float
+    ricci_flow_steps: int
+    ricci_mean_curvature: float
+    ricci_negative_edge_fraction: float
     mean_energy: float
     mean_magnetization: float
     color_entropy: float
@@ -289,6 +362,7 @@ class ScalingPoint:
     effective_light_cone_speed: float
     light_cone_fit_r2: float
     light_cone_leakage: float
+    topological_consensus: TopologyConsensusSummary
     alternative_distance_models: list[DistanceModelDiagnostics]
     null_model_summaries: list[NullModelAggregate]
     samples_collected: int
@@ -301,6 +375,9 @@ class ScalingSweepResult:
     backend: str
     gauge_group: str
     graph_prior: str
+    inflation_seed_sites: int | None
+    holographic_bound_scale: float
+    ricci_flow_steps: int
     tensor_bond_dim: int
     degree: int
     distance_powers: tuple[float, ...]
@@ -318,6 +395,9 @@ class ScalingSweepResult:
                 "backend": self.backend,
                 "gauge_group": self.gauge_group,
                 "graph_prior": self.graph_prior,
+                "inflation_seed_sites": self.inflation_seed_sites,
+                "holographic_bound_scale": self.holographic_bound_scale,
+                "ricci_flow_steps": self.ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
                 "distance_powers": list(self.distance_powers),
@@ -341,6 +421,19 @@ class InvarianceMetricSummary:
 
 
 @dataclass
+class ThreeDimensionalityCheck:
+    name: str
+    passed: bool
+    details: str
+
+
+@dataclass
+class ThreeDimensionalityVerdict:
+    passed: bool
+    checks: list[ThreeDimensionalityCheck]
+
+
+@dataclass
 class GraphPriorComparisonPoint:
     sites: int
     priors: list[str]
@@ -348,7 +441,11 @@ class GraphPriorComparisonPoint:
     hausdorff_dimension_by_prior: dict[str, float]
     gravity_r2_by_prior: dict[str, float]
     light_cone_speed_by_prior: dict[str, float]
+    topological_spectral_dimension_by_prior: dict[str, float]
+    topological_hausdorff_dimension_by_prior: dict[str, float]
+    topological_three_dimensionality_score_by_prior: dict[str, float]
     metric_summaries: list[InvarianceMetricSummary]
+    three_dimensionality_verdict: ThreeDimensionalityVerdict
 
 
 @dataclass
@@ -357,12 +454,16 @@ class GraphPriorComparisonResult:
     backend: str
     gauge_group: str
     priors: tuple[str, ...]
+    inflation_seed_sites: int | None
+    holographic_bound_scale: float
+    ricci_flow_steps: int
     tensor_bond_dim: int
     degree: int
     distance_powers: tuple[float, ...]
     null_model_types: tuple[str, ...]
     null_model_samples: int
     points: list[GraphPriorComparisonPoint]
+    overall_three_dimensionality_verdict: ThreeDimensionalityVerdict
 
     def to_json(self) -> str:
         return json.dumps(
@@ -371,11 +472,15 @@ class GraphPriorComparisonResult:
                 "backend": self.backend,
                 "gauge_group": self.gauge_group,
                 "priors": list(self.priors),
+                "inflation_seed_sites": self.inflation_seed_sites,
+                "holographic_bound_scale": self.holographic_bound_scale,
+                "ricci_flow_steps": self.ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
                 "distance_powers": list(self.distance_powers),
                 "null_model_types": list(self.null_model_types),
                 "null_model_samples": self.null_model_samples,
+                "overall_three_dimensionality_verdict": asdict(self.overall_three_dimensionality_verdict),
                 "points": [asdict(point) for point in self.points],
             },
             indent=2,
@@ -416,6 +521,424 @@ def normalize_graph_prior_list(values: tuple[str, ...] | list[str]) -> tuple[str
         if prior not in normalized:
             normalized.append(prior)
     return tuple(normalized)
+
+
+def compute_degree_penalty_factors(adjacency: np.ndarray, target_degree: int, penalty_scale: float) -> np.ndarray:
+    if penalty_scale <= 0.0:
+        return np.ones_like(adjacency, dtype=np.float32)
+    degrees = np.sum(adjacency, axis=1).astype(np.float32)
+    excess = np.clip((degrees - float(target_degree)) / max(float(target_degree), 1.0), 0.0, None)
+    pair_penalty = np.exp(-penalty_scale * (excess[:, None] + excess[None, :]))
+    return pair_penalty.astype(np.float32)
+
+
+def compute_holographic_suppression(
+    distances: np.ndarray,
+    common_neighbors: np.ndarray,
+    upper_i: np.ndarray,
+    upper_j: np.ndarray,
+    bound_scale: float,
+    penalty_strength: float,
+) -> tuple[np.ndarray, HolographicDiagnostics]:
+    if bound_scale <= 0.0 or len(upper_i) == 0:
+        return np.ones(len(upper_i), dtype=np.float32), HolographicDiagnostics(False, 1.0, 0.0, 0.0)
+    edge_distance = np.clip(distances[upper_i, upper_j].astype(np.float64), 1e-6, None)
+    overlap = common_neighbors[upper_i, upper_j].astype(np.float64)
+    surface_capacity = bound_scale * (1.0 + overlap) / (1.0 + edge_distance)
+    entanglement_demand = (1.0 + edge_distance**2) / (1.0 + overlap)
+    overload_ratio = entanglement_demand / np.clip(surface_capacity, 1e-6, None)
+    overloaded = overload_ratio > 1.0
+    suppression = np.ones(len(upper_i), dtype=np.float32)
+    if np.any(overloaded):
+        suppression[overloaded] = np.exp(-penalty_strength * (overload_ratio[overloaded] - 1.0)).astype(np.float32)
+    diagnostics = HolographicDiagnostics(
+        enabled=True,
+        mean_suppression=float(np.mean(suppression)) if len(suppression) > 0 else 1.0,
+        overloaded_edge_fraction=float(np.mean(overloaded)) if len(overloaded) > 0 else 0.0,
+        mean_overload_ratio=float(np.mean(overload_ratio)) if len(overload_ratio) > 0 else 0.0,
+    )
+    return suppression, diagnostics
+
+
+def temperature_for_sweep(
+    sweep: int,
+    burn_in_sweeps: int,
+    target_temperature: float,
+    anneal_start_temperature: float | None,
+) -> float:
+    if burn_in_sweeps <= 0 or anneal_start_temperature is None:
+        return float(target_temperature)
+    start_temperature = max(float(anneal_start_temperature), float(target_temperature))
+    if sweep >= burn_in_sweeps:
+        return float(target_temperature)
+    fraction = (sweep + 1) / max(burn_in_sweeps, 1)
+    return float(start_temperature + (target_temperature - start_temperature) * fraction)
+
+
+def normalize_inflation_seed_sites(sites: int, inflation_seed_sites: int | None) -> int | None:
+    if inflation_seed_sites is None:
+        return None
+    normalized = int(inflation_seed_sites)
+    if normalized <= 0 or normalized >= sites:
+        return None
+    return max(4, normalized)
+
+
+def periodic_displacement(reference: np.ndarray, target: np.ndarray) -> np.ndarray:
+    delta = np.asarray(target, dtype=np.float32) - np.asarray(reference, dtype=np.float32)
+    return delta - np.round(delta)
+
+
+def choose_inflation_parent(adjacency: np.ndarray, degree: int, rng: np.random.Generator) -> int:
+    degrees = np.sum(adjacency, axis=1).astype(np.float64)
+    penalties = np.exp(-degrees / max(float(degree), 1.0))
+    weights = penalties / np.sum(penalties)
+    return int(rng.choice(len(adjacency), p=weights))
+
+
+def next_inflation_stage_size(current_sites: int, target_sites: int, growth_factor: float) -> int:
+    safe_growth = max(float(growth_factor), 1.1)
+    proposed = int(np.ceil(current_sites * safe_growth))
+    if proposed <= current_sites:
+        proposed = current_sites + 1
+    return min(target_sites, proposed)
+
+
+def spawn_inflation_child_position(
+    positions: np.ndarray,
+    parent: int,
+    parent_neighbors: np.ndarray,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    anchor = positions[parent]
+    if len(parent_neighbors) == 0:
+        jitter = 0.08 * rng.normal(size=3).astype(np.float32)
+        return np.mod(anchor + jitter, 1.0).astype(np.float32)
+    offsets = np.asarray([periodic_displacement(anchor, positions[neighbor]) for neighbor in parent_neighbors], dtype=np.float32)
+    mean_offset = np.mean(offsets, axis=0)
+    child_offset = 0.45 * mean_offset + 0.05 * rng.normal(size=3).astype(np.float32)
+    return np.mod(anchor + child_offset, 1.0).astype(np.float32)
+
+
+def enforce_local_degree_budget(adjacency: np.ndarray, positions: np.ndarray, nodes: np.ndarray, degree: int) -> None:
+    for node in np.unique(nodes.astype(np.int32)):
+        neighbors = np.flatnonzero(adjacency[node])
+        if len(neighbors) <= degree:
+            continue
+        displacements = np.asarray([periodic_displacement(positions[node], positions[neighbor]) for neighbor in neighbors], dtype=np.float32)
+        distances = np.sqrt(np.sum(displacements**2, axis=1))
+        keep = neighbors[np.argsort(distances)[:degree]]
+        drop = np.setdiff1d(neighbors, keep, assume_unique=False)
+        adjacency[node, drop] = False
+        adjacency[drop, node] = False
+
+
+def expand_inflation_stage(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    stage_target: int,
+    degree: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    while len(positions) < stage_target:
+        parent = choose_inflation_parent(adjacency, degree, rng)
+        parent_neighbors = np.flatnonzero(adjacency[parent])
+        child_position = spawn_inflation_child_position(positions, parent, parent_neighbors, rng)
+        old_sites = len(positions)
+        positions = np.vstack([positions, child_position.astype(np.float32)])
+        expanded = np.zeros((old_sites + 1, old_sites + 1), dtype=bool)
+        expanded[:old_sites, :old_sites] = adjacency
+        adjacency = expanded
+
+        candidate_neighbors = np.unique(np.concatenate([np.asarray([parent], dtype=np.int32), parent_neighbors.astype(np.int32)]))
+        if len(candidate_neighbors) == 0:
+            candidate_neighbors = np.asarray([parent], dtype=np.int32)
+        child_distances = np.asarray(
+            [np.linalg.norm(periodic_displacement(child_position, positions[neighbor])) for neighbor in candidate_neighbors],
+            dtype=np.float32,
+        )
+        keep_count = min(max(2, degree), len(candidate_neighbors))
+        inherited = candidate_neighbors[np.argsort(child_distances)[:keep_count]]
+        adjacency[old_sites, inherited] = True
+        adjacency[inherited, old_sites] = True
+        enforce_local_degree_budget(adjacency, positions, np.concatenate([inherited, np.asarray([parent, old_sites], dtype=np.int32)]), degree)
+    return positions.astype(np.float32), adjacency
+
+
+def collect_local_rewiring_candidates(adjacency: np.ndarray, node: int) -> np.ndarray:
+    one_hop = np.flatnonzero(adjacency[node])
+    if len(one_hop) == 0:
+        return np.empty(0, dtype=np.int32)
+    two_hop_sets = [np.flatnonzero(adjacency[neighbor]) for neighbor in one_hop]
+    combined = np.unique(np.concatenate([one_hop.astype(np.int32), *[neighbors.astype(np.int32) for neighbors in two_hop_sets]]))
+    return combined[combined != node].astype(np.int32)
+
+
+def rewire_to_local_geometry(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    degree: int,
+) -> np.ndarray:
+    sites = len(positions)
+    rewired = adjacency.copy()
+    for node in range(sites):
+        candidates = collect_local_rewiring_candidates(adjacency, node)
+        if len(candidates) == 0:
+            continue
+        distances = np.asarray(
+            [np.linalg.norm(periodic_displacement(positions[node], positions[candidate])) for candidate in candidates],
+            dtype=np.float32,
+        )
+        keep = candidates[np.argsort(distances)[: min(degree, len(candidates))]]
+        rewired[node, keep] = True
+    rewired = np.logical_or(rewired, rewired.T)
+    enforce_local_degree_budget(rewired, positions, np.arange(sites, dtype=np.int32), degree)
+    return rewired
+
+
+def relax_inflation_stage(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    degree: int,
+    rounds: int,
+    smoothing_strength: float,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    effective_rounds = max(0, int(rounds))
+    strength = float(np.clip(smoothing_strength, 0.0, 1.0))
+    for _ in range(effective_rounds):
+        updated_positions = positions.copy()
+        for node in range(len(positions)):
+            neighbors = np.flatnonzero(adjacency[node])
+            if len(neighbors) == 0:
+                continue
+            offsets = np.asarray([periodic_displacement(positions[node], positions[neighbor]) for neighbor in neighbors], dtype=np.float32)
+            mean_offset = np.mean(offsets, axis=0)
+            jitter = 0.01 * rng.normal(size=3).astype(np.float32)
+            updated_positions[node] = np.mod(positions[node] + strength * mean_offset + jitter, 1.0).astype(np.float32)
+        positions = updated_positions
+        adjacency = rewire_to_local_geometry(positions, adjacency, degree)
+    return positions.astype(np.float32), adjacency
+
+
+def grow_graph_via_local_inflation(
+    graph_prior: str,
+    sites: int,
+    degree: int,
+    rng: np.random.Generator,
+    seed_sites: int,
+    growth_factor: float,
+    relax_rounds: int,
+    smoothing_strength: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    positions = make_position_cloud(seed_sites, rng, graph_prior)
+    adjacency, _ = build_graph_prior_adjacency(graph_prior, positions, degree, rng)
+    while len(positions) < sites:
+        stage_target = next_inflation_stage_size(len(positions), sites, growth_factor)
+        positions, adjacency = expand_inflation_stage(positions, adjacency, stage_target, degree, rng)
+        positions, adjacency = relax_inflation_stage(positions, adjacency, degree, relax_rounds, smoothing_strength, rng)
+
+    distances = pairwise_periodic_distances(positions)
+    return positions.astype(np.float32), adjacency, distances
+
+
+def compute_ollivier_ricci_proxy_curvature(adjacency: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
+    if len(upper_i) == 0:
+        return upper_i.astype(np.int32), upper_j.astype(np.int32), np.empty(0, dtype=np.float32), np.empty(0, dtype=np.int32)
+    degrees = np.sum(adjacency, axis=1).astype(np.int32)
+    adjacency_lists = [set(np.flatnonzero(adjacency[node]).tolist()) for node in range(len(adjacency))]
+    curvature = np.empty(len(upper_i), dtype=np.float32)
+    overlap_count = np.empty(len(upper_i), dtype=np.int32)
+    for index, (src, dst) in enumerate(zip(upper_i.tolist(), upper_j.tolist())):
+        common = len(adjacency_lists[src].intersection(adjacency_lists[dst]))
+        overlap_count[index] = common
+        degree_floor = max(min(int(degrees[src]), int(degrees[dst])), 1)
+        overlap_ratio = common / degree_floor
+        bridge_penalty = 0.75 if common == 0 else 0.0
+        degree_imbalance = abs(int(degrees[src]) - int(degrees[dst])) / max(int(degrees[src]), int(degrees[dst]), 1)
+        curvature[index] = float(overlap_ratio - bridge_penalty - 0.15 * degree_imbalance)
+    return upper_i.astype(np.int32), upper_j.astype(np.int32), curvature, overlap_count
+
+
+def apply_combinatorial_ricci_flow(
+    adjacency: np.ndarray,
+    degree: int,
+    rng: np.random.Generator,
+    steps: int,
+    negative_threshold: float,
+    evaporation_rate: float,
+    positive_boost: float,
+) -> tuple[np.ndarray, np.ndarray, RicciFlowDiagnostics]:
+    flowed = adjacency.copy()
+    edge_bias = np.ones_like(flowed, dtype=np.float32)
+    total_evaporated = 0
+    total_strengthened = 0
+    latest_curvature = np.empty(0, dtype=np.float32)
+    effective_steps = max(0, int(steps))
+    if effective_steps == 0:
+        diagnostics = RicciFlowDiagnostics(
+            steps=0,
+            mean_curvature=0.0,
+            min_curvature=0.0,
+            negative_edge_fraction=0.0,
+            evaporated_edges=0,
+            strengthened_edges=0,
+        )
+        return flowed, edge_bias, diagnostics
+
+    min_degree_floor = max(2, min(4, degree // 2 if degree > 2 else 2))
+    for _ in range(effective_steps):
+        upper_i, upper_j, curvature, overlap_count = compute_ollivier_ricci_proxy_curvature(flowed)
+        latest_curvature = curvature
+        if len(curvature) == 0:
+            break
+        positive_mask = curvature > 0.0
+        if np.any(positive_mask):
+            boost = 1.0 + positive_boost * curvature[positive_mask]
+            edge_bias[upper_i[positive_mask], upper_j[positive_mask]] *= boost.astype(np.float32)
+            edge_bias[upper_j[positive_mask], upper_i[positive_mask]] *= boost.astype(np.float32)
+            total_strengthened += int(np.sum(positive_mask))
+
+        total_evaporated += evaporate_negative_ricci_edges(
+            flowed=flowed,
+            edge_bias=edge_bias,
+            upper_i=upper_i,
+            upper_j=upper_j,
+            curvature=curvature,
+            overlap_count=overlap_count,
+            negative_threshold=negative_threshold,
+            evaporation_rate=evaporation_rate,
+            min_degree_floor=min_degree_floor,
+            rng=rng,
+        )
+
+    upper_i, upper_j, final_curvature, _ = compute_ollivier_ricci_proxy_curvature(flowed)
+    if len(final_curvature) > 0:
+        latest_curvature = final_curvature
+    diagnostics = RicciFlowDiagnostics(
+        steps=effective_steps,
+        mean_curvature=float(np.mean(latest_curvature)) if len(latest_curvature) > 0 else 0.0,
+        min_curvature=float(np.min(latest_curvature)) if len(latest_curvature) > 0 else 0.0,
+        negative_edge_fraction=float(np.mean(latest_curvature < 0.0)) if len(latest_curvature) > 0 else 0.0,
+        evaporated_edges=total_evaporated,
+        strengthened_edges=total_strengthened,
+    )
+    return flowed, edge_bias, diagnostics
+
+
+def evaporate_negative_ricci_edges(
+    flowed: np.ndarray,
+    edge_bias: np.ndarray,
+    upper_i: np.ndarray,
+    upper_j: np.ndarray,
+    curvature: np.ndarray,
+    overlap_count: np.ndarray,
+    negative_threshold: float,
+    evaporation_rate: float,
+    min_degree_floor: int,
+    rng: np.random.Generator,
+) -> int:
+    evaporated_edges = 0
+    degrees = np.sum(flowed, axis=1).astype(np.int32)
+    for edge_index in np.argsort(curvature).tolist():
+        current_curvature = float(curvature[edge_index])
+        if current_curvature >= negative_threshold:
+            break
+        src = int(upper_i[edge_index])
+        dst = int(upper_j[edge_index])
+        if not should_evaporate_ricci_edge(
+            flowed=flowed,
+            degrees=degrees,
+            src=src,
+            dst=dst,
+            overlap_count=int(overlap_count[edge_index]),
+            current_curvature=current_curvature,
+            negative_threshold=negative_threshold,
+            evaporation_rate=evaporation_rate,
+            min_degree_floor=min_degree_floor,
+            rng=rng,
+        ):
+            continue
+        flowed[src, dst] = False
+        flowed[dst, src] = False
+        edge_bias[src, dst] = 0.0
+        edge_bias[dst, src] = 0.0
+        degrees[src] -= 1
+        degrees[dst] -= 1
+        evaporated_edges += 1
+    return evaporated_edges
+
+
+def should_evaporate_ricci_edge(
+    flowed: np.ndarray,
+    degrees: np.ndarray,
+    src: int,
+    dst: int,
+    overlap_count: int,
+    current_curvature: float,
+    negative_threshold: float,
+    evaporation_rate: float,
+    min_degree_floor: int,
+    rng: np.random.Generator,
+) -> bool:
+    if not flowed[src, dst]:
+        return False
+    if overlap_count > 0:
+        return False
+    if int(degrees[src]) <= min_degree_floor or int(degrees[dst]) <= min_degree_floor:
+        return False
+    severity = min(1.0, (negative_threshold - current_curvature) / max(abs(negative_threshold), 1e-6))
+    return bool(rng.random() < evaporation_rate * severity)
+
+
+def build_locality_seed(
+    graph_prior: str,
+    sites: int,
+    degree: int,
+    rng: np.random.Generator,
+    inflation_seed_sites: int | None,
+    inflation_mode: str,
+    inflation_growth_factor: float,
+    inflation_relax_rounds: int,
+    inflation_smoothing_strength: float,
+) -> LocalitySeedArtifacts:
+    normalized_seed_sites = normalize_inflation_seed_sites(sites, inflation_seed_sites)
+    if normalized_seed_sites is None:
+        positions = make_position_cloud(sites, rng, graph_prior)
+        adjacency, distances = build_graph_prior_adjacency(graph_prior, positions, degree, rng)
+    else:
+        if inflation_mode == "staged":
+            positions, adjacency, distances = grow_graph_via_local_inflation(
+                graph_prior,
+                sites,
+                degree,
+                rng,
+                normalized_seed_sites,
+                inflation_growth_factor,
+                inflation_relax_rounds,
+                inflation_smoothing_strength,
+            )
+        else:
+            positions, adjacency, distances = grow_graph_via_local_inflation(
+                graph_prior,
+                sites,
+                degree,
+                rng,
+                normalized_seed_sites,
+                1.0,
+                0,
+                0.0,
+            )
+    ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
+    edge_bias = np.ones_like(adjacency, dtype=np.float32)
+    return LocalitySeedArtifacts(
+        positions=positions.astype(np.float32),
+        adjacency=adjacency,
+        distances=distances,
+        edge_bias=edge_bias,
+        ricci=ricci,
+    )
 
 
 def get_primary_hausdorff_dimension(point: ScalingPoint) -> float:
@@ -468,6 +991,310 @@ def build_invariance_metric_summaries(points: list[ScalingPoint]) -> list[Invari
             )
         )
     return summaries
+
+
+def get_invariance_score(metric_summaries: list[InvarianceMetricSummary], metric: str) -> float:
+    for summary in metric_summaries:
+        if summary.metric == metric:
+            return float(summary.invariance_score)
+    return float("inf")
+
+
+def format_metric_window(values: dict[str, float], target: float) -> str:
+    offsets = {key: abs(value - target) for key, value in values.items()}
+    return ", ".join(f"{key}:{offset:.3f}" for key, offset in offsets.items())
+
+
+def build_three_dimensionality_verdict(points: list[ScalingPoint], metric_summaries: list[InvarianceMetricSummary]) -> ThreeDimensionalityVerdict:
+    weighted_spectral = {point.graph_prior: point.spectral_dimension for point in points}
+    weighted_hausdorff = {point.graph_prior: get_primary_hausdorff_dimension(point) for point in points}
+    topo_spectral = {point.graph_prior: point.topological_consensus.spectral_dimension_median for point in points}
+    topo_hausdorff = {point.graph_prior: point.topological_consensus.hausdorff_dimension_median for point in points}
+
+    checks: list[ThreeDimensionalityCheck] = []
+
+    spectral_3d_ok = max(abs(value - 3.0) for value in weighted_spectral.values()) < 0.25
+    checks.append(
+        ThreeDimensionalityCheck(
+            name="spectral_dimension_near_3",
+            passed=spectral_3d_ok,
+            details=format_metric_window(weighted_spectral, 3.0),
+        )
+    )
+
+    topo_spectral_ok = max(abs(value - 3.0) for value in topo_spectral.values()) < 0.25
+    checks.append(
+        ThreeDimensionalityCheck(
+            name="topological_spectral_dimension_near_3",
+            passed=topo_spectral_ok,
+            details=format_metric_window(topo_spectral, 3.0),
+        )
+    )
+
+    hausdorff_3d_ok = max(abs(value - 3.0) for value in weighted_hausdorff.values()) < 0.35
+    checks.append(
+        ThreeDimensionalityCheck(
+            name="hausdorff_dimension_near_3",
+            passed=hausdorff_3d_ok,
+            details=format_metric_window(weighted_hausdorff, 3.0),
+        )
+    )
+
+    topo_hausdorff_ok = max(abs(value - 3.0) for value in topo_hausdorff.values()) < 0.35
+    checks.append(
+        ThreeDimensionalityCheck(
+            name="topological_hausdorff_dimension_near_3",
+            passed=topo_hausdorff_ok,
+            details=format_metric_window(topo_hausdorff, 3.0),
+        )
+    )
+
+    spectral_invariance = get_invariance_score(metric_summaries, "spectral_dimension")
+    checks.append(
+        ThreeDimensionalityCheck(
+            name="spectral_invariance",
+            passed=spectral_invariance < 1.0,
+            details=f"score={spectral_invariance:.3f}",
+        )
+    )
+
+    hausdorff_invariance = get_invariance_score(metric_summaries, "hausdorff_dimension")
+    checks.append(
+        ThreeDimensionalityCheck(
+            name="hausdorff_invariance",
+            passed=hausdorff_invariance < 1.0,
+            details=f"score={hausdorff_invariance:.3f}",
+        )
+    )
+
+    null_passes: list[bool] = []
+    null_details: list[str] = []
+    for point in points:
+        if not point.null_model_summaries:
+            continue
+        spectral_sep = all(
+            abs(point.spectral_dimension - null_summary.spectral_dimension_mean)
+            > max(2.0 * null_summary.spectral_dimension_std, 0.15)
+            for null_summary in point.null_model_summaries
+        )
+        hausdorff_sep = all(
+            abs(get_primary_hausdorff_dimension(point) - null_summary.hausdorff_dimension_mean)
+            > max(2.0 * null_summary.hausdorff_dimension_std, 0.20)
+            for null_summary in point.null_model_summaries
+        )
+        null_passes.append(spectral_sep and hausdorff_sep)
+        null_details.append(f"{point.graph_prior}:d_s={spectral_sep},d_H={hausdorff_sep}")
+    checks.append(
+        ThreeDimensionalityCheck(
+            name="null_model_separation",
+            passed=all(null_passes) if null_passes else False,
+            details="; ".join(null_details) if null_details else "null models unavailable",
+        )
+    )
+
+    return ThreeDimensionalityVerdict(
+        passed=all(check.passed for check in checks),
+        checks=checks,
+    )
+
+
+def merge_three_dimensionality_verdicts(verdicts: list[ThreeDimensionalityVerdict]) -> ThreeDimensionalityVerdict:
+    if not verdicts:
+        return ThreeDimensionalityVerdict(passed=False, checks=[])
+    checks: list[ThreeDimensionalityCheck] = []
+    for index, first_check in enumerate(verdicts[0].checks):
+        checks.append(
+            ThreeDimensionalityCheck(
+                name=f"all_sizes::{first_check.name}",
+                passed=all(item.checks[index].passed for item in verdicts),
+                details=" | ".join(item.checks[index].details for item in verdicts),
+            )
+        )
+    return ThreeDimensionalityVerdict(
+        passed=all(verdict.passed for verdict in verdicts),
+        checks=checks,
+    )
+
+
+def render_three_dimensionality_checks(prefix: str, verdict: ThreeDimensionalityVerdict) -> list[str]:
+    return [
+        f"{prefix}[{check.name}] {'PASS' if check.passed else 'FAIL'} {check.details}"
+        for check in verdict.checks
+    ]
+
+
+def render_graph_prior_point(point: GraphPriorComparisonPoint) -> list[str]:
+    lines = [
+        f"N={point.sites}",
+        f"  d_s: {point.spectral_dimension_by_prior}",
+        f"  d_H: {point.hausdorff_dimension_by_prior}",
+        f"  gravity_R2: {point.gravity_r2_by_prior}",
+        f"  c_eff: {point.light_cone_speed_by_prior}",
+        f"  topo_d_s: {point.topological_spectral_dimension_by_prior}",
+        f"  topo_d_H: {point.topological_hausdorff_dimension_by_prior}",
+        f"  topo_3d_score: {point.topological_three_dimensionality_score_by_prior}",
+        f"  3d_verdict: {'PASS' if point.three_dimensionality_verdict.passed else 'FAIL'}",
+    ]
+    lines.extend(render_three_dimensionality_checks("    check", point.three_dimensionality_verdict))
+    lines.extend(
+        [
+            f"  invariance[{metric.metric}] spread={metric.prior_spread:.6f} sigma={metric.internal_sigma:.6f} score={metric.invariance_score:.3f}"
+            for metric in point.metric_summaries
+        ]
+    )
+    return lines
+
+
+def estimate_graph_spectral_dimension(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    max_walk_steps: int,
+    source_count: int,
+) -> tuple[float, float]:
+    transition = np.zeros((sites, sites), dtype=np.float64)
+    transition[edge_i, edge_j] = 1.0
+    transition[edge_j, edge_i] = 1.0
+    row_sum = np.sum(transition, axis=1, keepdims=True)
+    isolated = row_sum[:, 0] <= 1e-12
+    transition = np.divide(transition, np.maximum(row_sum, 1e-12), out=transition)
+    transition[isolated, isolated] = 1.0
+    times = np.arange(2, max_walk_steps + 1, 2, dtype=int)
+    start_count = min(source_count, sites)
+    starts = np.linspace(0, sites - 1, num=start_count, dtype=np.int32)
+    distributions = np.zeros((start_count, sites), dtype=np.float64)
+    distributions[np.arange(start_count), starts] = 1.0
+    returns: list[float] = []
+    for step in range(1, max_walk_steps + 1):
+        distributions = distributions @ transition
+        if step in times:
+            returns.append(float(np.mean(distributions[np.arange(start_count), starts])))
+    return_probabilities = np.clip(np.asarray(returns, dtype=float), 1e-12, None)
+    log_times = np.log(times.astype(float))
+    log_returns = np.log(return_probabilities)
+    fit_slice = slice(1, len(log_times) - 1 if len(log_times) > 3 else len(log_times))
+    slope, _ = np.polyfit(log_times[fit_slice], log_returns[fit_slice], deg=1)
+    spectral_dimension = float(np.clip(-2.0 * slope, 0.0, 6.0))
+    local_slopes = -2.0 * np.gradient(log_returns, log_times)
+    spectral_std = float(np.std(local_slopes[1:-1])) if len(local_slopes) > 2 else 0.0
+    return spectral_dimension, spectral_std
+
+
+def estimate_unweighted_volume_scaling(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    source_cap: int = 64,
+    radius_count: int = 24,
+) -> float:
+    if sites < 2 or len(edge_i) == 0:
+        return 0.0
+    graph = sp.csr_matrix((np.ones(len(edge_i), dtype=np.float64), (edge_i, edge_j)), shape=(sites, sites), dtype=np.float64)
+    graph = graph + graph.T
+    source_count = min(max(1, source_cap), sites)
+    sources = np.linspace(0, sites - 1, num=source_count, dtype=np.int32)
+    distances = csgraph.shortest_path(graph, directed=False, indices=sources, unweighted=True)
+    positive = distances[np.isfinite(distances) & (distances > 0.0)]
+    if len(positive) < 4:
+        return 0.0
+    unique_positive = np.unique(positive.astype(np.int32))
+    if len(unique_positive) < 2:
+        return 0.0
+    if len(unique_positive) <= radius_count:
+        radii = unique_positive.astype(float)
+    else:
+        radii = np.linspace(float(unique_positive[0]), float(unique_positive[-1]), num=radius_count, dtype=float)
+    volumes = np.asarray([float(np.mean(np.sum(distances <= radius, axis=1))) for radius in radii], dtype=float)
+    fit_mask = (radii > 0.0) & (volumes > 1.0)
+    if np.count_nonzero(fit_mask) < 3:
+        return 0.0
+    slope, _ = np.polyfit(np.log(radii[fit_mask]), np.log(volumes[fit_mask]), deg=1)
+    return float(slope)
+
+
+def build_rank_backbone_graph(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+    retain_fraction: float,
+    min_degree: int = 2,
+) -> tuple[np.ndarray, np.ndarray]:
+    retain_fraction = float(np.clip(retain_fraction, 0.0, 1.0))
+    if retain_fraction >= 0.999:
+        return edge_i.astype(np.int32), edge_j.astype(np.int32)
+    incident: list[list[tuple[float, int, int]]] = [[] for _ in range(sites)]
+    for src, dst, weight in zip(edge_i.tolist(), edge_j.tolist(), edge_weights.tolist()):
+        incident[src].append((float(weight), src, dst))
+        incident[dst].append((float(weight), src, dst))
+    retained_edges: set[tuple[int, int]] = set()
+    for site in range(sites):
+        site_edges = sorted(incident[site], key=lambda item: item[0], reverse=True)
+        if not site_edges:
+            continue
+        keep_count = min(len(site_edges), max(min_degree, int(np.ceil(len(site_edges) * retain_fraction))))
+        for _, src, dst in site_edges[:keep_count]:
+            retained_edges.add(tuple(sorted((src, dst))))
+    if not retained_edges:
+        return edge_i.astype(np.int32), edge_j.astype(np.int32)
+    retained = np.asarray(sorted(retained_edges), dtype=np.int32)
+    return retained[:, 0], retained[:, 1]
+
+
+def assess_topological_three_dimensionality(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+    max_walk_steps: int,
+    source_count: int,
+) -> TopologyConsensusSummary:
+    graph_specs = (
+        ("support", 1.0),
+        ("rank-backbone-50", 0.5),
+        ("rank-backbone-25", 0.25),
+    )
+    graphizations: list[TopologyGraphizationDiagnostics] = []
+    for label, retain_fraction in graph_specs:
+        graph_i, graph_j = build_rank_backbone_graph(sites, edge_i, edge_j, edge_weights, retain_fraction)
+        spectral_dimension, spectral_std = estimate_graph_spectral_dimension(
+            sites=sites,
+            edge_i=graph_i,
+            edge_j=graph_j,
+            max_walk_steps=max_walk_steps,
+            source_count=source_count,
+        )
+        hausdorff_dimension = estimate_unweighted_volume_scaling(
+            sites=sites,
+            edge_i=graph_i,
+            edge_j=graph_j,
+        )
+        graphizations.append(
+            TopologyGraphizationDiagnostics(
+                label=label,
+                retained_edge_fraction=retain_fraction,
+                spectral_dimension=float(spectral_dimension),
+                spectral_dimension_std=float(spectral_std),
+                hausdorff_dimension=float(hausdorff_dimension),
+            )
+        )
+    spectral_values = np.asarray([entry.spectral_dimension for entry in graphizations], dtype=float)
+    hausdorff_values = np.asarray([entry.hausdorff_dimension for entry in graphizations], dtype=float)
+    spectral_median = float(np.median(spectral_values))
+    spectral_std = float(np.std(spectral_values))
+    hausdorff_median = float(np.median(hausdorff_values))
+    hausdorff_std = float(np.std(hausdorff_values))
+    three_dimensionality_score = float(
+        1.0 / (1.0 + abs(spectral_median - 3.0) + abs(hausdorff_median - 3.0) + spectral_std + hausdorff_std)
+    )
+    return TopologyConsensusSummary(
+        spectral_dimension_median=spectral_median,
+        spectral_dimension_std=spectral_std,
+        hausdorff_dimension_median=hausdorff_median,
+        hausdorff_dimension_std=hausdorff_std,
+        three_dimensionality_score=three_dimensionality_score,
+        graphizations=graphizations,
+    )
 
 
 def make_position_cloud(sites: int, rng: np.random.Generator, graph_prior: str) -> np.ndarray:
@@ -801,6 +1628,12 @@ class MonteCarloOperatorNetwork:
         self.field_scale = config.field_scale
         self.chiral_scale = config.chiral_scale
         self.temperature = config.temperature
+        self.anneal_start_temperature = config.anneal_start_temperature
+        self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
+        self.inflation_mode = config.inflation_mode
+        self.inflation_growth_factor = max(1.1, float(config.inflation_growth_factor))
+        self.inflation_relax_rounds = max(0, int(config.inflation_relax_rounds))
+        self.inflation_smoothing_strength = float(np.clip(config.inflation_smoothing_strength, 0.0, 1.0))
         self.burn_in_sweeps = config.burn_in_sweeps
         self.measurement_sweeps = config.measurement_sweeps
         self.sample_interval = config.sample_interval
@@ -810,9 +1643,18 @@ class MonteCarloOperatorNetwork:
         self.null_model_types = normalize_null_model_types(config.null_model_types)
         self.null_model_samples = max(0, int(config.null_model_samples))
         self.null_rewire_swaps = max(1, int(config.null_rewire_swaps))
+        self.degree_penalty_scale = max(0.0, float(config.degree_penalty_scale))
+        self.holographic_bound_scale = max(0.0, float(config.holographic_bound_scale))
+        self.holographic_penalty_strength = max(0.0, float(config.holographic_penalty_strength))
+        self.ricci_flow_steps = max(0, int(config.ricci_flow_steps))
+        self.ricci_negative_threshold = float(config.ricci_negative_threshold)
+        self.ricci_evaporation_rate = float(np.clip(config.ricci_evaporation_rate, 0.0, 1.0))
+        self.ricci_positive_boost = max(0.0, float(config.ricci_positive_boost))
         self.backend_name, self.xp = resolve_array_backend(config.backend)
         self.progress_reporter = progress_reporter
         self.rng = np.random.default_rng(seed)
+        self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
+        self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
 
     def analyze(self) -> MonteCarloArtifacts:
         self._progress(0, 4, "build locality")
@@ -822,6 +1664,14 @@ class MonteCarloOperatorNetwork:
         self._progress(2, 4, STAGE_MONTE_CARLO)
         samples, energies = self._sample_spin_configurations(edge_i, edge_j, couplings, local_fields, triads)
         raw_edge_weights = self._edge_covariances(samples, edge_i, edge_j, couplings)
+        topological_consensus = assess_topological_three_dimensionality(
+            sites=self.sites,
+            edge_i=edge_i,
+            edge_j=edge_j,
+            edge_weights=raw_edge_weights,
+            max_walk_steps=self.max_walk_steps,
+            source_count=self.walker_count,
+        )
         self._progress(3, 4, "distance tests")
         evaluation_context = DistanceEvaluationContext(
             positions,
@@ -898,6 +1748,14 @@ class MonteCarloOperatorNetwork:
             spectral_dimension=float(spectral_dimension),
             spectral_dimension_std=float(spectral_std),
             mean_return_error=float(fit_error),
+            holographic_enabled=self._last_holographic.enabled,
+            holographic_mean_suppression=self._last_holographic.mean_suppression,
+            holographic_overloaded_edge_fraction=self._last_holographic.overloaded_edge_fraction,
+            ricci_flow_steps=self._last_ricci.steps,
+            ricci_mean_curvature=self._last_ricci.mean_curvature,
+            ricci_min_curvature=self._last_ricci.min_curvature,
+            ricci_negative_edge_fraction=self._last_ricci.negative_edge_fraction,
+            ricci_evaporated_edges=self._last_ricci.evaporated_edges,
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
@@ -908,6 +1766,7 @@ class MonteCarloOperatorNetwork:
             effective_light_cone_speed=light_cone_speed,
             light_cone_fit_r2=light_cone_fit_r2,
             light_cone_leakage=light_cone_leakage,
+            topological_consensus=topological_consensus,
             distance_model=primary_distance.summary.label,
             distance_alpha=primary_distance.summary.alpha,
             alternative_distance_models=[artifact.summary for artifact in distance_model_artifacts],
@@ -937,25 +1796,64 @@ class MonteCarloOperatorNetwork:
         self.progress_reporter.update(current, total, stage)
 
     def _build_sparse_algebraic_locality(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        positions_np = make_position_cloud(self.sites, self.rng, self.graph_prior)
+        locality = build_locality_seed(
+            self.graph_prior,
+            self.sites,
+            self.degree,
+            self.rng,
+            self.inflation_seed_sites,
+            self.inflation_mode,
+            self.inflation_growth_factor,
+            self.inflation_relax_rounds,
+            self.inflation_smoothing_strength,
+        )
+        if self.ricci_flow_steps > 0:
+            adjacency, edge_bias, ricci = apply_combinatorial_ricci_flow(
+                locality.adjacency,
+                self.degree,
+                self.rng,
+                self.ricci_flow_steps,
+                self.ricci_negative_threshold,
+                self.ricci_evaporation_rate,
+                self.ricci_positive_boost,
+            )
+            locality = LocalitySeedArtifacts(
+                positions=locality.positions,
+                adjacency=adjacency,
+                distances=locality.distances,
+                edge_bias=edge_bias,
+                ricci=ricci,
+            )
+        positions_np = locality.positions
+        adjacency = locality.adjacency
+        distances = locality.distances
         features_np = 2.0 * pi * positions_np
-        adjacency, distances = build_graph_prior_adjacency(self.graph_prior, positions_np, self.degree, self.rng)
         neighbor_count = min(max(1, self.degree), self.sites - 1)
 
         common_neighbors = adjacency.astype(np.int16) @ adjacency.astype(np.int16)
         closure_score = common_neighbors / max(neighbor_count, 1)
+        degree_penalty = compute_degree_penalty_factors(adjacency, self.degree, self.degree_penalty_scale)
         coupling_matrix = np.zeros((self.sites, self.sites), dtype=np.float32)
         upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
+        holographic_suppression, self._last_holographic = compute_holographic_suppression(
+            distances,
+            common_neighbors,
+            upper_i,
+            upper_j,
+            self.holographic_bound_scale,
+            self.holographic_penalty_strength,
+        )
         base = np.exp(-(distances[upper_i, upper_j] ** 2) / (2.0 * 0.22**2))
         reinforcement = 1.0 + 0.18 * closure_score[upper_i, upper_j]
         noise = (1.0 + 0.05 * self.rng.normal(size=int(base.shape[0]))).astype(np.float32)
-        values = self.coupling_scale * base * reinforcement * noise
+        values = self.coupling_scale * base * reinforcement * noise * degree_penalty[upper_i, upper_j] * locality.edge_bias[upper_i, upper_j] * holographic_suppression
         coupling_matrix[upper_i, upper_j] = values
         coupling_matrix[upper_j, upper_i] = values
 
         edge_i, edge_j = np.nonzero(np.triu(adjacency, k=1))
         couplings = coupling_matrix[edge_i, edge_j]
         local_fields = self.rng.normal(0.0, self.field_scale, size=self.sites)
+        self._last_ricci = locality.ricci
         return (
             np.asarray(features_np, dtype=np.float32),
             positions_np.astype(np.float32),
@@ -1031,9 +1929,14 @@ class MonteCarloOperatorNetwork:
         samples: list[np.ndarray] = []
         energies: list[float] = []
         total_sweeps = self.burn_in_sweeps + self.measurement_sweeps
-        beta = 1.0 / max(self.temperature, 1e-9)
-
         for sweep in range(total_sweeps):
+            sweep_temperature = temperature_for_sweep(
+                sweep=sweep,
+                burn_in_sweeps=self.burn_in_sweeps,
+                target_temperature=self.temperature,
+                anneal_start_temperature=self.anneal_start_temperature,
+            )
+            beta = 1.0 / max(sweep_temperature, 1e-9)
             self._metropolis_sweep(spins, neighbor_index, local_fields, triads, beta)
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
             if sweep >= self.burn_in_sweeps and (sweep - self.burn_in_sweeps) % self.sample_interval == 0:
@@ -1222,6 +2125,12 @@ class SU3TensorNetworkMonteCarlo:
         self.field_scale = config.field_scale
         self.chiral_scale = config.chiral_scale
         self.temperature = config.temperature
+        self.anneal_start_temperature = config.anneal_start_temperature
+        self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
+        self.inflation_mode = config.inflation_mode
+        self.inflation_growth_factor = max(1.1, float(config.inflation_growth_factor))
+        self.inflation_relax_rounds = max(0, int(config.inflation_relax_rounds))
+        self.inflation_smoothing_strength = float(np.clip(config.inflation_smoothing_strength, 0.0, 1.0))
         self.burn_in_sweeps = config.burn_in_sweeps
         self.measurement_sweeps = config.measurement_sweeps
         self.sample_interval = config.sample_interval
@@ -1233,28 +2142,48 @@ class SU3TensorNetworkMonteCarlo:
         self.null_model_types = normalize_null_model_types(config.null_model_types)
         self.null_model_samples = max(0, int(config.null_model_samples))
         self.null_rewire_swaps = max(1, int(config.null_rewire_swaps))
+        self.degree_penalty_scale = max(0.0, float(config.degree_penalty_scale))
+        self.holographic_bound_scale = max(0.0, float(config.holographic_bound_scale))
+        self.holographic_penalty_strength = max(0.0, float(config.holographic_penalty_strength))
+        self.ricci_flow_steps = max(0, int(config.ricci_flow_steps))
+        self.ricci_negative_threshold = float(config.ricci_negative_threshold)
+        self.ricci_evaporation_rate = float(np.clip(config.ricci_evaporation_rate, 0.0, 1.0))
+        self.ricci_positive_boost = max(0.0, float(config.ricci_positive_boost))
         self.progress_reporter = progress_reporter
         self.rng = np.random.default_rng(seed)
+        self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
+        self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
 
     def analyze(self) -> MonteCarloArtifacts:
-        self._progress(0, 5, "build locality")
+        self._progress(0, 6, "build locality")
         positions, edge_i, edge_j, couplings, local_fields, link_phases = self._build_su3_locality()
-        self._progress(1, 5, "build kernels")
+        self._progress(1, 6, "build triads")
+        triads, unique_triads = self._build_su3_triads(edge_i, edge_j)
+        self._progress(2, 6, "build kernels")
         kernels, tensor_residual = self._build_truncated_kernels(couplings, link_phases)
-        self._progress(2, 5, "belief propagation")
+        self._progress(3, 6, "belief propagation")
         directed_src, directed_dst, directed_kernel, incoming_edges = self._build_message_graph(edge_i, edge_j, kernels)
         messages = self._run_belief_propagation(directed_src, directed_dst, directed_kernel, incoming_edges, local_fields)
-        self._progress(3, 5, STAGE_MONTE_CARLO)
+        self._progress(4, 6, STAGE_MONTE_CARLO)
         samples, energies, marginals = self._sample_color_configurations(
             edge_i,
             edge_j,
             kernels,
             local_fields,
+            triads,
             incoming_edges,
             messages,
         )
-        self._progress(4, 5, "distance tests")
+        self._progress(5, 6, "distance tests")
         raw_edge_weights = self._edge_correlations(samples, edge_i, edge_j, couplings)
+        topological_consensus = assess_topological_three_dimensionality(
+            sites=self.sites,
+            edge_i=edge_i,
+            edge_j=edge_j,
+            edge_weights=raw_edge_weights,
+            max_walk_steps=self.max_walk_steps,
+            source_count=self.walker_count,
+        )
         evaluation_context = DistanceEvaluationContext(
             positions,
             edge_i,
@@ -1292,7 +2221,7 @@ class SU3TensorNetworkMonteCarlo:
         light_cone_speed = primary_distance.summary.effective_light_cone_speed
         light_cone_fit_r2 = primary_distance.summary.light_cone_fit_r2
         light_cone_leakage = primary_distance.summary.light_cone_leakage
-        theta_order, matter_weight, antimatter_weight, asymmetry, wilson_loop = self._estimate_su3_sector_observables(samples, link_phases, edge_i, edge_j)
+        theta_order, matter_weight, antimatter_weight, asymmetry, wilson_loop = self._estimate_su3_sector_observables(samples, link_phases, edge_i, edge_j, unique_triads)
         color_entropy = self._mean_color_entropy(marginals)
         mean_color_imbalance = self._mean_color_imbalance(samples)
         mean_link_trace = float(np.mean(np.abs(np.mean(link_phases, axis=1)))) if len(link_phases) > 0 else 1.0
@@ -1329,6 +2258,14 @@ class SU3TensorNetworkMonteCarlo:
             spectral_dimension=float(spectral_dimension),
             spectral_dimension_std=float(spectral_std),
             mean_return_error=float(fit_error),
+            holographic_enabled=self._last_holographic.enabled,
+            holographic_mean_suppression=self._last_holographic.mean_suppression,
+            holographic_overloaded_edge_fraction=self._last_holographic.overloaded_edge_fraction,
+            ricci_flow_steps=self._last_ricci.steps,
+            ricci_mean_curvature=self._last_ricci.mean_curvature,
+            ricci_min_curvature=self._last_ricci.min_curvature,
+            ricci_negative_edge_fraction=self._last_ricci.negative_edge_fraction,
+            ricci_evaporated_edges=self._last_ricci.evaporated_edges,
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
@@ -1339,6 +2276,7 @@ class SU3TensorNetworkMonteCarlo:
             effective_light_cone_speed=light_cone_speed,
             light_cone_fit_r2=light_cone_fit_r2,
             light_cone_leakage=light_cone_leakage,
+            topological_consensus=topological_consensus,
             distance_model=primary_distance.summary.label,
             distance_alpha=primary_distance.summary.alpha,
             alternative_distance_models=[artifact.summary for artifact in distance_model_artifacts],
@@ -1369,16 +2307,54 @@ class SU3TensorNetworkMonteCarlo:
         self.progress_reporter.update(current, total, stage)
 
     def _build_su3_locality(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        positions = make_position_cloud(self.sites, self.rng, self.graph_prior)
-        adjacency, distances = build_graph_prior_adjacency(self.graph_prior, positions, self.degree, self.rng)
+        locality = build_locality_seed(
+            self.graph_prior,
+            self.sites,
+            self.degree,
+            self.rng,
+            self.inflation_seed_sites,
+            self.inflation_mode,
+            self.inflation_growth_factor,
+            self.inflation_relax_rounds,
+            self.inflation_smoothing_strength,
+        )
+        if self.ricci_flow_steps > 0:
+            adjacency, edge_bias, ricci = apply_combinatorial_ricci_flow(
+                locality.adjacency,
+                self.degree,
+                self.rng,
+                self.ricci_flow_steps,
+                self.ricci_negative_threshold,
+                self.ricci_evaporation_rate,
+                self.ricci_positive_boost,
+            )
+            locality = LocalitySeedArtifacts(
+                positions=locality.positions,
+                adjacency=adjacency,
+                distances=locality.distances,
+                edge_bias=edge_bias,
+                ricci=ricci,
+            )
+        positions = locality.positions
+        adjacency = locality.adjacency
+        distances = locality.distances
         neighbor_count = min(max(1, self.degree), self.sites - 1)
         common_neighbors = adjacency.astype(np.int16) @ adjacency.astype(np.int16)
         closure_score = common_neighbors / max(neighbor_count, 1)
+        degree_penalty = compute_degree_penalty_factors(adjacency, self.degree, self.degree_penalty_scale)
         upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
+        holographic_suppression, self._last_holographic = compute_holographic_suppression(
+            distances,
+            common_neighbors,
+            upper_i,
+            upper_j,
+            self.holographic_bound_scale,
+            self.holographic_penalty_strength,
+        )
         base = np.exp(-(distances[upper_i, upper_j] ** 2) / (2.0 * 0.22**2))
         reinforcement = 1.0 + 0.20 * closure_score[upper_i, upper_j]
         noise = 1.0 + 0.05 * self.rng.normal(size=len(base))
-        couplings = (self.coupling_scale * base * reinforcement * noise).astype(np.float32)
+        couplings = (self.coupling_scale * base * reinforcement * noise * degree_penalty[upper_i, upper_j] * locality.edge_bias[upper_i, upper_j] * holographic_suppression).astype(np.float32)
         local_fields = self.field_scale * self.rng.normal(size=(self.sites, self.color_count)).astype(np.float32)
         local_fields -= np.mean(local_fields, axis=1, keepdims=True)
 
@@ -1387,6 +2363,7 @@ class SU3TensorNetworkMonteCarlo:
         link_phases[:, 0] = np.exp(1.0j * angles[:, 0])
         link_phases[:, 1] = np.exp(1.0j * angles[:, 1])
         link_phases[:, 2] = np.exp(-1.0j * (angles[:, 0] + angles[:, 1]))
+        self._last_ricci = locality.ricci
         return positions, upper_i.astype(np.int32), upper_j.astype(np.int32), couplings, local_fields, link_phases
 
     def _build_truncated_kernels(self, couplings: np.ndarray, link_phases: np.ndarray) -> tuple[np.ndarray, float]:
@@ -1406,6 +2383,41 @@ class SU3TensorNetworkMonteCarlo:
             kernels[edge_index] = truncated
             residuals.append(float(np.linalg.norm(kernel - truncated) / (np.linalg.norm(kernel) + 1e-12)))
         return kernels, float(np.mean(residuals)) if residuals else 0.0
+
+    def _build_su3_triads(
+        self,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+    ) -> tuple[list[list[tuple[int, int, float]]], np.ndarray]:
+        adjacency_lists: list[set[int]] = [set() for _ in range(self.sites)]
+        for i, j in zip(edge_i.tolist(), edge_j.tolist()):
+            adjacency_lists[i].add(j)
+            adjacency_lists[j].add(i)
+
+        per_site: list[list[tuple[int, int, float]]] = [[] for _ in range(self.sites)]
+        unique_triads: list[tuple[int, int, int, float]] = []
+        triads_added: set[tuple[int, int, int]] = set()
+        max_triads = max(self.sites * 4, len(edge_i))
+        for center in range(self.sites):
+            neighbors = sorted(adjacency_lists[center])
+            if len(neighbors) < 2:
+                continue
+            self.rng.shuffle(neighbors)
+            for idx in range(len(neighbors) - 1):
+                left = neighbors[idx]
+                right = neighbors[idx + 1]
+                triad = tuple(sorted((center, left, right)))
+                if triad in triads_added:
+                    continue
+                triads_added.add(triad)
+                strength = float(self.chiral_scale * (1.0 + 0.08 * self.rng.normal()))
+                per_site[center].append((left, right, strength))
+                per_site[left].append((center, right, strength))
+                per_site[right].append((center, left, strength))
+                unique_triads.append((triad[0], triad[1], triad[2], strength))
+                if len(triads_added) >= max_triads:
+                    return per_site, np.asarray(unique_triads, dtype=np.float32)
+        return per_site, np.asarray(unique_triads, dtype=np.float32)
 
     def _build_message_graph(
         self,
@@ -1478,6 +2490,7 @@ class SU3TensorNetworkMonteCarlo:
         edge_j: np.ndarray,
         kernels: np.ndarray,
         local_fields: np.ndarray,
+        triads: list[list[tuple[int, int, float]]],
         incoming_edges: list[list[int]],
         messages: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -1493,21 +2506,46 @@ class SU3TensorNetworkMonteCarlo:
         local_bias = local_fields / max(self.temperature, 1e-9)
         marginals = self._compute_site_marginals(local_bias, incoming_edges, messages)
         for sweep in range(total_sweeps):
+            sweep_temperature = temperature_for_sweep(
+                sweep=sweep,
+                burn_in_sweeps=self.burn_in_sweeps,
+                target_temperature=self.temperature,
+                anneal_start_temperature=self.anneal_start_temperature,
+            )
+            anneal_ratio = self.temperature / max(sweep_temperature, 1e-9)
             for site in self.rng.permutation(self.sites):
-                log_prob = local_bias[site].astype(np.float64).copy()
-                log_prob += np.log(np.clip(marginals[site], 1e-12, None))
+                log_prob = anneal_ratio * local_bias[site].astype(np.float64).copy()
+                log_prob += anneal_ratio * np.log(np.clip(marginals[site], 1e-12, None))
                 for neighbor, kernel in neighbors[site]:
-                    log_prob += np.log(np.clip(kernel[:, colors[neighbor]], 1e-12, None))
+                    log_prob += anneal_ratio * np.log(np.clip(kernel[:, colors[neighbor]], 1e-12, None))
+                log_prob += anneal_ratio * self._triad_color_logits(colors, site, triads)
                 color_prob = softmax_from_log(log_prob)
                 colors[site] = np.int8(self.rng.choice(self.color_count, p=color_prob))
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
             if sweep >= self.burn_in_sweeps and (sweep - self.burn_in_sweeps) % self.sample_interval == 0:
                 samples.append(colors.copy())
-                energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields))
+                energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads))
         if not samples:
             samples.append(colors.copy())
-            energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields))
+            energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads))
         return np.asarray(samples, dtype=np.int8), np.asarray(energies, dtype=float), marginals
+
+    def _triad_color_logits(
+        self,
+        colors: np.ndarray,
+        site: int,
+        triads: list[list[tuple[int, int, float]]],
+    ) -> np.ndarray:
+        logits = np.zeros(self.color_count, dtype=np.float64)
+        thermal_scale = max(self.temperature, 1e-9)
+        for left, right, strength in triads[site]:
+            left_color = int(colors[left])
+            right_color = int(colors[right])
+            if left_color == right_color:
+                logits[left_color] += strength / thermal_scale
+                logits += (-0.35 * strength / thermal_scale)
+                logits[left_color] += 0.35 * strength / thermal_scale
+        return logits
 
     def _compute_site_marginals(
         self,
@@ -1533,12 +2571,28 @@ class SU3TensorNetworkMonteCarlo:
         edge_j: np.ndarray,
         kernels: np.ndarray,
         local_fields: np.ndarray,
+        triads: list[list[tuple[int, int, float]]],
     ) -> float:
         pair_term = 0.0
         for edge_index, (src, dst) in enumerate(zip(edge_i.tolist(), edge_j.tolist())):
             pair_term -= np.log(np.clip(kernels[edge_index, colors[src], colors[dst]], 1e-12, None))
         field_term = -float(np.sum(local_fields[np.arange(self.sites), colors]))
-        return float(pair_term + field_term)
+        triad_term = 0.0
+        counted: set[tuple[int, int, int]] = set()
+        for site, site_triads in enumerate(triads):
+            for left, right, strength in site_triads:
+                triad = tuple(sorted((site, left, right)))
+                if triad in counted:
+                    continue
+                counted.add(triad)
+                left_color = int(colors[left])
+                right_color = int(colors[right])
+                site_color = int(colors[site])
+                if site_color == left_color == right_color:
+                    triad_term -= strength
+                elif left_color == right_color != site_color:
+                    triad_term += 0.35 * strength
+        return float(pair_term + field_term + triad_term)
 
     def _edge_correlations(
         self,
@@ -1622,6 +2676,7 @@ class SU3TensorNetworkMonteCarlo:
         link_phases: np.ndarray,
         edge_i: np.ndarray,
         edge_j: np.ndarray,
+        unique_triads: np.ndarray,
     ) -> tuple[float, float, float, float, complex]:
         color_charge = np.array([-1.0, 0.0, 1.0], dtype=np.float64)
         sample_charge = np.sum(color_charge[samples], axis=1)
@@ -1629,12 +2684,18 @@ class SU3TensorNetworkMonteCarlo:
         antimatter_weight = float(np.sum(sample_charge < 0))
         total = matter_weight + antimatter_weight + 1e-12
         asymmetry = float((matter_weight - antimatter_weight) / total)
-        if len(link_phases) == 0:
-            return 0.0, matter_weight, antimatter_weight, asymmetry, 1.0 + 0.0j
-        wilson_loop = np.mean(np.prod(link_phases, axis=0))
-        loop_angle = float(np.angle(wilson_loop))
+        wilson_loop = np.mean(np.prod(link_phases, axis=0)) if len(link_phases) > 0 else 1.0 + 0.0j
+        loop_angle = float(np.angle(wilson_loop)) if len(link_phases) > 0 else 0.0
         same_color_fraction = float(np.mean(samples[:, edge_i] == samples[:, edge_j])) if len(edge_i) > 0 else 0.0
-        theta_order = abs(loop_angle) / np.pi * same_color_fraction
+        triad_alignment = 0.0
+        if unique_triads.size > 0:
+            triad_index = unique_triads[:, :3].astype(np.int32)
+            aligned = (
+                (samples[:, triad_index[:, 0]] == samples[:, triad_index[:, 1]])
+                & (samples[:, triad_index[:, 1]] == samples[:, triad_index[:, 2]])
+            ).astype(np.float64)
+            triad_alignment = float(np.mean(aligned))
+        theta_order = abs(loop_angle) / np.pi * same_color_fraction + self.chiral_scale * triad_alignment
         return theta_order, matter_weight, antimatter_weight, asymmetry, wilson_loop
 
     def _mean_color_entropy(self, marginals: np.ndarray) -> float:
@@ -1857,6 +2918,11 @@ def run_scaling_sweep(
                 spectral_dimension=summary.spectral_dimension,
                 spectral_dimension_std=summary.spectral_dimension_std,
                 mean_return_error=summary.mean_return_error,
+                holographic_enabled=summary.holographic_enabled,
+                holographic_mean_suppression=summary.holographic_mean_suppression,
+                ricci_flow_steps=summary.ricci_flow_steps,
+                ricci_mean_curvature=summary.ricci_mean_curvature,
+                ricci_negative_edge_fraction=summary.ricci_negative_edge_fraction,
                 mean_energy=summary.mean_energy,
                 mean_magnetization=summary.mean_magnetization,
                 color_entropy=summary.color_entropy,
@@ -1873,6 +2939,7 @@ def run_scaling_sweep(
                 effective_light_cone_speed=summary.effective_light_cone_speed,
                 light_cone_fit_r2=summary.light_cone_fit_r2,
                 light_cone_leakage=summary.light_cone_leakage,
+                topological_consensus=summary.topological_consensus,
                 alternative_distance_models=summary.alternative_distance_models,
                 null_model_summaries=summary.null_model_summaries,
                 samples_collected=summary.samples_collected,
@@ -1887,6 +2954,9 @@ def run_scaling_sweep(
         backend=artifacts[0].summary.backend if artifacts else config.backend,
         gauge_group=config.gauge_group,
         graph_prior=config.graph_prior,
+        inflation_seed_sites=config.inflation_seed_sites,
+        holographic_bound_scale=config.holographic_bound_scale,
+        ricci_flow_steps=config.ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
         distance_powers=config.distance_powers,
@@ -1920,6 +2990,12 @@ def run_graph_prior_comparison(
             field_scale=config.field_scale,
             chiral_scale=config.chiral_scale,
             temperature=config.temperature,
+            anneal_start_temperature=config.anneal_start_temperature,
+            inflation_seed_sites=config.inflation_seed_sites,
+            inflation_mode=config.inflation_mode,
+            inflation_growth_factor=config.inflation_growth_factor,
+            inflation_relax_rounds=config.inflation_relax_rounds,
+            inflation_smoothing_strength=config.inflation_smoothing_strength,
             burn_in_sweeps=config.burn_in_sweeps,
             measurement_sweeps=config.measurement_sweeps,
             sample_interval=config.sample_interval,
@@ -1930,6 +3006,13 @@ def run_graph_prior_comparison(
             null_model_types=config.null_model_types,
             null_model_samples=config.null_model_samples,
             null_rewire_swaps=config.null_rewire_swaps,
+            degree_penalty_scale=config.degree_penalty_scale,
+            holographic_bound_scale=config.holographic_bound_scale,
+            holographic_penalty_strength=config.holographic_penalty_strength,
+            ricci_flow_steps=config.ricci_flow_steps,
+            ricci_negative_threshold=config.ricci_negative_threshold,
+            ricci_evaporation_rate=config.ricci_evaporation_rate,
+            ricci_positive_boost=config.ricci_positive_boost,
         )
         sweep_result, _ = run_scaling_sweep(
             sizes=sizes,
@@ -1942,6 +3025,8 @@ def run_graph_prior_comparison(
     points: list[GraphPriorComparisonPoint] = []
     for index, size in enumerate(sizes):
         size_points = [sweep_results[prior].points[index] for prior in normalized_priors]
+        metric_summaries = build_invariance_metric_summaries(size_points)
+        verdict = build_three_dimensionality_verdict(size_points, metric_summaries)
         points.append(
             GraphPriorComparisonPoint(
                 sites=size,
@@ -1950,7 +3035,11 @@ def run_graph_prior_comparison(
                 hausdorff_dimension_by_prior={point.graph_prior: get_primary_hausdorff_dimension(point) for point in size_points},
                 gravity_r2_by_prior={point.graph_prior: point.gravity_inverse_square_r2 for point in size_points},
                 light_cone_speed_by_prior={point.graph_prior: point.effective_light_cone_speed for point in size_points},
-                metric_summaries=build_invariance_metric_summaries(size_points),
+                topological_spectral_dimension_by_prior={point.graph_prior: point.topological_consensus.spectral_dimension_median for point in size_points},
+                topological_hausdorff_dimension_by_prior={point.graph_prior: point.topological_consensus.hausdorff_dimension_median for point in size_points},
+                topological_three_dimensionality_score_by_prior={point.graph_prior: point.topological_consensus.three_dimensionality_score for point in size_points},
+                metric_summaries=metric_summaries,
+                three_dimensionality_verdict=verdict,
             )
         )
 
@@ -1960,48 +3049,54 @@ def run_graph_prior_comparison(
         backend=first_result.backend,
         gauge_group=config.gauge_group,
         priors=normalized_priors,
+        inflation_seed_sites=config.inflation_seed_sites,
+        holographic_bound_scale=config.holographic_bound_scale,
+        ricci_flow_steps=config.ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
         distance_powers=config.distance_powers,
         null_model_types=config.null_model_types,
         null_model_samples=config.null_model_samples,
         points=points,
+        overall_three_dimensionality_verdict=merge_three_dimensionality_verdicts([point.three_dimensionality_verdict for point in points]),
     )
 
 
 def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> str:
+    holographic_line = "holographic bound: on" if result.holographic_bound_scale > 0.0 else "holographic bound: off"
     lines = [
         "Graph Prior Invariance Report",
         "=" * 29,
         f"backend: {result.backend}",
         f"gauge group: {result.gauge_group}",
         f"priors: {', '.join(result.priors)}",
+        f"inflation seed sites: {result.inflation_seed_sites}" if result.inflation_seed_sites is not None else "inflation seed sites: off",
         f"degree: {result.degree}",
+        holographic_line,
+        f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
         f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
         f"null models: {', '.join(result.null_model_types)} x {result.null_model_samples}" if result.null_model_types and result.null_model_samples > 0 else "null models: off",
+        f"3D verdict: {'PASS' if result.overall_three_dimensionality_verdict.passed else 'FAIL'}",
     ]
+    lines.extend(render_three_dimensionality_checks("  overall", result.overall_three_dimensionality_verdict))
     for point in result.points:
-        lines.append(f"N={point.sites}")
-        lines.append(f"  d_s: {point.spectral_dimension_by_prior}")
-        lines.append(f"  d_H: {point.hausdorff_dimension_by_prior}")
-        lines.append(f"  gravity_R2: {point.gravity_r2_by_prior}")
-        lines.append(f"  c_eff: {point.light_cone_speed_by_prior}")
-        for metric in point.metric_summaries:
-            lines.append(
-                f"  invariance[{metric.metric}] spread={metric.prior_spread:.6f} sigma={metric.internal_sigma:.6f} score={metric.invariance_score:.3f}"
-            )
+        lines.extend(render_graph_prior_point(point))
     return "\n".join(lines)
 
 
 def render_scaling_report(result: ScalingSweepResult) -> str:
+    holographic_line = "holographic bound: on" if result.holographic_bound_scale > 0.0 else "holographic bound: off"
     lines = [
         "Monte Carlo Scaling Report",
         "=" * 26,
         f"backend: {result.backend}",
         f"gauge group: {result.gauge_group}",
         f"graph prior: {result.graph_prior}",
+        f"inflation seed sites: {result.inflation_seed_sites}" if result.inflation_seed_sites is not None else "inflation seed sites: off",
         f"tensor bond dim: {result.tensor_bond_dim}",
         f"degree: {result.degree}",
+        holographic_line,
+        f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
         f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
         f"null models: {', '.join(result.null_model_types)} x {result.null_model_samples}" if result.null_model_types and result.null_model_samples > 0 else "null models: off",
         f"alpha_eff(N->inf): {result.asymptotic_fine_structure_proxy:.8f}" if result.asymptotic_fine_structure_proxy is not None else "alpha_eff(N->inf): n/a",
@@ -2016,11 +3111,18 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         )
         lines.append(
             f"      gauge={point.gauge_group} prior={point.graph_prior} theta={point.theta_order:.5f} asym={point.matter_antimatter_asymmetry:.5f} "
+            f"holo_sup={point.holographic_mean_suppression:.3f} "
+            f"ricci_mean={point.ricci_mean_curvature:.4f} ricci_neg={point.ricci_negative_edge_fraction:.3f} "
             f"entropy={point.color_entropy:.5f} tn_res={point.tensor_residual:.5f} "
             f"alpha_eff={point.fine_structure_proxy:.8f} m_e={point.electron_gap:.6f} m_p={point.proton_gap:.6f} m_p/m_e={point.proton_electron_mass_ratio_proxy:.6f} "
             f"c_eff={point.effective_light_cone_speed:.6f} cone_R2={point.light_cone_fit_r2:.5f} cone_leak={point.light_cone_leakage:.5f} "
             f"gravity p={point.gravity_power_exponent:.3f} R^2={point.gravity_inverse_square_r2:.5f} "
             f"mae={point.gravity_inverse_square_mae:.5f}"
+        )
+        lines.append(
+            f"      topo d_s~{point.topological_consensus.spectral_dimension_median:.3f}±{point.topological_consensus.spectral_dimension_std:.3f} "
+            f"d_H~{point.topological_consensus.hausdorff_dimension_median:.3f}±{point.topological_consensus.hausdorff_dimension_std:.3f} "
+            f"3d_score={point.topological_consensus.three_dimensionality_score:.3f}"
         )
         if point.alternative_distance_models:
             alt_spectral = [model.spectral_dimension for model in point.alternative_distance_models]

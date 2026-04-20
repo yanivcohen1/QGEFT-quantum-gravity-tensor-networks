@@ -1,0 +1,159 @@
+{
+  "mode": "monte-carlo",
+  "backend": "cpu",
+  "gauge_group": "su3",
+  "priors": [
+    "3d-local",
+    "small-world"
+  ],
+  "tensor_bond_dim": 2,
+  "degree": 8,
+  "distance_powers": [
+    1.0
+  ],
+  "null_model_types": [],
+  "null_model_samples": 0,
+  "overall_three_dimensionality_verdict": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "all_sizes::spectral_dimension_near_3",
+        "passed": true,
+        "details": "3d-local:0.014, small-world:0.047"
+      },
+      {
+        "name": "all_sizes::topological_spectral_dimension_near_3",
+        "passed": true,
+        "details": "3d-local:0.012, small-world:0.012"
+      },
+      {
+        "name": "all_sizes::hausdorff_dimension_near_3",
+        "passed": false,
+        "details": "3d-local:0.315, small-world:0.864"
+      },
+      {
+        "name": "all_sizes::topological_hausdorff_dimension_near_3",
+        "passed": false,
+        "details": "3d-local:0.825, small-world:0.488"
+      },
+      {
+        "name": "all_sizes::spectral_invariance",
+        "passed": true,
+        "details": "score=0.267"
+      },
+      {
+        "name": "all_sizes::hausdorff_invariance",
+        "passed": false,
+        "details": "score=1179685.537"
+      },
+      {
+        "name": "all_sizes::null_model_separation",
+        "passed": false,
+        "details": "null models unavailable"
+      }
+    ]
+  },
+  "points": [
+    {
+      "sites": 1024,
+      "priors": [
+        "3d-local",
+        "small-world"
+      ],
+      "spectral_dimension_by_prior": {
+        "3d-local": 2.9859966140063654,
+        "small-world": 3.0466287594542596
+      },
+      "hausdorff_dimension_by_prior": {
+        "3d-local": 2.6847223471965043,
+        "small-world": 3.864407884174289
+      },
+      "gravity_r2_by_prior": {
+        "3d-local": -4.741282435630128,
+        "small-world": -0.777724338912126
+      },
+      "light_cone_speed_by_prior": {
+        "3d-local": 0.014097515062281973,
+        "small-world": 0.004238386239324308
+      },
+      "topological_spectral_dimension_by_prior": {
+        "3d-local": 2.988462637294603,
+        "small-world": 3.012326902146717
+      },
+      "topological_hausdorff_dimension_by_prior": {
+        "3d-local": 2.1749250147434447,
+        "small-world": 2.5119504532354044
+      },
+      "topological_three_dimensionality_score_by_prior": {
+        "3d-local": 0.48803504041639434,
+        "small-world": 0.4702505430695383
+      },
+      "metric_summaries": [
+        {
+          "metric": "spectral_dimension",
+          "prior_spread": 0.06063214544789419,
+          "internal_sigma": 0.22706903012629998,
+          "invariance_score": 0.2670207619866499
+        },
+        {
+          "metric": "hausdorff_dimension",
+          "prior_spread": 1.1796855369777846,
+          "internal_sigma": 1e-06,
+          "invariance_score": 1179685.5369777847
+        },
+        {
+          "metric": "gravity_r2",
+          "prior_spread": 3.9635580967180024,
+          "internal_sigma": 1e-06,
+          "invariance_score": 3963558.0967180026
+        },
+        {
+          "metric": "light_cone_speed",
+          "prior_spread": 0.009859128822957666,
+          "internal_sigma": 1e-06,
+          "invariance_score": 9859.128822957666
+        }
+      ],
+      "three_dimensionality_verdict": {
+        "passed": false,
+        "checks": [
+          {
+            "name": "spectral_dimension_near_3",
+            "passed": true,
+            "details": "3d-local:0.014, small-world:0.047"
+          },
+          {
+            "name": "topological_spectral_dimension_near_3",
+            "passed": true,
+            "details": "3d-local:0.012, small-world:0.012"
+          },
+          {
+            "name": "hausdorff_dimension_near_3",
+            "passed": false,
+            "details": "3d-local:0.315, small-world:0.864"
+          },
+          {
+            "name": "topological_hausdorff_dimension_near_3",
+            "passed": false,
+            "details": "3d-local:0.825, small-world:0.488"
+          },
+          {
+            "name": "spectral_invariance",
+            "passed": true,
+            "details": "score=0.267"
+          },
+          {
+            "name": "hausdorff_invariance",
+            "passed": false,
+            "details": "score=1179685.537"
+          },
+          {
+            "name": "null_model_separation",
+            "passed": false,
+            "details": "null models unavailable"
+          }
+        ]
+      }
+    }
+  ]
+}

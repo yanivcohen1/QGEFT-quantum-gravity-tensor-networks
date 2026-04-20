@@ -35,9 +35,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tensor-bond-dim", type=int, default=2, help="Bond dimension for the SU(3) tensor-network-assisted Monte Carlo surrogate.")
     parser.add_argument("--seed", type=int, default=7, help="Random seed.")
     parser.add_argument("--temperature", type=float, default=0.35, help="Effective temperature.")
+    parser.add_argument("--anneal-start-temperature", type=float, default=None, help="Optional high starting temperature for burn-in simulated annealing in Monte Carlo mode.")
+    parser.add_argument("--inflation-seed-sites", type=int, default=None, help="Optional synthetic-inflation seed size. When set below the target N, the graph is grown locally from this small seed instead of being initialized at full size.")
+    parser.add_argument("--inflation-mode", choices=["legacy", "staged"], default="legacy", help="Inflation builder to use when --inflation-seed-sites is enabled. 'staged' grows in bursts with local smoothing between stages.")
+    parser.add_argument("--inflation-growth-factor", type=float, default=2.0, help="Stage-to-stage growth factor for synthetic inflation. Values above 1 cause rapid exponential expansion from the seed universe.")
+    parser.add_argument("--inflation-relax-rounds", type=int, default=2, help="Local smoothing rounds performed after each inflation stage to iron out topological defects before the next burst of growth.")
+    parser.add_argument("--inflation-smoothing-strength", type=float, default=0.20, help="How strongly each inflation stage pulls nodes toward their local neighborhood during defect-smoothing.")
     parser.add_argument("--coupling-scale", type=float, default=0.55, help="Scale for pair couplings.")
     parser.add_argument("--field-scale", type=float, default=0.35, help="Scale for local fields.")
-    parser.add_argument("--chiral-scale", type=float, default=0.18, help="Scale for chiral terms.")
+    parser.add_argument("--chiral-scale", type=float, default=None, help="Scale for chiral terms / triad couplings.")
+    parser.add_argument("--triad-scale", type=float, default=None, help="Alias for --chiral-scale in Monte Carlo mode; controls triad coupling strength in the scalar surrogate.")
+    parser.add_argument("--degree-penalty-scale", type=float, default=0.0, help="Static suppression strength for couplings attached to nodes whose realized degree exceeds the target degree.")
+    parser.add_argument("--holographic-bound-scale", type=float, default=0.0, help="ER=EPR holographic capacity scale. Positive values suppress long-range entanglement links that exceed their local area budget.")
+    parser.add_argument("--holographic-penalty-strength", type=float, default=1.0, help="Strength of the suppression applied when an edge exceeds the holographic entanglement bound.")
+    parser.add_argument("--ricci-flow-steps", type=int, default=0, help="Optional number of combinatorial Ricci-flow smoothing steps before Monte Carlo sampling.")
+    parser.add_argument("--ricci-negative-threshold", type=float, default=-0.55, help="Edges with Ricci curvature below this threshold are treated as wormhole candidates.")
+    parser.add_argument("--ricci-evaporation-rate", type=float, default=0.85, help="Base probability for evaporating strongly negative-curvature edges during Ricci flow.")
+    parser.add_argument("--ricci-positive-boost", type=float, default=0.35, help="Multiplicative strengthening applied to positive-curvature edges during Ricci flow.")
     parser.add_argument("--yukawa-scale", type=float, default=0.0, help="Toy Higgs/Yukawa scale for exact mode.")
     parser.add_argument("--domain-wall-height", type=float, default=0.0, help="Toy domain-wall amplitude for exact mode.")
     parser.add_argument("--domain-wall-width", type=float, default=0.18, help="Toy domain-wall width for exact mode.")
@@ -103,6 +117,11 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
     distance_powers = parse_float_list(args.distance_powers, default=(1.0,))
     null_models = parse_string_list(args.null_models)
     graph_prior_scan = parse_string_list(args.graph_prior_scan)
+    chiral_scale = args.chiral_scale
+    if args.triad_scale is not None:
+        chiral_scale = args.triad_scale
+    if chiral_scale is None:
+        chiral_scale = 0.18
     config = MonteCarloConfig(
         degree=args.degree,
         gauge_group=args.gauge_group,
@@ -111,8 +130,14 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         tensor_bond_dim=args.tensor_bond_dim,
         coupling_scale=args.coupling_scale,
         field_scale=args.field_scale,
-        chiral_scale=args.chiral_scale,
+        chiral_scale=chiral_scale,
         temperature=1.35 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature,
+        anneal_start_temperature=args.anneal_start_temperature,
+        inflation_seed_sites=args.inflation_seed_sites,
+        inflation_mode=args.inflation_mode,
+        inflation_growth_factor=args.inflation_growth_factor,
+        inflation_relax_rounds=args.inflation_relax_rounds,
+        inflation_smoothing_strength=args.inflation_smoothing_strength,
         burn_in_sweeps=args.burn_in_sweeps,
         measurement_sweeps=args.measurement_sweeps,
         sample_interval=args.sample_interval,
@@ -123,6 +148,13 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         null_model_types=null_models,
         null_model_samples=args.null_model_samples,
         null_rewire_swaps=args.null_rewire_swaps,
+        degree_penalty_scale=args.degree_penalty_scale,
+        holographic_bound_scale=args.holographic_bound_scale,
+        holographic_penalty_strength=args.holographic_penalty_strength,
+        ricci_flow_steps=args.ricci_flow_steps,
+        ricci_negative_threshold=args.ricci_negative_threshold,
+        ricci_evaporation_rate=args.ricci_evaporation_rate,
+        ricci_positive_boost=args.ricci_positive_boost,
     )
     if graph_prior_scan:
         comparison = run_graph_prior_comparison(
@@ -152,6 +184,8 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.chiral_scale is None:
+        args.chiral_scale = 0.18
     color_filling = parse_color_filling(args.color_filling)
     exact_mass_config = ExactMassConfig(
         yukawa_scale=args.yukawa_scale,

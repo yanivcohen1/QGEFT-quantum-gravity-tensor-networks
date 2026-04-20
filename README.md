@@ -3,6 +3,8 @@
 ## Abstract
 This paper presents a toy model where geometry is inferred from observables derived from an operator algebra $\mathcal{A}$ acting on a Hilbert space $\mathcal{H}$. We test whether low-dimensional geometric diagnostics can be recovered from the correlation structure of low-energy states under a specific correlation-to-distance prescription. The main interpretive limitation is that, in the scalable surrogate, sparse 3D locality is already built into the graph construction, while the subsequent logarithmic map from correlations to distance further pushes the data toward a metric description. Accordingly, the central result is modest: within this combined construction, the resulting weighted correlation graphs display 3D-like diffusion and volume-growth diagnostics over an intermediate range of scales. This should be read as a statement about correlation geometry in a toy model, not as a derivation of physical spacetime.
 
+The most recent large-scale `SU(3)` campaign in this repository sharpened that picture. Across graph-prior comparisons, alternative distance prescriptions, null-model hooks, topology-only diagnostics, synthetic inflation variants, Ricci-flow-like pruning, holographic suppression, and extended parameter sweeps up to `N=1024`, the most robust large-`N` outcome was not a full three-dimensional manifold verdict but a repeatable Hausdorff-sector convergence near $d_H \approx 2.6$. In the best static regimes, that Hausdorff-like scaling became comparatively stable across the `3d-local` and `small-world` priors, indicating a nontrivial degree of background robustness in the volume-growth sector. At the same time, the spectral dimension remained substantially below $3$, so the strongest defensible conclusion is that the model approaches a geometrically thick, sponge-like correlation manifold rather than a clean emergent 3D spacetime.
+
 ## 1. Introduction
 A fundamental challenge in quantum gravity is the derivation of a continuous spacetime background from discrete, pre-geometric quantum degrees of freedom. Approaches such as Causal Dynamical Triangulations (CDT) [1] suggest that macroscopic geometry is an emergent phenomenon, a notion supported by the spontaneous dimensional reduction observed in various short-distance quantum gravity models [2, 3]. Recent work in quantum information theory further proposes that spatial connectivity can be fundamentally tied to entanglement and tensor network structures [4, 5]. This paper presents a toy model where geometry is inferred from observables derived from an operator algebra $\mathcal{A}$ acting on a Hilbert space $\mathcal{H}$. The key question is not whether the code proves emergent spacetime, but whether fermionic correlation networks equipped with a locality prior and a chosen metric prescription can reproduce internally consistent low-dimensional graph diagnostics. This distinction matters, because the current framework contains three nontrivial sources of geometric bias: the sparse-locality graph construction, the logarithmic correlation-to-distance map, and Euclidean embedding/diffusion diagnostics built on top of that map. The scientific value of the project is therefore in characterizing that full pipeline and identifying where apparently geometric behavior is robust, where it is tautological, and where it may survive stronger stress tests.
 
@@ -44,6 +46,30 @@ We analyze the macroscopic "response" between nodes across the emergent distance
 ### 4.3 Narrowest Defensible Claim
 The strongest claim currently supported by the code is narrower than "emergent spacetime": a fermionic correlation network equipped with sparse locality constraints and a logarithmic correlation-to-distance map can generate weighted graphs whose diffusion, volume-growth, and embedding diagnostics are mutually consistent with 3D-like behavior over an intermediate range of scales. This is already a nontrivial statement about graph organization and correlation structure. It is not yet a statement about physical spacetime, Lorentz invariance, or a controlled continuum limit.
 
+### 4.4 Updated Large-N Outcome
+After the initial diffusion and volume-growth study, the project was extended in several directions designed to probe whether the apparent geometry was universal or merely an artifact of the original construction. The scalable engine now supports explicit graph-prior comparisons (`3d-local`, `small-world`, `random-regular`), alternative distance prescriptions through $E_{ij}^\alpha$, null-model baselines based on shuffling and degree-preserving rewiring, topology-only graphizations, synthetic inflation from a small local seed, staged growth controls, `SU(3)` triad terms, Ricci-flow-like edge evaporation, and holographic/ER=EPR-inspired suppression of overloaded long links.
+
+Those additions materially improved the stress-testing value of the repository. They did not, however, overturn the basic conclusion. Repeated `SU(3)` campaigns at `N=1024` found that the most stable static regimes are high-coordination, large-seed configurations in which the Hausdorff-like dimension converges toward
+
+$$
+d_H \approx 2.6
+$$
+
+with substantially reduced spread between `3d-local` and `small-world` priors. A representative late run,
+
+```powershell
+python main.py --mode monte-carlo --size-scan 1024 --gauge-group su3 --graph-prior-scan 3d-local,small-world --degree 18 --burn-in-sweeps 500 --measurement-sweeps 250 --sample-interval 25 --walker-count 128 --max-walk-steps 80 --backend cupy --progress-mode log --inflation-seed-sites 128 --anneal-start-temperature 15.0 --degree-penalty-scale 0.3 --triad-scale 1.0 --json-out ultimate_quantum_manifold.json
+```
+
+produced
+
+- $d_H \approx 2.59$ for `3d-local`
+- $d_H \approx 2.62$ for `small-world`
+- $d_s \approx 1.94$ for `3d-local`
+- $d_s \approx 1.47$ for `small-world`
+
+This is one of the strongest signs of geometric convergence in the repository: the volume-growth sector becomes fairly insensitive to the prior and settles near a common value. But it is not a full 3D success, because the diffusion sector does not track that convergence. The model therefore appears to generate a solid, background-robust correlation manifold in the Hausdorff sense while still failing the stronger requirement of simultaneous three-dimensionality in both $d_H$ and $d_s$.
+
 ## 5. Robustness Analysis
 The repository includes exploratory parameter scans and complementary geometric diagnostics extracted from the correlation network, most notably diffusion-based spectral estimates and volume-growth exponents from correlation balls. At present these checks should be interpreted as qualitative robustness probes rather than a completed universality analysis.
 
@@ -55,6 +81,16 @@ In the current codebase, moderate variations of couplings, graph degree, gauge/b
 
 The volume-scaling plot provides an independent consistency check: if the emergent graph is approximately organized by a low-dimensional metric, then the mean enclosed node count $V(r)$ should grow roughly as a power law in the emergent radius, $V(r) \sim r^{d_H}$, over an intermediate scaling window. Agreement between the diffusion-based observable $D_s$ and the volume-growth behavior strengthens the interpretation that the correlation network is structured rather than arbitrary, but it still falls short of proving a continuum geometric manifold.
 
+The updated large-`N` campaign refines that statement. What proved most robust was not the simultaneous approach to $d_H \approx 3$ and $d_s \approx 3$, but rather the partial convergence of the Hausdorff sector alone. In the strongest `SU(3)` runs at `N=1024`, the system repeatedly settled into a regime with
+
+$$
+d_H \approx 2.6
+$$
+
+and noticeably smaller prior-to-prior variation than in earlier runs. That is meaningful evidence that some coarse geometric organization survives changes in the sparse backbone. It is weaker than a full universality claim, because the spectral dimension remains too low and the automatic `3D verdict` still fails. The safest interpretation is therefore that the model reaches a computationally stable thick manifold, not a completed three-dimensional spacetime phase.
+
+From a practical computing perspective, these `SU(3)` tests also suggest that `N=1024` is close to the useful limit of the current deep-surrogate workflow when one simultaneously pushes coordination number, burn-in length, measurement depth, and diffusion horizon. Simpler scalar runs can reach larger `N`, but for the heavier `SU(3)` parameter searches the remaining discrepancy looks more structural than merely statistical. Further smoothing of the residual "holes in the sponge" will likely require either substantially more compute or a different growth architecture rather than another small parameter retuning.
+
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
 
@@ -64,6 +100,8 @@ While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelli
 4. **Algorithmic Embedding Bias:** MDS inherently attempts to fit data into a Euclidean target space and can artificially project trees or small-world networks into low-dimensional manifolds. To verify that the 3D topology is not an algorithmic illusion, future analysis must track MDS stress as a function of system size $N$ and compare the emergent topology using alternative non-Euclidean or non-linear embeddings.
 5. **Commutativity of Limits:** Our methodology tacitly assumes that the thermodynamic limit ($N \to \infty$), the tensor network truncation limit (bond dimension $D \to \infty$), and the choice of the metric mapping function $f(E)$ commute. This is a non-trivial assumption. The observed geometry might exist only within a restricted cross-section of these limits, necessitating careful finite-size and finite-entanglement scaling analysis.
 6. **Graph Renormalization Group (RG) Flow:** A genuine physical spacetime must exhibit well-defined behavior under coarse-graining. Future work must implement graph-based RG flows (e.g., decimating highly correlated node clusters) to study the stability of the spectral dimension $D_s$ and generalized fractal dimensions $D_q$ under scale transformations.
+
+The present campaign points to one especially important next step. The repeated failure mode is no longer a simple lack of tuning; it is the inability of a static prebuilt graph plus local `SU(3)` relaxation to raise $d_s$ while preserving the improved Hausdorff behavior. The natural structural modification is therefore an interleaved growth loop of the form `grow -> short relax -> optional mild Ricci cleanup -> grow`, so that geometry is shaped during inflation rather than only diagnosed after the final graph has already been fixed.
 
 ## 7. References
 1. Loll, R. (2019). "Quantum Gravity from Causal Dynamical Triangulations: A Review." *Classical and Quantum Gravity*.
@@ -245,6 +283,10 @@ python main.py --mode monte-carlo --size-scan 128,256 --gauge-group none --graph
 ```
 
 This emits a `Graph Prior Invariance Report` with per-size spreads across priors and an `invariance score = prior spread / internal sigma` for `d_s`, `d_H`, gravity-fit `R^2`, and `c_eff`. Scores much larger than `1` indicate that the observable is controlled more by the graph prior than by universal dynamics.
+
+The comparison report now also emits an automatic `3D verdict`. It marks `PASS` only when the existing checks jointly support a three-dimensional interpretation: weighted and topology-only `d_s` are near `3`, weighted and topology-only `d_H` are near `3`, the spectral and Hausdorff observables are prior-invariant, and the result remains separated from the configured null models.
+
+The same report now also includes a topology-only consensus check that avoids the `E_{ij}^\alpha` remapping entirely. It builds unweighted support and rank-backbone graphs from the learned connectivity, then measures graph-based `d_s` and `d_H` directly from random walks and discrete shortest-path ball growth. The reported `topo_3d_score` is highest when these topology-only dimensions are both close to `3` and stable across the graphizations.
 
 Run the block-projected exact solver in a fixed filling sector:
 
