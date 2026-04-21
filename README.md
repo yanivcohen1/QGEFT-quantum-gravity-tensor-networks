@@ -92,15 +92,15 @@ and noticeably smaller prior-to-prior variation than in earlier runs. That is me
 There is also a second, more narrowly defined finite-size trend worth recording from the simpler graph-prior baseline runs with null-model controls. In the `3d-local` branch of the topology-only analysis, the discrete Hausdorff-like exponent extracted directly from unweighted graph balls,
 
 $$
-\mathrm{topo}\_d_H,
+\mathrm{topo}_{d_H},
 $$
 
 shows a steady upward drift with system size:
 
-- `N=512`: $\mathrm{topo}\_d_H \approx 2.04$
-- `N=1024`: $\mathrm{topo}\_d_H \approx 2.16$
-- `N=2048`: $\mathrm{topo}\_d_H \approx 2.24$
-- `N=4096`: $\mathrm{topo}\_d_H \approx 2.48$
+- `N=512`: $\mathrm{topo}_{d_H} \approx 2.04$
+- `N=1024`: $\mathrm{topo}_{d_H} \approx 2.16$
+- `N=2048`: $\mathrm{topo}_{d_H} \approx 2.24$
+- `N=4096`: $\mathrm{topo}_{d_H} \approx 2.48$
 
 This is an encouraging sign that the topology-only volume-growth observable becomes smoother and more manifold-like as the graph is enlarged, even before one appeals to weighted distances. At the same time, this trend remains branch-specific: it refers to the `3d-local` prior in the simpler baseline workflow, not to a prior-independent `SU(3)` universality class. It therefore supports the claim that a topological manifold signal is strengthening with size, but it still falls short of proving that the infinite-size limit is a perfect three-dimensional spacetime.
 
