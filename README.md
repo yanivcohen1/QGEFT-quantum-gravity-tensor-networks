@@ -133,7 +133,7 @@ While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelli
 5. **Commutativity of Limits:** Our methodology tacitly assumes that the thermodynamic limit ($N \to \infty$), the tensor network truncation limit (bond dimension $D \to \infty$), and the choice of the metric mapping function $f(E)$ commute. This is a non-trivial assumption. The observed geometry might exist only within a restricted cross-section of these limits, necessitating careful finite-size and finite-entanglement scaling analysis.
 6. **Graph Renormalization Group (RG) Flow:** A genuine physical spacetime must exhibit well-defined behavior under coarse-graining. Future work must implement graph-based RG flows (e.g., decimating highly correlated node clusters) to study the stability of the spectral dimension $D_s$ and generalized fractal dimensions $D_q$ under scale transformations.
 
-The newest Monte Carlo branch sharpens this agenda. The code now supports entanglement-biased edge relocations together with a cosmological volume regularizer, so the graph can dynamically trade off attractive clustering against a harmonic penalty on local degree inflation. This is a real improvement over the earlier degree-preserving swap rule, because a degree-preserving move cannot feel a cosmological constant at all. A representative `N=64` `SU(3)` validation run with `--edge-swap-attempts-per-sweep 64 --edge-swap-entanglement-bias 2.0 --cosmological-constant 0.1` produced thousands of accepted relocations while suppressing unconditional hub growth. But the Einstein-Hilbert-style local fit remained weak: the action-density versus Ricci regression gave a Pearson correlation of about `-0.28` and `R^2 \approx 0.077`. The correct interpretation is therefore narrow: the model now has a bona fide dynamical volume-stabilization mechanism, but it has not yet numerically recovered Einstein-Hilbert dynamics. The immediate scaling target is to rerun this stabilized relocation branch at `N=512` and `N=1024`, while tracking degree-distribution width, maximum degree, swap acceptance, and the local action-curvature fit.
+The newest Monte Carlo branch sharpens this agenda substantially. The code now supports entanglement-biased edge relocations together with a cosmological volume regularizer, so the graph can dynamically trade off attractive clustering against a harmonic penalty on local degree inflation. This is a real improvement over the earlier degree-preserving swap rule, because a degree-preserving move cannot feel a cosmological constant at all. A representative `N=64` `SU(3)` validation run with `--edge-swap-attempts-per-sweep 64 --edge-swap-entanglement-bias 2.0 --cosmological-constant 0.1` produced thousands of accepted relocations while suppressing unconditional hub growth. However, the current evidence remains mixed rather than triumphant: the Einstein-Hilbert-style local fit at `N=64` remained weak, with a Pearson correlation of about `-0.28` and `R^2 \approx 0.077`, while the larger `N=512` relocation branch weakened that fit rather than strengthening it. In particular, the `N=512` runs with `\Lambda = 0.1` and `\Lambda = 0.4` yielded `R^2 \approx 0.0067` and `R^2 \approx 0.00007`, respectively, together with correlations close to zero. The correct interpretation is therefore narrower but stronger: the model now has a bona fide dynamical volume-stabilization mechanism, but it has not yet numerically recovered Einstein-Hilbert dynamics.
 
 The present campaign points to one especially important next step. The repeated failure mode is no longer a simple lack of tuning; it is the inability of a static prebuilt graph plus local `SU(3)` relaxation to raise $d_s$ while preserving the improved Hausdorff behavior. The natural structural modification is therefore an interleaved growth loop of the form `grow -> short relax -> optional mild Ricci cleanup -> grow`, so that geometry is shaped during inflation rather than only diagnosed after the final graph has already been fixed.
 
@@ -545,7 +545,7 @@ In Monte Carlo mode, the program instead reports:
 - error bars from the local slope dispersion of the return-probability fit
 - scaling diagnostics across multiple system sizes
 - for `SU(3)`, color-entropy and tensor-truncation diagnostics from the tensor-network surrogate
-- edge-relocation acceptance counts when the dynamical swap branch is enabled
+- edge-relocation acceptance counts when the dynamical relocation branch is enabled
 - Einstein-Hilbert-style local action-density versus Ricci fit diagnostics
 - emergent coupling and mass-sector proxies `alpha_eff` and `m_p/m_e`, plus an `N -> infinity` extrapolation during size sweeps
 - an effective light-cone diagnostic `c_eff`, with linear-front fit quality and out-of-cone leakage
@@ -557,6 +557,14 @@ python main.py --mode monte-carlo --sites 64 --gauge-group su3 --tensor-bond-dim
 ```
 
 This branch should be read as a validation of dynamical volume regularization, not as a closed proof of emergent Einstein-Hilbert gravity. At `N=64`, the local action-curvature fit is still weak and noisy, even though the relocation dynamics itself is active and the cosmological penalty materially changes swap acceptance.
+
+A representative larger-system dynamical relocation stress test is:
+
+```powershell
+python main.py --mode monte-carlo --sites 512 --gauge-group su3 --tensor-bond-dim 2 --degree 16 --inflation-seed-sites 128 --inflation-mode boundary-strain --bulk-root-probability 0.2 --bulk-root-budget 2 --bulk-root-degree-bias 1.5 --triad-scale 1.5 --triad-burn-in-scale 0.1 --triad-ramp-fraction 0.8 --burn-in-sweeps 300 --measurement-sweeps 150 --sample-interval 10 --edge-swap-attempts-per-sweep 512 --edge-swap-entanglement-bias 2.0 --cosmological-constant 0.1 --walker-count 128 --max-walk-steps 24 --measurement-ricci-flow-steps 1 --measurement-ricci-strength 0.1 --backend cupy --progress-mode log
+```
+
+These larger relocation runs show a real topological response and many accepted updates, but they do not rescue a clean local Einstein-Hilbert-style law. The safest reading is that this branch demonstrates backreaction and volume stabilization together with a concrete crumpling failure mode at larger scale.
 
 If `--plot-dir` is provided, the program also writes:
 
