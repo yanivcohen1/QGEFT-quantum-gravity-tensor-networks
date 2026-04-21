@@ -471,6 +471,28 @@ Scan several nearby seeds and rank the most geometric regime:
 python main.py --sites 8 --seed 7 --scan-seeds 12 --json-out scan.json
 ```
 
+## Docker Usage
+
+Build a self-contained image with the full Python runtime and the required scientific stack:
+
+```powershell
+docker build -t emergent-geometry .
+```
+
+Run the default CLI help:
+
+```powershell
+docker run --rm emergent-geometry
+```
+
+Run a concrete simulation and write plots back to the host machine:
+
+```powershell
+docker run --rm -v ${PWD}/plots:/app/plots emergent-geometry --mode monte-carlo --sites 512 --gauge-group su3 --progress-mode log --plot-dir plots
+```
+
+The container uses a headless matplotlib backend (`Agg`) so it works consistently across operating systems and CI environments. Interactive GUI windows are not opened from inside the container, but plot images and live-visualization frames can still be written to `plots/`.
+
 ## Reported Outputs
 
 In exact mode, the program reports:
