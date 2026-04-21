@@ -118,6 +118,19 @@ While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelli
 
 The present campaign points to one especially important next step. The repeated failure mode is no longer a simple lack of tuning; it is the inability of a static prebuilt graph plus local `SU(3)` relaxation to raise $d_s$ while preserving the improved Hausdorff behavior. The natural structural modification is therefore an interleaved growth loop of the form `grow -> short relax -> optional mild Ricci cleanup -> grow`, so that geometry is shaped during inflation rather than only diagnosed after the final graph has already been fixed.
 
+### 6.1 Benchmarking Status
+
+The repository now contains multiple large-$N$ surrogate regimes, but it does **not** yet contain a completed benchmarking study against conventional Monte Carlo methods for entanglement-related observables. That comparison is scientifically interesting, especially because the current scalable `SU(3)` engine combines sparse graph locality, belief-propagation-assisted updates, rank-truncated transfer kernels, and graph-based postprocessing diagnostics in a single workflow.
+
+At present, the codebase should therefore be read as documenting a geometry-oriented tensor-network-assisted surrogate, not as proving a performance or accuracy advantage over standard Monte Carlo baselines. A meaningful benchmark study would need to compare at least:
+
+1. The same observables, for example connected correlators, return-probability spectra, mutual-information proxies, or volume-growth exponents.
+2. The same problem family, including matched graph size, couplings, sampling budget, and approximation rules.
+3. The same cost metrics, such as wall-clock time, peak memory, variance at fixed budget, or scaling with $N$ and bond dimension.
+4. A clearly specified baseline, such as plain Metropolis sampling, worm-style updates, or other conventional Monte Carlo estimators for the same correlator-derived quantities.
+
+This comparison is a natural next step for future work. For now, the README should be interpreted as describing what the current tensor-network-assisted surrogate measures and how its geometric diagnostics behave, not as a completed head-to-head benchmark study.
+
 ## 7. References
 1. Loll, R. (2019). "Quantum Gravity from Causal Dynamical Triangulations: A Review." *Classical and Quantum Gravity*.
 2. Ambjørn, J., Jurkiewicz, J., & Loll, R. (2005). "Spectral Dimension of the Universe." *Physical Review Letters*, 95(17), 171301.
@@ -186,6 +199,54 @@ measures a chiral phase observable that biases positive versus negative charge s
 - `emergent_simulation.py`: sparse exact fermion solver and diagnostics
 - `scalable_simulation.py`: sparse Monte Carlo surrogate for hundreds to thousands of sites
 - `main.py`: CLI entrypoint
+
+## Quick Start
+
+The sequence below is the shortest practical route for reproducing the main numerical regimes discussed in this repository.
+
+### 1. Install dependencies
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+For CUDA-backed Monte Carlo runs, also install a matching CuPy build:
+
+```powershell
+python -m pip install cupy-cuda12x
+```
+
+### 2. Reproduce the simplest large-$N$ diffusion baseline
+
+```powershell
+python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy --progress-mode log
+```
+
+This run reproduces the basic finite-size diffusion crossover discussed in the Results section.
+
+### 3. Reproduce the graph-prior and null-model stress test
+
+```powershell
+python main.py --mode monte-carlo --size-scan 512,1024,2048,4096 --gauge-group none --graph-prior-scan 3d-local,small-world --degree 8 --walker-count 256 --max-walk-steps 28 --backend cupy --progress-mode log --distance-powers 0.5,1.0,2.0 --null-models shuffle,rewired --null-model-samples 16
+```
+
+This run reproduces the topology-only Hausdorff trend and the explicit graph-prior robustness checks.
+
+### 4. Reproduce the strongest late `SU(3)` volumetric branch
+
+```powershell
+python main.py --mode monte-carlo --size-scan 1024 --gauge-group su3 --graph-prior-scan 3d-local,small-world --degree 16 --burn-in-sweeps 600 --measurement-sweeps 300 --sample-interval 20 --walker-count 128 --max-walk-steps 80 --backend cupy --progress-mode log --inflation-seed-sites 128 --anneal-start-temperature 10.0 --degree-penalty-scale 0.3 --triad-scale 1.0 --ricci-flow-steps 1 --ricci-negative-threshold -0.70
+```
+
+This is the most direct route to the robust weighted large-$N$ branch with $d_H \approx 2.6$.
+
+### 5. Reproduce a small-system exact `SU(3)` benchmark
+
+```powershell
+python main.py --mode exact --sites 12 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 6
+```
+
+This provides a controlled small-system reference point for interpreting the surrogate calculations.
 
 ## Representative Runs
 
