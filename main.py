@@ -73,6 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--null-models", type=str, default="", help="Optional comma-separated null models to compare against: shuffle, rewired.")
     parser.add_argument("--null-model-samples", type=int, default=0, help="Number of randomized realizations per null model in Monte Carlo mode.")
     parser.add_argument("--null-rewire-swaps", type=int, default=4, help="Approximate number of degree-preserving swap attempts per edge for the rewired null model.")
+    parser.add_argument("--live-plot", action="store_true", help="Open a live tensor-network visualization during Monte Carlo sampling. When --plot-dir is also set, frame snapshots are written there as well.")
+    parser.add_argument("--live-plot-interval", type=int, default=12, help="How many Monte Carlo sweeps to skip between live tensor-network updates.")
+    parser.add_argument("--live-plot-max-edges", type=int, default=320, help="Maximum number of strongest edges rendered in each live tensor-network frame.")
     parser.add_argument("--no-progress", action="store_true", help="Disable the live terminal progress bar for long Monte Carlo runs.")
     parser.add_argument("--progress-mode", choices=["bar", "log", "off"], default="bar", help="Progress display mode for Monte Carlo runs. 'log' is often more stable for CUDA/CuPy runs.")
     return parser
@@ -155,6 +158,10 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         ricci_negative_threshold=args.ricci_negative_threshold,
         ricci_evaporation_rate=args.ricci_evaporation_rate,
         ricci_positive_boost=args.ricci_positive_boost,
+        live_plot_enabled=args.live_plot,
+        live_plot_interval=args.live_plot_interval,
+        live_plot_max_edges=args.live_plot_max_edges,
+        live_plot_output_dir=(args.plot_dir / "live_tensor_network") if args.live_plot and args.plot_dir is not None else None,
     )
     if graph_prior_scan:
         comparison = run_graph_prior_comparison(

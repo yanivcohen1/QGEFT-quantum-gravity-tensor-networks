@@ -445,6 +445,14 @@ Use the GPU via CuPy when available:
 python main.py --mode monte-carlo --sites 2048 --backend cupy
 ```
 
+Open a live tensor-network visualization during Monte Carlo sampling:
+
+```powershell
+python main.py --mode monte-carlo --sites 512 --gauge-group su3 --degree 12 --backend cupy --progress-mode log --live-plot --live-plot-interval 10 --plot-dir plots
+```
+
+This live view highlights the boundary shell in amber and the deeper bulk core in white while the node colors and strongest edges update during the run. When `--plot-dir` is supplied, frame snapshots are also written under `plots/live_tensor_network/`, which makes the pedagogical `boundary -> bulk` narrative easier to inspect after the run.
+
 For CUDA progress without the interactive bar, use log mode:
 
 ```powershell

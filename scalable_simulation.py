@@ -103,6 +103,198 @@ class LogProgressReporter:
         print(f"{title}: stopped after {elapsed:6.1f}s", file=sys.stderr, flush=True)
 
 
+class LiveTensorNetworkVisualizer:
+    def __init__(
+        self,
+        enabled: bool,
+        output_dir: Path | None = None,
+        prefix: str = "live_tensor_network",
+        update_interval: int = 12,
+        max_edges: int = 320,
+    ) -> None:
+        self.enabled = enabled
+        self.output_dir = output_dir
+        self.prefix = prefix
+        self.update_interval = max(1, int(update_interval))
+        self.max_edges = max(24, int(max_edges))
+        self._plt = None
+        self._figure = None
+        self._axis = None
+        self._frame_index = 0
+        if self.output_dir is not None:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def should_update(self, sweep: int, total_sweeps: int) -> bool:
+        if not self.enabled:
+            return False
+        if sweep <= 0 or sweep + 1 >= total_sweeps:
+            return True
+        return (sweep + 1) % self.update_interval == 0
+
+    def update(
+        self,
+        positions: np.ndarray,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+        node_values: np.ndarray,
+        edge_strengths: np.ndarray,
+        sweep: int,
+        total_sweeps: int,
+        title: str,
+    ) -> None:
+        if not self.enabled:
+            return
+        plt = self._ensure_plotting()
+        coordinates = self._normalize_positions(positions)
+        if coordinates.shape[1] < 3:
+            padding = np.zeros((coordinates.shape[0], 3 - coordinates.shape[1]), dtype=float)
+            coordinates = np.hstack([coordinates, padding])
+
+        node_values = np.asarray(node_values, dtype=float)
+        edge_strengths = np.asarray(edge_strengths, dtype=float)
+        color_values = self._normalize_series(node_values)
+        bulk_depth = self._compute_bulk_depth(coordinates)
+        visible_edges = self._select_visible_edges(edge_strengths)
+
+        figure, axis = self._ensure_figure(plt)
+        axis.clear()
+        for edge_index in visible_edges:
+            src = int(edge_i[edge_index])
+            dst = int(edge_j[edge_index])
+            strength = float(edge_strengths[edge_index])
+            normalized_strength = strength / (float(np.max(edge_strengths)) + 1e-12)
+            axis.plot(
+                [coordinates[src, 0], coordinates[dst, 0]],
+                [coordinates[src, 1], coordinates[dst, 1]],
+                [coordinates[src, 2], coordinates[dst, 2]],
+                color="#94d2bd",
+                alpha=0.10 + 0.55 * normalized_strength,
+                linewidth=0.4 + 2.2 * normalized_strength,
+            )
+
+        node_sizes = 40.0 + 135.0 * bulk_depth
+        axis.scatter(
+            coordinates[:, 0],
+            coordinates[:, 1],
+            coordinates[:, 2],
+            c=color_values,
+            cmap="viridis",
+            s=node_sizes,
+            edgecolors="#001219",
+            linewidths=0.5,
+            alpha=0.92,
+        )
+
+        boundary_mask = bulk_depth <= float(np.quantile(bulk_depth, 0.25))
+        bulk_mask = bulk_depth >= float(np.quantile(bulk_depth, 0.75))
+        if np.any(boundary_mask):
+            axis.scatter(
+                coordinates[boundary_mask, 0],
+                coordinates[boundary_mask, 1],
+                coordinates[boundary_mask, 2],
+                facecolors="none",
+                edgecolors="#ee9b00",
+                s=node_sizes[boundary_mask] * 1.4,
+                linewidths=1.4,
+                alpha=0.95,
+            )
+        if np.any(bulk_mask):
+            axis.scatter(
+                coordinates[bulk_mask, 0],
+                coordinates[bulk_mask, 1],
+                coordinates[bulk_mask, 2],
+                facecolors="none",
+                edgecolors="#ffffff",
+                s=node_sizes[bulk_mask] * 1.15,
+                linewidths=1.0,
+                alpha=0.85,
+            )
+
+        boundary_mean = float(np.mean(node_values[boundary_mask])) if np.any(boundary_mask) else 0.0
+        bulk_mean = float(np.mean(node_values[bulk_mask])) if np.any(bulk_mask) else 0.0
+        axis.text2D(
+            0.02,
+            0.98,
+            (
+                f"sweep {sweep + 1}/{total_sweeps}\n"
+                f"boundary mean = {boundary_mean:.3f}\n"
+                f"bulk mean = {bulk_mean:.3f}"
+            ),
+            transform=axis.transAxes,
+            va="top",
+            bbox={"facecolor": "white", "alpha": 0.82, "edgecolor": "#d0d7de"},
+        )
+        axis.set_title(f"{title}\nBoundary shell highlighted in amber; bulk core outlined in white")
+        axis.set_xlabel("x")
+        axis.set_ylabel("y")
+        axis.set_zlabel("z")
+        if hasattr(axis, "set_box_aspect"):
+            axis.set_box_aspect((1.0, 1.0, 1.0))
+        figure.tight_layout()
+        figure.canvas.draw_idle()
+        plt.pause(0.001)
+        if self.output_dir is not None:
+            frame_path = self.output_dir / f"{self.prefix}_{self._frame_index:04d}.png"
+            figure.savefig(frame_path, dpi=150)
+        self._frame_index += 1
+
+    def close(self) -> None:
+        if self._plt is not None and self._figure is not None:
+            self._plt.close(self._figure)
+        self._figure = None
+        self._axis = None
+
+    def _ensure_plotting(self):
+        if self._plt is None:
+            self._plt = importlib.import_module("matplotlib.pyplot")
+            self._plt.ion()
+        return self._plt
+
+    def _ensure_figure(self, plt):
+        if self._figure is None or self._axis is None:
+            self._figure = plt.figure(figsize=(8.0, 6.8))
+            self._axis = self._figure.add_subplot(111, projection="3d")
+            plt.show(block=False)
+        return self._figure, self._axis
+
+    def _normalize_positions(self, positions: np.ndarray) -> np.ndarray:
+        coordinates = np.asarray(positions, dtype=float)
+        mins = np.min(coordinates, axis=0, keepdims=True)
+        spans = np.max(coordinates, axis=0, keepdims=True) - mins
+        spans = np.where(spans <= 1e-9, 1.0, spans)
+        return (coordinates - mins) / spans
+
+    def _compute_bulk_depth(self, coordinates: np.ndarray) -> np.ndarray:
+        shell_distance = np.min(
+            np.column_stack(
+                [
+                    coordinates[:, 0],
+                    1.0 - coordinates[:, 0],
+                    coordinates[:, 1],
+                    1.0 - coordinates[:, 1],
+                    coordinates[:, 2],
+                    1.0 - coordinates[:, 2],
+                ]
+            ),
+            axis=1,
+        )
+        return self._normalize_series(shell_distance)
+
+    def _normalize_series(self, values: np.ndarray) -> np.ndarray:
+        array = np.asarray(values, dtype=float)
+        minimum = float(np.min(array)) if len(array) > 0 else 0.0
+        maximum = float(np.max(array)) if len(array) > 0 else 1.0
+        if maximum - minimum <= 1e-12:
+            return np.zeros_like(array, dtype=float)
+        return (array - minimum) / (maximum - minimum)
+
+    def _select_visible_edges(self, edge_strengths: np.ndarray) -> np.ndarray:
+        if len(edge_strengths) <= self.max_edges:
+            return np.arange(len(edge_strengths), dtype=np.int32)
+        order = np.argsort(edge_strengths)[-self.max_edges :]
+        return np.sort(order.astype(np.int32))
+
+
 def balanced_lattice_dims(sites: int) -> tuple[int, int, int]:
     nx = max(2, int(round(sites ** (1.0 / 3.0))))
     ny = nx
@@ -310,6 +502,10 @@ class MonteCarloConfig:
     ricci_negative_threshold: float = -0.55
     ricci_evaporation_rate: float = 0.85
     ricci_positive_boost: float = 0.35
+    live_plot_enabled: bool = False
+    live_plot_interval: int = 12
+    live_plot_max_edges: int = 320
+    live_plot_output_dir: Path | None = None
 
 
 @dataclass
@@ -1608,6 +1804,7 @@ class MonteCarloOperatorNetwork:
         config: MonteCarloConfig | None = None,
         backend: str = "auto",
         progress_reporter: LiveProgressBar | LogProgressReporter | NullProgressReporter | None = None,
+        live_visualizer: LiveTensorNetworkVisualizer | None = None,
     ) -> None:
         config = config or MonteCarloConfig(backend=backend)
         if sites < 16:
@@ -1652,6 +1849,8 @@ class MonteCarloOperatorNetwork:
         self.ricci_positive_boost = max(0.0, float(config.ricci_positive_boost))
         self.backend_name, self.xp = resolve_array_backend(config.backend)
         self.progress_reporter = progress_reporter
+        self.live_visualizer = live_visualizer
+        self._live_positions: np.ndarray = np.zeros((self.sites, 3), dtype=np.float32)
         self.rng = np.random.default_rng(seed)
         self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
         self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
@@ -1659,6 +1858,7 @@ class MonteCarloOperatorNetwork:
     def analyze(self) -> MonteCarloArtifacts:
         self._progress(0, 4, "build locality")
         features, positions, edge_i, edge_j, couplings, local_fields = self._build_sparse_algebraic_locality()
+        self._live_positions = positions
         self._progress(1, 4, "build triads")
         triads, unique_triads = self._build_sparse_triads(edge_i, edge_j)
         self._progress(2, 4, STAGE_MONTE_CARLO)
@@ -1939,6 +2139,18 @@ class MonteCarloOperatorNetwork:
             beta = 1.0 / max(sweep_temperature, 1e-9)
             self._metropolis_sweep(spins, neighbor_index, local_fields, triads, beta)
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
+            if self.live_visualizer is not None and self.live_visualizer.should_update(sweep, total_sweeps):
+                dynamic_edge_strengths = np.abs(couplings.astype(np.float64)) * (0.35 + 0.65 * (spins[edge_i] == spins[edge_j]).astype(np.float64))
+                self.live_visualizer.update(
+                    positions=self._live_positions,
+                    edge_i=edge_i,
+                    edge_j=edge_j,
+                    node_values=spins.astype(np.float64),
+                    edge_strengths=dynamic_edge_strengths,
+                    sweep=sweep,
+                    total_sweeps=total_sweeps,
+                    title="Live Tensor Network: boundary-to-bulk scalar relaxation",
+                )
             if sweep >= self.burn_in_sweeps and (sweep - self.burn_in_sweeps) % self.sample_interval == 0:
                 samples.append(spins.copy())
                 energies.append(self._energy(spins, edge_i, edge_j, couplings, local_fields, triads))
@@ -2112,6 +2324,7 @@ class SU3TensorNetworkMonteCarlo:
         seed: int = 7,
         config: MonteCarloConfig | None = None,
         progress_reporter: LiveProgressBar | LogProgressReporter | NullProgressReporter | None = None,
+        live_visualizer: LiveTensorNetworkVisualizer | None = None,
     ) -> None:
         config = config or MonteCarloConfig(gauge_group="su3", color_count=3)
         if sites < 16:
@@ -2150,6 +2363,8 @@ class SU3TensorNetworkMonteCarlo:
         self.ricci_evaporation_rate = float(np.clip(config.ricci_evaporation_rate, 0.0, 1.0))
         self.ricci_positive_boost = max(0.0, float(config.ricci_positive_boost))
         self.progress_reporter = progress_reporter
+        self.live_visualizer = live_visualizer
+        self._live_positions: np.ndarray = np.zeros((self.sites, 3), dtype=np.float32)
         self.rng = np.random.default_rng(seed)
         self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
         self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
@@ -2157,6 +2372,7 @@ class SU3TensorNetworkMonteCarlo:
     def analyze(self) -> MonteCarloArtifacts:
         self._progress(0, 6, "build locality")
         positions, edge_i, edge_j, couplings, local_fields, link_phases = self._build_su3_locality()
+        self._live_positions = positions
         self._progress(1, 6, "build triads")
         triads, unique_triads = self._build_su3_triads(edge_i, edge_j)
         self._progress(2, 6, "build kernels")
@@ -2522,6 +2738,18 @@ class SU3TensorNetworkMonteCarlo:
                 color_prob = softmax_from_log(log_prob)
                 colors[site] = np.int8(self.rng.choice(self.color_count, p=color_prob))
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
+            if self.live_visualizer is not None and self.live_visualizer.should_update(sweep, total_sweeps):
+                active_edge_strengths = kernels[np.arange(len(edge_i)), colors[edge_i], colors[edge_j]].astype(np.float64)
+                self.live_visualizer.update(
+                    positions=self._live_positions,
+                    edge_i=edge_i,
+                    edge_j=edge_j,
+                    node_values=colors.astype(np.float64),
+                    edge_strengths=active_edge_strengths,
+                    sweep=sweep,
+                    total_sweeps=total_sweeps,
+                    title="Live Tensor Network: boundary-to-bulk SU(3) color flow",
+                )
             if sweep >= self.burn_in_sweeps and (sweep - self.burn_in_sweeps) % self.sample_interval == 0:
                 samples.append(colors.copy())
                 energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads))
@@ -2886,6 +3114,18 @@ def run_scaling_sweep(
     artifacts: list[MonteCarloArtifacts] = []
     for offset, size in enumerate(sizes):
         progress_reporter = create_progress_reporter(progress_mode, prefix=f"[{offset + 1}/{len(sizes)}] N={size}")
+        live_visualizer = None
+        if config.live_plot_enabled:
+            live_dir = None
+            if config.live_plot_output_dir is not None:
+                live_dir = config.live_plot_output_dir / f"{config.gauge_group}_{config.graph_prior}_N{size}"
+            live_visualizer = LiveTensorNetworkVisualizer(
+                enabled=True,
+                output_dir=live_dir,
+                prefix=f"live_{config.gauge_group}_{config.graph_prior}_N{size}",
+                update_interval=config.live_plot_interval,
+                max_edges=config.live_plot_max_edges,
+            )
         try:
             if config.gauge_group == "su3":
                 simulation = SU3TensorNetworkMonteCarlo(
@@ -2893,6 +3133,7 @@ def run_scaling_sweep(
                     seed=seed + 37 * offset,
                     config=config,
                     progress_reporter=progress_reporter,
+                    live_visualizer=live_visualizer,
                 )
             else:
                 simulation = MonteCarloOperatorNetwork(
@@ -2900,12 +3141,16 @@ def run_scaling_sweep(
                     seed=seed + 37 * offset,
                     config=config,
                     progress_reporter=progress_reporter,
+                    live_visualizer=live_visualizer,
                 )
             artifact = simulation.analyze()
             progress_reporter.finish()
         except KeyboardInterrupt:
             progress_reporter.abort()
             raise
+        finally:
+            if live_visualizer is not None:
+                live_visualizer.close()
         artifacts.append(artifact)
         summary = artifact.summary
         points.append(
