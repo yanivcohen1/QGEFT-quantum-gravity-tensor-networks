@@ -45,6 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--field-scale", type=float, default=0.35, help="Scale for local fields.")
     parser.add_argument("--chiral-scale", type=float, default=None, help="Scale for chiral terms / triad couplings.")
     parser.add_argument("--triad-scale", type=float, default=None, help="Alias for --chiral-scale in Monte Carlo mode; controls triad coupling strength in the scalar surrogate.")
+    parser.add_argument("--triad-burn-in-scale", type=float, default=1.0, help="Initial fraction of the target triad scale used at the start of Monte Carlo burn-in. Values below 1 keep triads soft while new boundary layers thermally relax.")
+    parser.add_argument("--triad-ramp-fraction", type=float, default=0.0, help="Fraction of burn-in sweeps over which the triad scale ramps from --triad-burn-in-scale up to the full target triad scale.")
     parser.add_argument("--degree-penalty-scale", type=float, default=0.0, help="Static suppression strength for couplings attached to nodes whose realized degree exceeds the target degree.")
     parser.add_argument("--holographic-bound-scale", type=float, default=0.0, help="ER=EPR holographic capacity scale. Positive values suppress long-range entanglement links that exceed their local area budget.")
     parser.add_argument("--holographic-penalty-strength", type=float, default=1.0, help="Strength of the suppression applied when an edge exceeds the holographic entanglement bound.")
@@ -134,6 +136,8 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         coupling_scale=args.coupling_scale,
         field_scale=args.field_scale,
         chiral_scale=chiral_scale,
+        triad_burn_in_scale=args.triad_burn_in_scale,
+        triad_ramp_fraction=args.triad_ramp_fraction,
         temperature=1.35 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature,
         anneal_start_temperature=args.anneal_start_temperature,
         inflation_seed_sites=args.inflation_seed_sites,

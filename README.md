@@ -120,6 +120,8 @@ The present campaign points to one especially important next step. The repeated 
 
 That loop is now available experimentally in the CLI through `--inflation-mode boundary-strain` together with `--inflation-seed-sites ...`. In this mode, each burst identifies a boundary/strain shell, adds a weakly coupled outer layer, performs a short local relaxation, and then trims overly long negative-curvature links before the next burst.
 
+For the next tuning round, the intended usage is not a hard high-strain freeze but a gradual thermal sewing-in of the new shell. The Monte Carlo CLI now supports `--triad-burn-in-scale` and `--triad-ramp-fraction`, which let a `boundary-strain` run begin with softened triad couplings and restore the full target triad scale only partway through burn-in. In practice this should be paired with a substantially larger `--burn-in-sweeps` budget so that newly added boundary nodes can explore metastable nonlocal correlations before the final geometry locks in.
+
 ### 6.1 Benchmarking Status
 
 The repository now contains multiple large-$N$ surrogate regimes, but it does **not** yet contain a completed benchmarking study against conventional Monte Carlo methods for entanglement-related observables. That comparison is scientifically interesting, especially because the current scalable `SU(3)` engine combines sparse graph locality, belief-propagation-assisted updates, rank-truncated transfer kernels, and graph-based postprocessing diagnostics in a single workflow.

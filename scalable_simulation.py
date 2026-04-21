@@ -478,6 +478,8 @@ class MonteCarloConfig:
     coupling_scale: float = 0.9
     field_scale: float = 0.06
     chiral_scale: float = 0.04
+    triad_burn_in_scale: float = 1.0
+    triad_ramp_fraction: float = 0.0
     temperature: float = 1.35
     anneal_start_temperature: float | None = None
     inflation_seed_sites: int | None = None
@@ -577,6 +579,8 @@ class ScalingSweepResult:
     ricci_flow_steps: int
     tensor_bond_dim: int
     degree: int
+    triad_burn_in_scale: float
+    triad_ramp_fraction: float
     distance_powers: tuple[float, ...]
     null_model_types: tuple[str, ...]
     null_model_samples: int
@@ -598,6 +602,8 @@ class ScalingSweepResult:
                 "ricci_flow_steps": self.ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
+                "triad_burn_in_scale": self.triad_burn_in_scale,
+                "triad_ramp_fraction": self.triad_ramp_fraction,
                 "distance_powers": list(self.distance_powers),
                 "null_model_types": list(self.null_model_types),
                 "null_model_samples": self.null_model_samples,
@@ -658,6 +664,8 @@ class GraphPriorComparisonResult:
     ricci_flow_steps: int
     tensor_bond_dim: int
     degree: int
+    triad_burn_in_scale: float
+    triad_ramp_fraction: float
     distance_powers: tuple[float, ...]
     null_model_types: tuple[str, ...]
     null_model_samples: int
@@ -677,6 +685,8 @@ class GraphPriorComparisonResult:
                 "ricci_flow_steps": self.ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
+                "triad_burn_in_scale": self.triad_burn_in_scale,
+                "triad_ramp_fraction": self.triad_ramp_fraction,
                 "distance_powers": list(self.distance_powers),
                 "null_model_types": list(self.null_model_types),
                 "null_model_samples": self.null_model_samples,
@@ -720,6 +730,22 @@ def normalize_inflation_mode(value: str) -> str:
     if normalized not in allowed:
         raise ValueError("inflation mode must be one of: legacy, staged, boundary-strain")
     return normalized
+
+
+def triad_scale_for_sweep(
+    sweep: int,
+    burn_in_sweeps: int,
+    burn_in_scale: float,
+    ramp_fraction: float,
+) -> float:
+    if burn_in_sweeps <= 0 or ramp_fraction <= 0.0 or sweep >= burn_in_sweeps:
+        return 1.0
+    safe_start = float(np.clip(burn_in_scale, 0.0, 1.0))
+    if safe_start >= 0.999:
+        return 1.0
+    ramp_sweeps = max(1, int(np.ceil(burn_in_sweeps * float(np.clip(ramp_fraction, 0.0, 1.0)))))
+    progress = min(max(float(sweep) / float(ramp_sweeps), 0.0), 1.0)
+    return float(safe_start + (1.0 - safe_start) * progress)
 
 
 def normalize_graph_prior_list(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
@@ -2093,6 +2119,8 @@ class MonteCarloOperatorNetwork:
         self.coupling_scale = config.coupling_scale
         self.field_scale = config.field_scale
         self.chiral_scale = config.chiral_scale
+        self.triad_burn_in_scale = float(np.clip(config.triad_burn_in_scale, 0.0, 1.0))
+        self.triad_ramp_fraction = float(np.clip(config.triad_ramp_fraction, 0.0, 1.0))
         self.temperature = config.temperature
         self.anneal_start_temperature = config.anneal_start_temperature
         self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
@@ -2406,7 +2434,13 @@ class MonteCarloOperatorNetwork:
                 anneal_start_temperature=self.anneal_start_temperature,
             )
             beta = 1.0 / max(sweep_temperature, 1e-9)
-            self._metropolis_sweep(spins, neighbor_index, local_fields, triads, beta)
+            triad_scale = triad_scale_for_sweep(
+                sweep=sweep,
+                burn_in_sweeps=self.burn_in_sweeps,
+                burn_in_scale=self.triad_burn_in_scale,
+                ramp_fraction=self.triad_ramp_fraction,
+            )
+            self._metropolis_sweep(spins, neighbor_index, local_fields, triads, beta, triad_scale)
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
             if self.live_visualizer is not None and self.live_visualizer.should_update(sweep, total_sweeps):
                 dynamic_edge_strengths = np.abs(couplings.astype(np.float64)) * (0.35 + 0.65 * (spins[edge_i] == spins[edge_j]).astype(np.float64))
@@ -2422,11 +2456,11 @@ class MonteCarloOperatorNetwork:
                 )
             if sweep >= self.burn_in_sweeps and (sweep - self.burn_in_sweeps) % self.sample_interval == 0:
                 samples.append(spins.copy())
-                energies.append(self._energy(spins, edge_i, edge_j, couplings, local_fields, triads))
+                energies.append(self._energy(spins, edge_i, edge_j, couplings, local_fields, triads, 1.0))
 
         if not samples:
             samples.append(spins.copy())
-            energies.append(self._energy(spins, edge_i, edge_j, couplings, local_fields, triads))
+            energies.append(self._energy(spins, edge_i, edge_j, couplings, local_fields, triads, 1.0))
         return np.asarray(samples, dtype=np.int8), np.asarray(energies, dtype=float)
 
     def _metropolis_sweep(
@@ -2436,13 +2470,14 @@ class MonteCarloOperatorNetwork:
         local_fields: np.ndarray,
         triads: list[list[tuple[int, int, float]]],
         beta: float,
+        triad_scale: float,
     ) -> None:
         for site in self.rng.permutation(self.sites):
             effective_field = local_fields[site]
             for neighbor, coupling in neighbor_index[site]:
                 effective_field += coupling * spins[neighbor]
             for left, right, strength in triads[site]:
-                effective_field += strength * spins[left] * spins[right]
+                effective_field += triad_scale * strength * spins[left] * spins[right]
             delta_energy = 2.0 * spins[site] * effective_field
             if delta_energy <= 0.0 or self.rng.random() < np.exp(-beta * delta_energy):
                 spins[site] = np.int8(-spins[site])
@@ -2455,6 +2490,7 @@ class MonteCarloOperatorNetwork:
         couplings: np.ndarray,
         local_fields: np.ndarray,
         triads: list[list[tuple[int, int, float]]],
+        triad_scale: float,
     ) -> float:
         pair_term = -np.sum(couplings * spins[edge_i] * spins[edge_j])
         field_term = -np.dot(local_fields, spins)
@@ -2466,7 +2502,7 @@ class MonteCarloOperatorNetwork:
                 if triad in counted:
                     continue
                 counted.add(triad)
-                triad_term -= strength * spins[site] * spins[left] * spins[right]
+                triad_term -= triad_scale * strength * spins[site] * spins[left] * spins[right]
         return float(pair_term + field_term + triad_term)
 
     def _edge_covariances(
@@ -2606,6 +2642,8 @@ class SU3TensorNetworkMonteCarlo:
         self.coupling_scale = config.coupling_scale
         self.field_scale = config.field_scale
         self.chiral_scale = config.chiral_scale
+        self.triad_burn_in_scale = float(np.clip(config.triad_burn_in_scale, 0.0, 1.0))
+        self.triad_ramp_fraction = float(np.clip(config.triad_ramp_fraction, 0.0, 1.0))
         self.temperature = config.temperature
         self.anneal_start_temperature = config.anneal_start_temperature
         self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
@@ -2998,12 +3036,18 @@ class SU3TensorNetworkMonteCarlo:
                 anneal_start_temperature=self.anneal_start_temperature,
             )
             anneal_ratio = self.temperature / max(sweep_temperature, 1e-9)
+            triad_scale = triad_scale_for_sweep(
+                sweep=sweep,
+                burn_in_sweeps=self.burn_in_sweeps,
+                burn_in_scale=self.triad_burn_in_scale,
+                ramp_fraction=self.triad_ramp_fraction,
+            )
             for site in self.rng.permutation(self.sites):
                 log_prob = anneal_ratio * local_bias[site].astype(np.float64).copy()
                 log_prob += anneal_ratio * np.log(np.clip(marginals[site], 1e-12, None))
                 for neighbor, kernel in neighbors[site]:
                     log_prob += anneal_ratio * np.log(np.clip(kernel[:, colors[neighbor]], 1e-12, None))
-                log_prob += anneal_ratio * self._triad_color_logits(colors, site, triads)
+                log_prob += anneal_ratio * self._triad_color_logits(colors, site, triads, triad_scale)
                 color_prob = softmax_from_log(log_prob)
                 colors[site] = np.int8(self.rng.choice(self.color_count, p=color_prob))
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
@@ -3021,10 +3065,10 @@ class SU3TensorNetworkMonteCarlo:
                 )
             if sweep >= self.burn_in_sweeps and (sweep - self.burn_in_sweeps) % self.sample_interval == 0:
                 samples.append(colors.copy())
-                energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads))
+                energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads, 1.0))
         if not samples:
             samples.append(colors.copy())
-            energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads))
+            energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads, 1.0))
         return np.asarray(samples, dtype=np.int8), np.asarray(energies, dtype=float), marginals
 
     def _triad_color_logits(
@@ -3032,16 +3076,18 @@ class SU3TensorNetworkMonteCarlo:
         colors: np.ndarray,
         site: int,
         triads: list[list[tuple[int, int, float]]],
+        triad_scale: float,
     ) -> np.ndarray:
         logits = np.zeros(self.color_count, dtype=np.float64)
         thermal_scale = max(self.temperature, 1e-9)
         for left, right, strength in triads[site]:
             left_color = int(colors[left])
             right_color = int(colors[right])
+            scaled_strength = triad_scale * strength
             if left_color == right_color:
-                logits[left_color] += strength / thermal_scale
-                logits += (-0.35 * strength / thermal_scale)
-                logits[left_color] += 0.35 * strength / thermal_scale
+                logits[left_color] += scaled_strength / thermal_scale
+                logits += (-0.35 * scaled_strength / thermal_scale)
+                logits[left_color] += 0.35 * scaled_strength / thermal_scale
         return logits
 
     def _compute_site_marginals(
@@ -3069,6 +3115,7 @@ class SU3TensorNetworkMonteCarlo:
         kernels: np.ndarray,
         local_fields: np.ndarray,
         triads: list[list[tuple[int, int, float]]],
+        triad_scale: float,
     ) -> float:
         pair_term = 0.0
         for edge_index, (src, dst) in enumerate(zip(edge_i.tolist(), edge_j.tolist())):
@@ -3086,9 +3133,9 @@ class SU3TensorNetworkMonteCarlo:
                 right_color = int(colors[right])
                 site_color = int(colors[site])
                 if site_color == left_color == right_color:
-                    triad_term -= strength
+                    triad_term -= triad_scale * strength
                 elif left_color == right_color != site_color:
-                    triad_term += 0.35 * strength
+                    triad_term += 0.35 * triad_scale * strength
         return float(pair_term + field_term + triad_term)
 
     def _edge_correlations(
@@ -3474,6 +3521,8 @@ def run_scaling_sweep(
         ricci_flow_steps=config.ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
+        triad_burn_in_scale=float(np.clip(config.triad_burn_in_scale, 0.0, 1.0)),
+        triad_ramp_fraction=float(np.clip(config.triad_ramp_fraction, 0.0, 1.0)),
         distance_powers=config.distance_powers,
         null_model_types=config.null_model_types,
         null_model_samples=config.null_model_samples,
@@ -3504,6 +3553,8 @@ def run_graph_prior_comparison(
             coupling_scale=config.coupling_scale,
             field_scale=config.field_scale,
             chiral_scale=config.chiral_scale,
+            triad_burn_in_scale=config.triad_burn_in_scale,
+            triad_ramp_fraction=config.triad_ramp_fraction,
             temperature=config.temperature,
             anneal_start_temperature=config.anneal_start_temperature,
             inflation_seed_sites=config.inflation_seed_sites,
@@ -3570,6 +3621,8 @@ def run_graph_prior_comparison(
         ricci_flow_steps=config.ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
+        triad_burn_in_scale=float(np.clip(config.triad_burn_in_scale, 0.0, 1.0)),
+        triad_ramp_fraction=float(np.clip(config.triad_ramp_fraction, 0.0, 1.0)),
         distance_powers=config.distance_powers,
         null_model_types=config.null_model_types,
         null_model_samples=config.null_model_samples,
@@ -3589,6 +3642,8 @@ def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> 
         f"inflation seed sites: {result.inflation_seed_sites}" if result.inflation_seed_sites is not None else "inflation seed sites: off",
         f"inflation mode: {result.inflation_mode}",
         f"degree: {result.degree}",
+        f"triad burn-in scale: {result.triad_burn_in_scale:.2f}",
+        f"triad ramp fraction: {result.triad_ramp_fraction:.2f}",
         holographic_line,
         f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
         f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
@@ -3613,6 +3668,8 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         f"inflation mode: {result.inflation_mode}",
         f"tensor bond dim: {result.tensor_bond_dim}",
         f"degree: {result.degree}",
+        f"triad burn-in scale: {result.triad_burn_in_scale:.2f}",
+        f"triad ramp fraction: {result.triad_ramp_fraction:.2f}",
         holographic_line,
         f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
         f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
