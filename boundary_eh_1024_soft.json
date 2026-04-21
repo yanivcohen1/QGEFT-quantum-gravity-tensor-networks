@@ -1,0 +1,115 @@
+{
+  "mode": "monte-carlo",
+  "backend": "cpu",
+  "gauge_group": "su3",
+  "graph_prior": "3d-local",
+  "inflation_seed_sites": 256,
+  "inflation_mode": "boundary-strain",
+  "holographic_bound_scale": 0.0,
+  "ricci_flow_steps": 0,
+  "measurement_ricci_flow_steps": 1,
+  "tensor_bond_dim": 2,
+  "degree": 16,
+  "triad_burn_in_scale": 0.2,
+  "triad_ramp_fraction": 0.8,
+  "distance_powers": [
+    1.0
+  ],
+  "null_model_types": [],
+  "null_model_samples": 0,
+  "asymptotic_fine_structure_proxy": 0.05967858045381297,
+  "asymptotic_proton_electron_mass_ratio_proxy": 0.7458839421618403,
+  "asymptotic_light_cone_speed": 0.0023488277962485492,
+  "points": [
+    {
+      "sites": 1024,
+      "gauge_group": "su3",
+      "graph_prior": "3d-local",
+      "distance_model": "E^1.00",
+      "distance_alpha": 1.0,
+      "spectral_dimension": 2.1768637404667373,
+      "spectral_dimension_std": 0.4973452955327727,
+      "mean_return_error": 0.0013354653738861576,
+      "holographic_enabled": false,
+      "holographic_mean_suppression": 1.0,
+      "ricci_flow_steps": 4,
+      "ricci_mean_curvature": 0.37476691603660583,
+      "ricci_negative_edge_fraction": 0.012839433293978748,
+      "eh_node_count": 1024,
+      "eh_action_density_mean": -8.268988954252563,
+      "eh_action_density_std": 5.754687363112732,
+      "eh_ricci_scalar_mean": 0.3774859497925718,
+      "eh_ricci_scalar_std": 0.1437589422782192,
+      "eh_proportionality_slope": -2.9885358764395407,
+      "eh_intercept": -7.1408586504456055,
+      "eh_pearson_correlation": -0.07465718456077382,
+      "eh_fit_r2": 0.005573695206541274,
+      "eh_normalized_mae": 0.8919908781686972,
+      "mean_energy": -8486.344095284894,
+      "mean_magnetization": 0.5229492187499999,
+      "color_entropy": 0.9754871584687868,
+      "tensor_residual": 0.03225729959796374,
+      "theta_order": 1.5772563299594617,
+      "matter_antimatter_asymmetry": -0.9999999999999667,
+      "gravity_power_exponent": -0.12160900995294922,
+      "gravity_inverse_square_r2": -8.252347505279129,
+      "gravity_inverse_square_mae": 0.4619712574171898,
+      "fine_structure_proxy": 0.05967858045381297,
+      "electron_gap": 3.2229600470282818,
+      "proton_gap": 2.403954145307565,
+      "proton_electron_mass_ratio_proxy": 0.7458839421618403,
+      "effective_light_cone_speed": 0.0023488277962485492,
+      "light_cone_fit_r2": 0.7892827167807007,
+      "light_cone_leakage": 0.0,
+      "topological_consensus": {
+        "spectral_dimension_median": 2.383640258851935,
+        "spectral_dimension_std": 0.1014510479307933,
+        "hausdorff_dimension_median": 2.0628346926543717,
+        "hausdorff_dimension_std": 0.015534821532188318,
+        "three_dimensionality_score": 0.37446018036321826,
+        "graphizations": [
+          {
+            "label": "support",
+            "retained_edge_fraction": 1.0,
+            "spectral_dimension": 2.1905859885453065,
+            "spectral_dimension_std": 0.5703466848166879,
+            "hausdorff_dimension": 2.0628346926543717
+          },
+          {
+            "label": "rank-backbone-50",
+            "retained_edge_fraction": 0.5,
+            "spectral_dimension": 2.383640258851935,
+            "spectral_dimension_std": 0.18442953406937002,
+            "hausdorff_dimension": 2.0745836066396666
+          },
+          {
+            "label": "rank-backbone-25",
+            "retained_edge_fraction": 0.25,
+            "spectral_dimension": 2.422623103424964,
+            "spectral_dimension_std": 0.0553172836335972,
+            "hausdorff_dimension": 2.0373649264904174
+          }
+        ]
+      },
+      "alternative_distance_models": [
+        {
+          "label": "E^1.00",
+          "alpha": 1.0,
+          "spectral_dimension": 2.1768637404667373,
+          "spectral_dimension_std": 0.4973452955327727,
+          "mean_return_error": 0.0013354653738861576,
+          "gravity_power_exponent": -0.12160900995294922,
+          "gravity_inverse_square_r2": -8.252347505279129,
+          "gravity_inverse_square_mae": 0.4619712574171898,
+          "hausdorff_dimension": 2.2396203085622983,
+          "effective_light_cone_speed": 0.0023488277962485492,
+          "light_cone_fit_r2": 0.7892827167807007,
+          "light_cone_leakage": 0.0
+        }
+      ],
+      "null_model_summaries": [],
+      "samples_collected": 30,
+      "seed": 7
+    }
+  ]
+}

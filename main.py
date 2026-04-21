@@ -74,6 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--burn-in-sweeps", type=int, default=180, help="Burn-in sweeps for Monte Carlo mode.")
     parser.add_argument("--measurement-sweeps", type=int, default=420, help="Measurement sweeps for Monte Carlo mode.")
     parser.add_argument("--sample-interval", type=int, default=6, help="Sampling interval in sweeps for Monte Carlo mode.")
+    parser.add_argument("--edge-swap-attempts-per-sweep", type=int, default=0, help="How many edge-relocation proposals to attempt after each Monte Carlo sweep. Each proposal removes one existing edge and proposes one new edge, then accepts or rejects it by a local Metropolis action test.")
+    parser.add_argument("--edge-swap-entanglement-bias", type=float, default=0.75, help="How strongly edge swaps prefer to assign stronger links to high-entanglement nodes and reject rewires into cold regions.")
+    parser.add_argument("--cosmological-constant", type=float, default=0.0, help="Strength of the harmonic volume regularizer Lambda that penalizes node degrees moving away from the target background degree.")
     parser.add_argument("--walker-count", type=int, default=512, help="Number of random walkers for spectral-dimension estimation.")
     parser.add_argument("--max-walk-steps", type=int, default=24, help="Maximum random-walk time for spectral-dimension estimation.")
     parser.add_argument("--size-scan", type=str, default="", help="Comma-separated system sizes for a Monte Carlo scaling sweep, for example 64,128,256,512.")
@@ -158,6 +161,9 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         burn_in_sweeps=args.burn_in_sweeps,
         measurement_sweeps=args.measurement_sweeps,
         sample_interval=args.sample_interval,
+        edge_swap_attempts_per_sweep=args.edge_swap_attempts_per_sweep,
+        edge_swap_entanglement_bias=args.edge_swap_entanglement_bias,
+        cosmological_constant=args.cosmological_constant,
         walker_count=args.walker_count,
         max_walk_steps=args.max_walk_steps,
         backend=args.backend,

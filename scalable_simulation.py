@@ -396,6 +396,20 @@ class HolographicDiagnostics:
 
 
 @dataclass(frozen=True)
+class EinsteinHilbertFitDiagnostics:
+    node_count: int
+    action_density_mean: float
+    action_density_std: float
+    ricci_scalar_mean: float
+    ricci_scalar_std: float
+    proportionality_slope: float
+    intercept: float
+    pearson_correlation: float
+    fit_r2: float
+    normalized_mae: float
+
+
+@dataclass(frozen=True)
 class LocalitySeedArtifacts:
     positions: np.ndarray
     adjacency: np.ndarray
@@ -430,6 +444,8 @@ class MonteCarloSummary:
     burn_in_sweeps: int
     measurement_sweeps: int
     samples_collected: int
+    edge_swap_attempts: int
+    edge_swap_accepted: int
     mean_energy: float
     mean_magnetization: float
     color_entropy: float
@@ -452,6 +468,16 @@ class MonteCarloSummary:
     ricci_min_curvature: float
     ricci_negative_edge_fraction: float
     ricci_evaporated_edges: int
+    eh_node_count: int
+    eh_action_density_mean: float
+    eh_action_density_std: float
+    eh_ricci_scalar_mean: float
+    eh_ricci_scalar_std: float
+    eh_proportionality_slope: float
+    eh_intercept: float
+    eh_pearson_correlation: float
+    eh_fit_r2: float
+    eh_normalized_mae: float
     gravity_power_exponent: float
     gravity_inverse_square_r2: float
     gravity_inverse_square_mae: float
@@ -494,6 +520,9 @@ class MonteCarloConfig:
     burn_in_sweeps: int = 180
     measurement_sweeps: int = 420
     sample_interval: int = 6
+    edge_swap_attempts_per_sweep: int = 0
+    edge_swap_entanglement_bias: float = 0.75
+    cosmological_constant: float = 0.0
     walker_count: int = 512
     max_walk_steps: int = 24
     backend: str = "auto"
@@ -544,6 +573,8 @@ class ScalingPoint:
     graph_prior: str
     distance_model: str
     distance_alpha: float
+    edge_swap_attempts: int
+    edge_swap_accepted: int
     spectral_dimension: float
     spectral_dimension_std: float
     mean_return_error: float
@@ -552,6 +583,16 @@ class ScalingPoint:
     ricci_flow_steps: int
     ricci_mean_curvature: float
     ricci_negative_edge_fraction: float
+    eh_node_count: int
+    eh_action_density_mean: float
+    eh_action_density_std: float
+    eh_ricci_scalar_mean: float
+    eh_ricci_scalar_std: float
+    eh_proportionality_slope: float
+    eh_intercept: float
+    eh_pearson_correlation: float
+    eh_fit_r2: float
+    eh_normalized_mae: float
     mean_energy: float
     mean_magnetization: float
     color_entropy: float
@@ -590,6 +631,9 @@ class ScalingSweepResult:
     degree: int
     triad_burn_in_scale: float
     triad_ramp_fraction: float
+    edge_swap_attempts_per_sweep: int
+    edge_swap_entanglement_bias: float
+    cosmological_constant: float
     distance_powers: tuple[float, ...]
     null_model_types: tuple[str, ...]
     null_model_samples: int
@@ -614,6 +658,9 @@ class ScalingSweepResult:
                 "degree": self.degree,
                 "triad_burn_in_scale": self.triad_burn_in_scale,
                 "triad_ramp_fraction": self.triad_ramp_fraction,
+                "edge_swap_attempts_per_sweep": self.edge_swap_attempts_per_sweep,
+                "edge_swap_entanglement_bias": self.edge_swap_entanglement_bias,
+                "cosmological_constant": self.cosmological_constant,
                 "distance_powers": list(self.distance_powers),
                 "null_model_types": list(self.null_model_types),
                 "null_model_samples": self.null_model_samples,
@@ -848,6 +895,157 @@ def compute_holographic_suppression(
         mean_overload_ratio=float(np.mean(overload_ratio)) if len(overload_ratio) > 0 else 0.0,
     )
     return suppression, diagnostics
+
+
+def compute_node_ricci_scalar_proxy(sites: int, edge_i: np.ndarray, edge_j: np.ndarray) -> np.ndarray:
+    adjacency = rebuild_adjacency_from_edges(sites, edge_i, edge_j)
+    upper_i, upper_j, curvature, _ = compute_ollivier_ricci_proxy_curvature(adjacency)
+    if len(curvature) == 0:
+        return np.zeros(sites, dtype=np.float32)
+    node_sum = np.zeros(sites, dtype=np.float64)
+    node_count = np.zeros(sites, dtype=np.float64)
+    np.add.at(node_sum, upper_i, curvature)
+    np.add.at(node_sum, upper_j, curvature)
+    np.add.at(node_count, upper_i, 1.0)
+    np.add.at(node_count, upper_j, 1.0)
+    node_ricci = np.divide(node_sum, np.maximum(node_count, 1.0), out=np.zeros_like(node_sum), where=node_count > 0.0)
+    return node_ricci.astype(np.float32)
+
+
+def fit_einstein_hilbert_action_density(action_density: np.ndarray, ricci_scalar: np.ndarray) -> EinsteinHilbertFitDiagnostics:
+    density = np.asarray(action_density, dtype=np.float64)
+    ricci = np.asarray(ricci_scalar, dtype=np.float64)
+    mask = np.isfinite(density) & np.isfinite(ricci)
+    density = density[mask]
+    ricci = ricci[mask]
+    if len(density) < 2:
+        return EinsteinHilbertFitDiagnostics(
+            node_count=int(len(density)),
+            action_density_mean=float(np.mean(density)) if len(density) > 0 else 0.0,
+            action_density_std=float(np.std(density)) if len(density) > 0 else 0.0,
+            ricci_scalar_mean=float(np.mean(ricci)) if len(ricci) > 0 else 0.0,
+            ricci_scalar_std=float(np.std(ricci)) if len(ricci) > 0 else 0.0,
+            proportionality_slope=0.0,
+            intercept=float(np.mean(density)) if len(density) > 0 else 0.0,
+            pearson_correlation=0.0,
+            fit_r2=0.0,
+            normalized_mae=0.0,
+        )
+    if np.std(ricci) <= 1e-12:
+        intercept = float(np.mean(density))
+        residual = density - intercept
+        density_std = float(np.std(density))
+        return EinsteinHilbertFitDiagnostics(
+            node_count=int(len(density)),
+            action_density_mean=float(np.mean(density)),
+            action_density_std=density_std,
+            ricci_scalar_mean=float(np.mean(ricci)),
+            ricci_scalar_std=float(np.std(ricci)),
+            proportionality_slope=0.0,
+            intercept=intercept,
+            pearson_correlation=0.0,
+            fit_r2=0.0,
+            normalized_mae=float(np.mean(np.abs(residual)) / max(density_std, 1e-12)),
+        )
+    slope, intercept = np.polyfit(ricci, density, deg=1)
+    fitted = slope * ricci + intercept
+    residual = density - fitted
+    centered = density - np.mean(density)
+    variance = float(np.sum(centered**2)) + 1e-12
+    density_std = float(np.std(density))
+    ricci_std = float(np.std(ricci))
+    correlation = 0.0
+    if density_std > 1e-12 and ricci_std > 1e-12:
+        correlation = float(np.corrcoef(ricci, density)[0, 1])
+    return EinsteinHilbertFitDiagnostics(
+        node_count=int(len(density)),
+        action_density_mean=float(np.mean(density)),
+        action_density_std=density_std,
+        ricci_scalar_mean=float(np.mean(ricci)),
+        ricci_scalar_std=ricci_std,
+        proportionality_slope=float(slope),
+        intercept=float(intercept),
+        pearson_correlation=correlation,
+        fit_r2=float(1.0 - np.sum(residual**2) / variance),
+        normalized_mae=float(np.mean(np.abs(residual)) / max(density_std, 1e-12)),
+    )
+
+
+def compute_scalar_action_density_by_node(
+    sites: int,
+    samples: np.ndarray,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    couplings: np.ndarray,
+    local_fields: np.ndarray,
+    triads: list[list[tuple[int, int, float]]],
+    triad_scale: float,
+) -> np.ndarray:
+    sample_array = np.asarray(samples, dtype=np.float64)
+    mean_spin = np.mean(sample_array, axis=0)
+    local_density = np.zeros(sites, dtype=np.float64)
+    if len(edge_i) > 0:
+        mean_pair = np.mean(sample_array[:, edge_i] * sample_array[:, edge_j], axis=0)
+        pair_energy = -np.asarray(couplings, dtype=np.float64) * mean_pair
+        np.add.at(local_density, edge_i, 0.5 * pair_energy)
+        np.add.at(local_density, edge_j, 0.5 * pair_energy)
+    local_density -= np.asarray(local_fields, dtype=np.float64) * mean_spin
+    counted: set[tuple[int, int, int]] = set()
+    for site, site_triads in enumerate(triads):
+        for left, right, strength in site_triads:
+            triad = tuple(sorted((site, left, right)))
+            if triad in counted:
+                continue
+            counted.add(triad)
+            triad_product = np.mean(sample_array[:, triad[0]] * sample_array[:, triad[1]] * sample_array[:, triad[2]])
+            triad_energy = -float(triad_scale) * float(strength) * float(triad_product)
+            share = triad_energy / 3.0
+            local_density[triad[0]] += share
+            local_density[triad[1]] += share
+            local_density[triad[2]] += share
+    return local_density.astype(np.float32)
+
+
+def compute_su3_action_density_by_node(
+    sites: int,
+    samples: np.ndarray,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    kernels: np.ndarray,
+    local_fields: np.ndarray,
+    triads: list[list[tuple[int, int, float]]],
+    triad_scale: float,
+) -> np.ndarray:
+    sample_array = np.asarray(samples, dtype=np.int32)
+    local_density = np.zeros(sites, dtype=np.float64)
+    if len(edge_i) > 0:
+        edge_energy = np.empty(len(edge_i), dtype=np.float64)
+        for edge_index, (src, dst) in enumerate(zip(edge_i.tolist(), edge_j.tolist())):
+            kernel_values = kernels[edge_index, sample_array[:, src], sample_array[:, dst]]
+            edge_energy[edge_index] = -float(np.mean(np.log(np.clip(kernel_values, 1e-12, None))))
+        np.add.at(local_density, edge_i, 0.5 * edge_energy)
+        np.add.at(local_density, edge_j, 0.5 * edge_energy)
+    site_index = np.arange(sites, dtype=np.int32)
+    field_samples = local_fields[site_index[None, :], sample_array]
+    local_density -= np.mean(field_samples, axis=0)
+    counted: set[tuple[int, int, int]] = set()
+    for site, site_triads in enumerate(triads):
+        for left, right, strength in site_triads:
+            triad = tuple(sorted((site, left, right)))
+            if triad in counted:
+                continue
+            counted.add(triad)
+            triad_colors = sample_array[:, [triad[0], triad[1], triad[2]]]
+            all_equal = (triad_colors[:, 0] == triad_colors[:, 1]) & (triad_colors[:, 1] == triad_colors[:, 2])
+            left_right_equal = (triad_colors[:, 1] == triad_colors[:, 2]) & (triad_colors[:, 0] != triad_colors[:, 1])
+            triad_samples = np.zeros(len(sample_array), dtype=np.float64)
+            triad_samples[all_equal] = -float(triad_scale) * float(strength)
+            triad_samples[left_right_equal] = 0.35 * float(triad_scale) * float(strength)
+            share = float(np.mean(triad_samples)) / 3.0
+            local_density[triad[0]] += share
+            local_density[triad[1]] += share
+            local_density[triad[2]] += share
+    return local_density.astype(np.float32)
 
 
 def temperature_for_sweep(
@@ -2208,6 +2406,156 @@ def degree_preserving_edge_rewire(
     return rewired[:, 0], rewired[:, 1]
 
 
+def build_edge_tuple_set(edge_i: np.ndarray, edge_j: np.ndarray) -> set[tuple[int, int]]:
+    return {tuple(sorted((int(src), int(dst)))) for src, dst in zip(edge_i.tolist(), edge_j.tolist())}
+
+
+def propose_degree_preserving_edge_swap(
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_set: set[tuple[int, int]],
+    rng: np.random.Generator,
+    max_attempts: int = 24,
+) -> tuple[int, int, tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]] | None:
+    if len(edge_i) < 2:
+        return None
+    for _ in range(max_attempts):
+        first, second = rng.choice(len(edge_i), size=2, replace=False)
+        a = int(edge_i[first])
+        b = int(edge_j[first])
+        c = int(edge_i[second])
+        d = int(edge_j[second])
+        if len({a, b, c, d}) < 4:
+            continue
+        old_one = tuple(sorted((a, b)))
+        old_two = tuple(sorted((c, d)))
+        if rng.random() < 0.5:
+            candidate_one = tuple(sorted((a, d)))
+            candidate_two = tuple(sorted((c, b)))
+        else:
+            candidate_one = tuple(sorted((a, c)))
+            candidate_two = tuple(sorted((b, d)))
+        if candidate_one[0] == candidate_one[1] or candidate_two[0] == candidate_two[1]:
+            continue
+        if candidate_one in edge_set or candidate_two in edge_set:
+            continue
+        return first, second, old_one, old_two, candidate_one, candidate_two
+    return None
+
+
+def calculate_volume_penalty(degree: int, target_degree: int) -> float:
+    return float((int(degree) - int(target_degree)) ** 2)
+
+
+def compute_volume_penalty_delta(
+    degrees: np.ndarray,
+    old_edge: tuple[int, int],
+    new_edge: tuple[int, int],
+    target_degree: int,
+) -> float:
+    src_old, dst_old = old_edge
+    src_new, dst_new = new_edge
+    before = (
+        calculate_volume_penalty(int(degrees[src_old]), target_degree)
+        + calculate_volume_penalty(int(degrees[dst_old]), target_degree)
+        + calculate_volume_penalty(int(degrees[src_new]), target_degree)
+        + calculate_volume_penalty(int(degrees[dst_new]), target_degree)
+    )
+    after = (
+        calculate_volume_penalty(int(degrees[src_old]) - 1, target_degree)
+        + calculate_volume_penalty(int(degrees[dst_old]) - 1, target_degree)
+        + calculate_volume_penalty(int(degrees[src_new]) + 1, target_degree)
+        + calculate_volume_penalty(int(degrees[dst_new]) + 1, target_degree)
+    )
+    return float(after - before)
+
+
+def propose_edge_relocation(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_set: set[tuple[int, int]],
+    rng: np.random.Generator,
+    max_attempts: int = 32,
+) -> tuple[int, tuple[int, int], tuple[int, int]] | None:
+    if len(edge_i) < 1 or sites < 4:
+        return None
+    for _ in range(max_attempts):
+        edge_index = int(rng.integers(len(edge_i)))
+        old_edge = tuple(sorted((int(edge_i[edge_index]), int(edge_j[edge_index]))))
+        candidate_nodes = rng.choice(sites, size=2, replace=False)
+        new_edge = tuple(sorted((int(candidate_nodes[0]), int(candidate_nodes[1]))))
+        if new_edge in edge_set:
+            continue
+        if len({old_edge[0], old_edge[1], new_edge[0], new_edge[1]}) < 4:
+            continue
+        return edge_index, old_edge, new_edge
+    return None
+
+
+def pair_hotness(left_density: float, right_density: float) -> float:
+    return float(np.sqrt(max(left_density, 0.0) * max(right_density, 0.0)))
+
+
+def compute_scalar_node_entanglement_density(
+    sites: int,
+    spins: np.ndarray,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    couplings: np.ndarray,
+) -> np.ndarray:
+    density = np.zeros(sites, dtype=np.float64)
+    count = np.zeros(sites, dtype=np.float64)
+    if len(edge_i) == 0:
+        return density.astype(np.float32)
+    alignment = 0.5 * (1.0 + spins[edge_i].astype(np.float64) * spins[edge_j].astype(np.float64))
+    edge_strength = np.abs(couplings.astype(np.float64)) * alignment
+    np.add.at(density, edge_i, edge_strength)
+    np.add.at(density, edge_j, edge_strength)
+    np.add.at(count, edge_i, 1.0)
+    np.add.at(count, edge_j, 1.0)
+    normalized = np.divide(density, np.maximum(count, 1.0), out=np.zeros_like(density), where=count > 0.0)
+    return normalized.astype(np.float32)
+
+
+def compute_su3_node_entanglement_density(
+    sites: int,
+    colors: np.ndarray,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    kernels: np.ndarray,
+) -> np.ndarray:
+    density = np.zeros(sites, dtype=np.float64)
+    count = np.zeros(sites, dtype=np.float64)
+    if len(edge_i) == 0:
+        return density.astype(np.float32)
+    edge_strength = kernels[np.arange(len(edge_i)), colors[edge_i], colors[edge_j]].astype(np.float64)
+    np.add.at(density, edge_i, edge_strength)
+    np.add.at(density, edge_j, edge_strength)
+    np.add.at(count, edge_i, 1.0)
+    np.add.at(count, edge_j, 1.0)
+    normalized = np.divide(density, np.maximum(count, 1.0), out=np.zeros_like(density), where=count > 0.0)
+    return normalized.astype(np.float32)
+
+
+def compute_swap_entanglement_bias_delta(
+    slot_strengths: tuple[float, float],
+    old_edges: tuple[tuple[int, int], tuple[int, int]],
+    new_edges: tuple[tuple[int, int], tuple[int, int]],
+    node_density: np.ndarray,
+    bias_strength: float,
+) -> float:
+    if bias_strength <= 0.0:
+        return 0.0
+    old_score = 0.0
+    new_score = 0.0
+    for slot_strength, edge in zip(slot_strengths, old_edges):
+        old_score += float(slot_strength) * pair_hotness(float(node_density[edge[0]]), float(node_density[edge[1]]))
+    for slot_strength, edge in zip(slot_strengths, new_edges):
+        new_score += float(slot_strength) * pair_hotness(float(node_density[edge[0]]), float(node_density[edge[1]]))
+    return -float(bias_strength) * (new_score - old_score)
+
+
 def evaluate_distance_model(
     label: str,
     alpha: float,
@@ -2383,6 +2731,9 @@ class MonteCarloOperatorNetwork:
         self.burn_in_sweeps = config.burn_in_sweeps
         self.measurement_sweeps = config.measurement_sweeps
         self.sample_interval = config.sample_interval
+        self.edge_swap_attempts_per_sweep = max(0, int(config.edge_swap_attempts_per_sweep))
+        self.edge_swap_entanglement_bias = max(0.0, float(config.edge_swap_entanglement_bias))
+        self.cosmological_constant = max(0.0, float(config.cosmological_constant))
         self.walker_count = config.walker_count
         self.max_walk_steps = config.max_walk_steps
         self.distance_powers = normalize_distance_powers(config.distance_powers)
@@ -2407,6 +2758,8 @@ class MonteCarloOperatorNetwork:
         self.rng = np.random.default_rng(seed)
         self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
         self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
+        self._edge_swap_attempts = 0
+        self._edge_swap_accepted = 0
 
     def analyze(self) -> MonteCarloArtifacts:
         self._progress(0, 4, "build locality")
@@ -2476,6 +2829,19 @@ class MonteCarloOperatorNetwork:
             mean_return_error=fit_error,
         )
         mean_magnetization = float(np.mean(np.abs(np.mean(samples, axis=1))))
+        eh_diagnostics = fit_einstein_hilbert_action_density(
+            action_density=compute_scalar_action_density_by_node(
+                sites=self.sites,
+                samples=samples,
+                edge_i=edge_i,
+                edge_j=edge_j,
+                couplings=couplings,
+                local_fields=local_fields,
+                triads=triads,
+                triad_scale=1.0,
+            ),
+            ricci_scalar=compute_node_ricci_scalar_proxy(self.sites, edge_i, edge_j),
+        )
         summary = MonteCarloSummary(
             sites=self.sites,
             seed=self.seed,
@@ -2488,6 +2854,8 @@ class MonteCarloOperatorNetwork:
             burn_in_sweeps=self.burn_in_sweeps,
             measurement_sweeps=self.measurement_sweeps,
             samples_collected=int(samples.shape[0]),
+            edge_swap_attempts=self._edge_swap_attempts,
+            edge_swap_accepted=self._edge_swap_accepted,
             mean_energy=float(np.mean(energies)),
             mean_magnetization=mean_magnetization,
             color_entropy=0.0,
@@ -2510,6 +2878,16 @@ class MonteCarloOperatorNetwork:
             ricci_min_curvature=self._last_ricci.min_curvature,
             ricci_negative_edge_fraction=self._last_ricci.negative_edge_fraction,
             ricci_evaporated_edges=self._last_ricci.evaporated_edges,
+            eh_node_count=eh_diagnostics.node_count,
+            eh_action_density_mean=eh_diagnostics.action_density_mean,
+            eh_action_density_std=eh_diagnostics.action_density_std,
+            eh_ricci_scalar_mean=eh_diagnostics.ricci_scalar_mean,
+            eh_ricci_scalar_std=eh_diagnostics.ricci_scalar_std,
+            eh_proportionality_slope=eh_diagnostics.proportionality_slope,
+            eh_intercept=eh_diagnostics.intercept,
+            eh_pearson_correlation=eh_diagnostics.pearson_correlation,
+            eh_fit_r2=eh_diagnostics.fit_r2,
+            eh_normalized_mae=eh_diagnostics.normalized_mae,
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
@@ -2698,6 +3076,8 @@ class MonteCarloOperatorNetwork:
                 ramp_fraction=self.triad_ramp_fraction,
             )
             self._metropolis_sweep(spins, neighbor_index, local_fields, triads, beta, triad_scale)
+            if self._attempt_scalar_edge_swaps(spins, edge_i, edge_j, couplings, beta):
+                neighbor_index = self._build_scalar_neighbor_index(edge_i, edge_j, couplings)
             if self.measurement_ricci_flow_steps > 0 and should_run_measurement_ricci_pulse(
                 sweep=sweep,
                 burn_in_sweeps=self.burn_in_sweeps,
@@ -2763,6 +3143,56 @@ class MonteCarloOperatorNetwork:
         updated_couplings = (couplings[keep_mask] * edge_bias[updated_edge_i, updated_edge_j]).astype(np.float32)
         self._last_ricci = merge_ricci_diagnostics(self._last_ricci, ricci)
         return updated_edge_i, updated_edge_j, updated_couplings
+
+    def _attempt_scalar_edge_swaps(
+        self,
+        spins: np.ndarray,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+        couplings: np.ndarray,
+        beta: float,
+    ) -> bool:
+        if self.edge_swap_attempts_per_sweep <= 0 or len(edge_i) < 2:
+            return False
+        edge_set = build_edge_tuple_set(edge_i, edge_j)
+        degrees = np.bincount(np.concatenate([edge_i, edge_j]), minlength=self.sites).astype(np.int32)
+        node_density = compute_scalar_node_entanglement_density(self.sites, spins, edge_i, edge_j, couplings)
+        accepted = False
+        for _ in range(self.edge_swap_attempts_per_sweep):
+            proposal = propose_edge_relocation(self.sites, edge_i, edge_j, edge_set, self.rng)
+            self._edge_swap_attempts += 1
+            if proposal is None:
+                continue
+            edge_index, old_edge, new_edge = proposal
+            old_energy = -float(couplings[edge_index]) * float(spins[old_edge[0]] * spins[old_edge[1]])
+            new_energy = -float(couplings[edge_index]) * float(spins[new_edge[0]] * spins[new_edge[1]])
+            delta_energy = new_energy - old_energy
+            delta_energy += compute_swap_entanglement_bias_delta(
+                slot_strengths=(float(np.abs(couplings[edge_index])), 0.0),
+                old_edges=(old_edge, old_edge),
+                new_edges=(new_edge, new_edge),
+                node_density=node_density,
+                bias_strength=self.edge_swap_entanglement_bias,
+            )
+            delta_energy += self.cosmological_constant * compute_volume_penalty_delta(
+                degrees=degrees,
+                old_edge=old_edge,
+                new_edge=new_edge,
+                target_degree=self.degree,
+            )
+            if delta_energy > 0.0 and self.rng.random() >= np.exp(-beta * delta_energy):
+                continue
+            edge_set.remove(old_edge)
+            edge_set.add(new_edge)
+            degrees[old_edge[0]] -= 1
+            degrees[old_edge[1]] -= 1
+            degrees[new_edge[0]] += 1
+            degrees[new_edge[1]] += 1
+            edge_i[edge_index], edge_j[edge_index] = np.int32(new_edge[0]), np.int32(new_edge[1])
+            self._edge_swap_accepted += 1
+            node_density = compute_scalar_node_entanglement_density(self.sites, spins, edge_i, edge_j, couplings)
+            accepted = True
+        return accepted
 
     def _metropolis_sweep(
         self,
@@ -2958,6 +3388,9 @@ class SU3TensorNetworkMonteCarlo:
         self.burn_in_sweeps = config.burn_in_sweeps
         self.measurement_sweeps = config.measurement_sweeps
         self.sample_interval = config.sample_interval
+        self.edge_swap_attempts_per_sweep = max(0, int(config.edge_swap_attempts_per_sweep))
+        self.edge_swap_entanglement_bias = max(0.0, float(config.edge_swap_entanglement_bias))
+        self.cosmological_constant = max(0.0, float(config.cosmological_constant))
         self.walker_count = config.walker_count
         self.max_walk_steps = config.max_walk_steps
         self.color_count = 3
@@ -2983,6 +3416,8 @@ class SU3TensorNetworkMonteCarlo:
         self.rng = np.random.default_rng(seed)
         self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
         self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
+        self._edge_swap_attempts = 0
+        self._edge_swap_accepted = 0
 
     def analyze(self) -> MonteCarloArtifacts:
         self._progress(0, 6, "build locality")
@@ -3066,6 +3501,19 @@ class SU3TensorNetworkMonteCarlo:
             spectral_dimension=spectral_dimension,
             tensor_residual=tensor_residual,
         )
+        eh_diagnostics = fit_einstein_hilbert_action_density(
+            action_density=compute_su3_action_density_by_node(
+                sites=self.sites,
+                samples=samples,
+                edge_i=edge_i,
+                edge_j=edge_j,
+                kernels=kernels,
+                local_fields=local_fields,
+                triads=triads,
+                triad_scale=1.0,
+            ),
+            ricci_scalar=compute_node_ricci_scalar_proxy(self.sites, edge_i, edge_j),
+        )
         summary = MonteCarloSummary(
             sites=self.sites,
             seed=self.seed,
@@ -3078,6 +3526,8 @@ class SU3TensorNetworkMonteCarlo:
             burn_in_sweeps=self.burn_in_sweeps,
             measurement_sweeps=self.measurement_sweeps,
             samples_collected=int(samples.shape[0]),
+            edge_swap_attempts=self._edge_swap_attempts,
+            edge_swap_accepted=self._edge_swap_accepted,
             mean_energy=float(np.mean(energies)),
             mean_magnetization=mean_color_imbalance,
             color_entropy=color_entropy,
@@ -3100,6 +3550,16 @@ class SU3TensorNetworkMonteCarlo:
             ricci_min_curvature=self._last_ricci.min_curvature,
             ricci_negative_edge_fraction=self._last_ricci.negative_edge_fraction,
             ricci_evaporated_edges=self._last_ricci.evaporated_edges,
+            eh_node_count=eh_diagnostics.node_count,
+            eh_action_density_mean=eh_diagnostics.action_density_mean,
+            eh_action_density_std=eh_diagnostics.action_density_std,
+            eh_ricci_scalar_mean=eh_diagnostics.ricci_scalar_mean,
+            eh_ricci_scalar_std=eh_diagnostics.ricci_scalar_std,
+            eh_proportionality_slope=eh_diagnostics.proportionality_slope,
+            eh_intercept=eh_diagnostics.intercept,
+            eh_pearson_correlation=eh_diagnostics.pearson_correlation,
+            eh_fit_r2=eh_diagnostics.fit_r2,
+            eh_normalized_mae=eh_diagnostics.normalized_mae,
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
@@ -3294,6 +3754,7 @@ class SU3TensorNetworkMonteCarlo:
         local_fields: np.ndarray,
         iterations: int = 10,
         damping: float = 0.45,
+        report_progress: bool = True,
     ) -> np.ndarray:
         local_potential = np.exp(local_fields / max(self.temperature, 1e-9))
         local_potential /= np.sum(local_potential, axis=1, keepdims=True)
@@ -3318,8 +3779,77 @@ class SU3TensorNetworkMonteCarlo:
                 new_messages[edge_index] = damping * messages[edge_index] + (1.0 - damping) * propagated
                 new_messages[edge_index] /= np.sum(new_messages[edge_index])
             messages = new_messages
-            self._progress(iteration + 1, iterations, "belief propagation")
+            if report_progress:
+                self._progress(iteration + 1, iterations, "belief propagation")
         return messages
+
+    def _attempt_su3_edge_swaps(
+        self,
+        colors: np.ndarray,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+        kernels: np.ndarray,
+        local_fields: np.ndarray,
+        beta: float,
+    ) -> tuple[bool, list[list[tuple[int, np.ndarray]]], list[list[int]], np.ndarray]:
+        neighbors = self._build_su3_neighbors(edge_i, edge_j, kernels)
+        incoming_edges: list[list[int]] = [[] for _ in range(self.sites)]
+        messages = np.empty((0, self.color_count), dtype=np.float64)
+        if self.edge_swap_attempts_per_sweep <= 0 or len(edge_i) < 2:
+            return False, neighbors, incoming_edges, messages
+        edge_set = build_edge_tuple_set(edge_i, edge_j)
+        degrees = np.bincount(np.concatenate([edge_i, edge_j]), minlength=self.sites).astype(np.int32)
+        node_density = compute_su3_node_entanglement_density(self.sites, colors, edge_i, edge_j, kernels)
+        accepted = False
+        for _ in range(self.edge_swap_attempts_per_sweep):
+            proposal = propose_edge_relocation(self.sites, edge_i, edge_j, edge_set, self.rng)
+            self._edge_swap_attempts += 1
+            if proposal is None:
+                continue
+            edge_index, old_edge, new_edge = proposal
+            old_energy = -float(np.log(np.clip(kernels[edge_index, colors[old_edge[0]], colors[old_edge[1]]], 1e-12, None)))
+            new_energy = -float(np.log(np.clip(kernels[edge_index, colors[new_edge[0]], colors[new_edge[1]]], 1e-12, None)))
+            delta_energy = new_energy - old_energy
+            delta_energy += compute_swap_entanglement_bias_delta(
+                slot_strengths=(float(kernels[edge_index, colors[new_edge[0]], colors[new_edge[1]]]), 0.0),
+                old_edges=(old_edge, old_edge),
+                new_edges=(new_edge, new_edge),
+                node_density=node_density,
+                bias_strength=self.edge_swap_entanglement_bias,
+            )
+            delta_energy += self.cosmological_constant * compute_volume_penalty_delta(
+                degrees=degrees,
+                old_edge=old_edge,
+                new_edge=new_edge,
+                target_degree=self.degree,
+            )
+            if delta_energy > 0.0 and self.rng.random() >= np.exp(-beta * delta_energy):
+                continue
+            edge_set.remove(old_edge)
+            edge_set.add(new_edge)
+            degrees[old_edge[0]] -= 1
+            degrees[old_edge[1]] -= 1
+            degrees[new_edge[0]] += 1
+            degrees[new_edge[1]] += 1
+            edge_i[edge_index], edge_j[edge_index] = np.int32(new_edge[0]), np.int32(new_edge[1])
+            self._edge_swap_accepted += 1
+            node_density = compute_su3_node_entanglement_density(self.sites, colors, edge_i, edge_j, kernels)
+            accepted = True
+        if not accepted:
+            return False, neighbors, incoming_edges, messages
+        neighbors = self._build_su3_neighbors(edge_i, edge_j, kernels)
+        directed_src, directed_dst, directed_kernel, incoming_edges = self._build_message_graph(edge_i, edge_j, kernels)
+        messages = self._run_belief_propagation(
+            directed_src,
+            directed_dst,
+            directed_kernel,
+            incoming_edges,
+            local_fields,
+            iterations=2,
+            damping=0.55,
+            report_progress=False,
+        )
+        return True, neighbors, incoming_edges, messages
 
     def _sample_color_configurations(
         self,
@@ -3363,6 +3893,16 @@ class SU3TensorNetworkMonteCarlo:
                 log_prob += anneal_ratio * self._triad_color_logits(colors, site, triads, triad_scale)
                 color_prob = softmax_from_log(log_prob)
                 colors[site] = np.int8(self.rng.choice(self.color_count, p=color_prob))
+            swapped, neighbors, incoming_edges, messages = self._attempt_su3_edge_swaps(
+                colors,
+                edge_i,
+                edge_j,
+                kernels,
+                local_fields,
+                beta=1.0 / max(sweep_temperature, 1e-9),
+            )
+            if swapped:
+                marginals = self._compute_site_marginals(local_bias, incoming_edges, messages)
             if self.measurement_ricci_flow_steps > 0 and should_run_measurement_ricci_pulse(
                 sweep=sweep,
                 burn_in_sweeps=self.burn_in_sweeps,
@@ -3857,6 +4397,8 @@ def run_scaling_sweep(
                 graph_prior=summary.graph_prior,
                 distance_model=summary.distance_model,
                 distance_alpha=summary.distance_alpha,
+                edge_swap_attempts=summary.edge_swap_attempts,
+                edge_swap_accepted=summary.edge_swap_accepted,
                 spectral_dimension=summary.spectral_dimension,
                 spectral_dimension_std=summary.spectral_dimension_std,
                 mean_return_error=summary.mean_return_error,
@@ -3865,6 +4407,16 @@ def run_scaling_sweep(
                 ricci_flow_steps=summary.ricci_flow_steps,
                 ricci_mean_curvature=summary.ricci_mean_curvature,
                 ricci_negative_edge_fraction=summary.ricci_negative_edge_fraction,
+                eh_node_count=summary.eh_node_count,
+                eh_action_density_mean=summary.eh_action_density_mean,
+                eh_action_density_std=summary.eh_action_density_std,
+                eh_ricci_scalar_mean=summary.eh_ricci_scalar_mean,
+                eh_ricci_scalar_std=summary.eh_ricci_scalar_std,
+                eh_proportionality_slope=summary.eh_proportionality_slope,
+                eh_intercept=summary.eh_intercept,
+                eh_pearson_correlation=summary.eh_pearson_correlation,
+                eh_fit_r2=summary.eh_fit_r2,
+                eh_normalized_mae=summary.eh_normalized_mae,
                 mean_energy=summary.mean_energy,
                 mean_magnetization=summary.mean_magnetization,
                 color_entropy=summary.color_entropy,
@@ -3905,6 +4457,9 @@ def run_scaling_sweep(
         degree=config.degree,
         triad_burn_in_scale=float(np.clip(config.triad_burn_in_scale, 0.0, 1.0)),
         triad_ramp_fraction=float(np.clip(config.triad_ramp_fraction, 0.0, 1.0)),
+        edge_swap_attempts_per_sweep=max(0, int(config.edge_swap_attempts_per_sweep)),
+        edge_swap_entanglement_bias=max(0.0, float(config.edge_swap_entanglement_bias)),
+        cosmological_constant=max(0.0, float(config.cosmological_constant)),
         distance_powers=config.distance_powers,
         null_model_types=config.null_model_types,
         null_model_samples=config.null_model_samples,
@@ -3950,6 +4505,9 @@ def run_graph_prior_comparison(
             burn_in_sweeps=config.burn_in_sweeps,
             measurement_sweeps=config.measurement_sweeps,
             sample_interval=config.sample_interval,
+            edge_swap_attempts_per_sweep=config.edge_swap_attempts_per_sweep,
+            edge_swap_entanglement_bias=config.edge_swap_entanglement_bias,
+            cosmological_constant=config.cosmological_constant,
             walker_count=config.walker_count,
             max_walk_steps=config.max_walk_steps,
             backend=config.backend,
@@ -4034,6 +4592,9 @@ def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> 
         f"degree: {result.degree}",
         f"triad burn-in scale: {result.triad_burn_in_scale:.2f}",
         f"triad ramp fraction: {result.triad_ramp_fraction:.2f}",
+        f"edge relocations/sweep: {result.edge_swap_attempts_per_sweep}",
+        f"swap entanglement bias: {result.edge_swap_entanglement_bias:.2f}",
+        f"cosmological constant: {result.cosmological_constant:.4f}",
         holographic_line,
         f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
         f"measurement ricci: {result.measurement_ricci_flow_steps} steps" if result.measurement_ricci_flow_steps > 0 else "measurement ricci: off",
@@ -4069,12 +4630,12 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         f"alpha_eff(N->inf): {result.asymptotic_fine_structure_proxy:.8f}" if result.asymptotic_fine_structure_proxy is not None else "alpha_eff(N->inf): n/a",
         f"m_p/m_e(N->inf): {result.asymptotic_proton_electron_mass_ratio_proxy:.6f}" if result.asymptotic_proton_electron_mass_ratio_proxy is not None else "m_p/m_e(N->inf): n/a",
         f"c_eff(N->inf): {result.asymptotic_light_cone_speed:.6f}" if result.asymptotic_light_cone_speed is not None else "c_eff(N->inf): n/a",
-        "sites | spectral dimension | std | return fit error | |m| | samples | seed",
+        "sites | spectral dimension | std | return fit error | |m| | samples | swaps(acc/att) | seed",
     ]
     for point in result.points:
         lines.append(
             f"{point.sites:5d} | {point.spectral_dimension:18.3f} | {point.spectral_dimension_std:3.3f} | "
-            f"{point.mean_return_error:16.5f} | {point.mean_magnetization:3.3f} | {point.samples_collected:7d} | {point.seed}"
+            f"{point.mean_return_error:16.5f} | {point.mean_magnetization:3.3f} | {point.samples_collected:7d} | {point.edge_swap_accepted:4d}/{point.edge_swap_attempts:<4d} | {point.seed}"
         )
         lines.append(
             f"      gauge={point.gauge_group} prior={point.graph_prior} theta={point.theta_order:.5f} asym={point.matter_antimatter_asymmetry:.5f} "
@@ -4085,6 +4646,12 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
             f"c_eff={point.effective_light_cone_speed:.6f} cone_R2={point.light_cone_fit_r2:.5f} cone_leak={point.light_cone_leakage:.5f} "
             f"gravity p={point.gravity_power_exponent:.3f} R^2={point.gravity_inverse_square_r2:.5f} "
             f"mae={point.gravity_inverse_square_mae:.5f}"
+        )
+        lines.append(
+            f"      EH fit nodes={point.eh_node_count} slope={point.eh_proportionality_slope:.5f} intercept={point.eh_intercept:.5f} "
+            f"corr={point.eh_pearson_correlation:.5f} R^2={point.eh_fit_r2:.5f} nMAE={point.eh_normalized_mae:.5f} "
+            f"rho={point.eh_action_density_mean:.5f}±{point.eh_action_density_std:.5f} "
+            f"R={point.eh_ricci_scalar_mean:.5f}±{point.eh_ricci_scalar_std:.5f}"
         )
         lines.append(
             f"      topo d_s~{point.topological_consensus.spectral_dimension_median:.3f}±{point.topological_consensus.spectral_dimension_std:.3f} "
