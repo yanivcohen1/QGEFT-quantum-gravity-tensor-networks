@@ -118,6 +118,8 @@ While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelli
 
 The present campaign points to one especially important next step. The repeated failure mode is no longer a simple lack of tuning; it is the inability of a static prebuilt graph plus local `SU(3)` relaxation to raise $d_s$ while preserving the improved Hausdorff behavior. The natural structural modification is therefore an interleaved growth loop of the form `grow -> short relax -> optional mild Ricci cleanup -> grow`, so that geometry is shaped during inflation rather than only diagnosed after the final graph has already been fixed.
 
+That loop is now available experimentally in the CLI through `--inflation-mode boundary-strain` together with `--inflation-seed-sites ...`. In this mode, each burst identifies a boundary/strain shell, adds a weakly coupled outer layer, performs a short local relaxation, and then trims overly long negative-curvature links before the next burst.
+
 ### 6.1 Benchmarking Status
 
 The repository now contains multiple large-$N$ surrogate regimes, but it does **not** yet contain a completed benchmarking study against conventional Monte Carlo methods for entanglement-related observables. That comparison is scientifically interesting, especially because the current scalable `SU(3)` engine combines sparse graph locality, belief-propagation-assisted updates, rank-truncated transfer kernels, and graph-based postprocessing diagnostics in a single workflow.

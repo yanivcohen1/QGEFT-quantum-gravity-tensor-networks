@@ -572,6 +572,7 @@ class ScalingSweepResult:
     gauge_group: str
     graph_prior: str
     inflation_seed_sites: int | None
+    inflation_mode: str
     holographic_bound_scale: float
     ricci_flow_steps: int
     tensor_bond_dim: int
@@ -592,6 +593,7 @@ class ScalingSweepResult:
                 "gauge_group": self.gauge_group,
                 "graph_prior": self.graph_prior,
                 "inflation_seed_sites": self.inflation_seed_sites,
+                "inflation_mode": self.inflation_mode,
                 "holographic_bound_scale": self.holographic_bound_scale,
                 "ricci_flow_steps": self.ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
@@ -651,6 +653,7 @@ class GraphPriorComparisonResult:
     gauge_group: str
     priors: tuple[str, ...]
     inflation_seed_sites: int | None
+    inflation_mode: str
     holographic_bound_scale: float
     ricci_flow_steps: int
     tensor_bond_dim: int
@@ -669,6 +672,7 @@ class GraphPriorComparisonResult:
                 "gauge_group": self.gauge_group,
                 "priors": list(self.priors),
                 "inflation_seed_sites": self.inflation_seed_sites,
+                "inflation_mode": self.inflation_mode,
                 "holographic_bound_scale": self.holographic_bound_scale,
                 "ricci_flow_steps": self.ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
@@ -707,6 +711,14 @@ def normalize_graph_prior(value: str) -> str:
     allowed = {"3d-local", "random-regular", "small-world"}
     if normalized not in allowed:
         raise ValueError("graph prior must be one of: 3d-local, random-regular, small-world")
+    return normalized
+
+
+def normalize_inflation_mode(value: str) -> str:
+    normalized = value.strip().lower()
+    allowed = {"legacy", "staged", "boundary-strain"}
+    if normalized not in allowed:
+        raise ValueError("inflation mode must be one of: legacy, staged, boundary-strain")
     return normalized
 
 
@@ -785,6 +797,86 @@ def periodic_displacement(reference: np.ndarray, target: np.ndarray) -> np.ndarr
     return delta - np.round(delta)
 
 
+def normalize_series_array(values: np.ndarray) -> np.ndarray:
+    array = np.asarray(values, dtype=np.float32)
+    if len(array) == 0:
+        return np.empty(0, dtype=np.float32)
+    minimum = float(np.min(array))
+    maximum = float(np.max(array))
+    if maximum - minimum <= 1e-12:
+        return np.zeros_like(array, dtype=np.float32)
+    return ((array - minimum) / (maximum - minimum)).astype(np.float32)
+
+
+def normalize_positions_to_unit_cube(positions: np.ndarray) -> np.ndarray:
+    coordinates = np.asarray(positions, dtype=np.float32)
+    mins = np.min(coordinates, axis=0, keepdims=True)
+    spans = np.max(coordinates, axis=0, keepdims=True) - mins
+    spans = np.where(spans <= 1e-9, 1.0, spans)
+    return ((coordinates - mins) / spans).astype(np.float32)
+
+
+def compute_boundary_shell_scores(positions: np.ndarray) -> np.ndarray:
+    coordinates = normalize_positions_to_unit_cube(positions)
+    shell_distance = np.min(
+        np.column_stack(
+            [
+                coordinates[:, 0],
+                1.0 - coordinates[:, 0],
+                coordinates[:, 1],
+                1.0 - coordinates[:, 1],
+                coordinates[:, 2],
+                1.0 - coordinates[:, 2],
+            ]
+        ),
+        axis=1,
+    )
+    return 1.0 - normalize_series_array(shell_distance)
+
+
+def compute_boundary_strain_scores(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    degree: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    boundary_score = compute_boundary_shell_scores(positions)
+    realized_degree = np.sum(adjacency, axis=1).astype(np.float32)
+    degree_deficit = np.clip((float(degree) - realized_degree) / max(float(degree), 1.0), 0.0, 1.0)
+    if len(adjacency) == 0:
+        return boundary_score, np.empty(0, dtype=np.float32)
+    common_neighbors = adjacency.astype(np.int16) @ adjacency.astype(np.int16)
+    closure_mass = np.sum(common_neighbors * adjacency, axis=1).astype(np.float32)
+    closure_denom = np.maximum(realized_degree * np.maximum(realized_degree - 1.0, 1.0), 1.0)
+    local_closure = np.divide(
+        closure_mass,
+        closure_denom,
+        out=np.zeros_like(realized_degree, dtype=np.float32),
+        where=closure_denom > 0.0,
+    )
+    normalized_closure = normalize_series_array(local_closure)
+    strain_score = np.clip(0.65 * degree_deficit + 0.35 * (1.0 - normalized_closure), 0.0, 1.0).astype(np.float32)
+    growth_score = np.clip(0.60 * boundary_score + 0.40 * strain_score, 0.0, 1.0).astype(np.float32)
+    return growth_score, strain_score
+
+
+def select_boundary_growth_parents(
+    growth_score: np.ndarray,
+    stage_additions: int,
+) -> np.ndarray:
+    if len(growth_score) == 0:
+        return np.empty(0, dtype=np.int32)
+    parent_budget = min(len(growth_score), max(4, stage_additions))
+    threshold = float(np.quantile(growth_score, 0.75)) if len(growth_score) >= 4 else float(np.max(growth_score))
+    selected = np.flatnonzero(growth_score >= threshold).astype(np.int32)
+    if len(selected) == 0:
+        order = np.argsort(growth_score)[::-1]
+        return np.asarray(order[:parent_budget], dtype=np.int32)
+    if len(selected) > parent_budget:
+        order = selected[np.argsort(growth_score[selected])[::-1]]
+        return order[:parent_budget].astype(np.int32)
+    return selected
+
+
 def choose_inflation_parent(adjacency: np.ndarray, degree: int, rng: np.random.Generator) -> int:
     degrees = np.sum(adjacency, axis=1).astype(np.float64)
     penalties = np.exp(-degrees / max(float(degree), 1.0))
@@ -813,6 +905,28 @@ def spawn_inflation_child_position(
     offsets = np.asarray([periodic_displacement(anchor, positions[neighbor]) for neighbor in parent_neighbors], dtype=np.float32)
     mean_offset = np.mean(offsets, axis=0)
     child_offset = 0.45 * mean_offset + 0.05 * rng.normal(size=3).astype(np.float32)
+    return np.mod(anchor + child_offset, 1.0).astype(np.float32)
+
+
+def spawn_boundary_shell_child_position(
+    positions: np.ndarray,
+    parent: int,
+    parent_neighbors: np.ndarray,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    anchor = positions[parent]
+    outward = np.asarray(anchor - 0.5, dtype=np.float32)
+    outward_norm = float(np.linalg.norm(outward))
+    if outward_norm <= 1e-6:
+        outward = rng.normal(size=3).astype(np.float32)
+        outward_norm = float(np.linalg.norm(outward))
+    outward = outward / max(outward_norm, 1e-6)
+    if len(parent_neighbors) == 0:
+        jitter = 0.05 * rng.normal(size=3).astype(np.float32)
+        return np.mod(anchor + 0.08 * outward + jitter, 1.0).astype(np.float32)
+    offsets = np.asarray([periodic_displacement(anchor, positions[neighbor]) for neighbor in parent_neighbors], dtype=np.float32)
+    mean_offset = np.mean(offsets, axis=0)
+    child_offset = -0.35 * mean_offset + 0.10 * outward + 0.03 * rng.normal(size=3).astype(np.float32)
     return np.mod(anchor + child_offset, 1.0).astype(np.float32)
 
 
@@ -859,6 +973,55 @@ def expand_inflation_stage(
         adjacency[inherited, old_sites] = True
         enforce_local_degree_budget(adjacency, positions, np.concatenate([inherited, np.asarray([parent, old_sites], dtype=np.int32)]), degree)
     return positions.astype(np.float32), adjacency
+
+
+def expand_boundary_strain_stage(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    birth_stage: np.ndarray,
+    stage_target: int,
+    degree: int,
+    stage_index: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    while len(positions) < stage_target:
+        remaining = stage_target - len(positions)
+        growth_score, _ = compute_boundary_strain_scores(positions, adjacency, degree)
+        parents = select_boundary_growth_parents(growth_score, remaining)
+        if len(parents) == 0:
+            parents = np.arange(len(positions), dtype=np.int32)
+        parent_scores = growth_score[parents] + 1e-3
+        parent_scores = parent_scores / np.sum(parent_scores)
+        additions = min(max(1, len(parents)), remaining)
+        chosen = rng.choice(parents, size=additions, replace=len(parents) < additions, p=parent_scores)
+        for parent in np.asarray(chosen, dtype=np.int32).tolist():
+            parent_neighbors = np.flatnonzero(adjacency[parent])
+            child_position = spawn_boundary_shell_child_position(positions, int(parent), parent_neighbors, rng)
+            old_sites = len(positions)
+            positions = np.vstack([positions, child_position.astype(np.float32)])
+            birth_stage = np.append(birth_stage, np.int16(stage_index))
+            expanded = np.zeros((old_sites + 1, old_sites + 1), dtype=bool)
+            expanded[:old_sites, :old_sites] = adjacency
+            adjacency = expanded
+
+            candidate_neighbors = np.unique(np.concatenate([np.asarray([parent], dtype=np.int32), parent_neighbors.astype(np.int32)]))
+            child_distances = np.asarray(
+                [np.linalg.norm(periodic_displacement(child_position, positions[neighbor])) for neighbor in candidate_neighbors],
+                dtype=np.float32,
+            )
+            keep_count = min(max(2, degree // 2), len(candidate_neighbors))
+            inherited = candidate_neighbors[np.argsort(child_distances)[:keep_count]]
+            adjacency[old_sites, inherited] = True
+            adjacency[inherited, old_sites] = True
+            enforce_local_degree_budget(
+                adjacency,
+                positions,
+                np.concatenate([inherited, np.asarray([parent, old_sites], dtype=np.int32)]),
+                degree,
+            )
+            if len(positions) >= stage_target:
+                break
+    return positions.astype(np.float32), adjacency, birth_stage.astype(np.int16)
 
 
 def collect_local_rewiring_candidates(adjacency: np.ndarray, node: int) -> np.ndarray:
@@ -917,6 +1080,64 @@ def relax_inflation_stage(
     return positions.astype(np.float32), adjacency
 
 
+def apply_mild_boundary_ricci_cleanup(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    degree: int,
+    distance_slack: float = 1.65,
+    negative_curvature_threshold: float = -0.05,
+) -> np.ndarray:
+    if len(adjacency) == 0:
+        return adjacency
+    upper_i, upper_j, curvature, overlap_count = compute_ollivier_ricci_proxy_curvature(adjacency)
+    if len(curvature) == 0:
+        return adjacency
+    distances = pairwise_periodic_distances(positions)
+    neighbor_distances = np.where(adjacency, distances, np.nan)
+    local_scale = np.nanmedian(neighbor_distances, axis=1)
+    fallback_scale = np.nanmean(neighbor_distances, axis=1)
+    local_scale = np.where(np.isfinite(local_scale), local_scale, fallback_scale)
+    local_scale = np.where(np.isfinite(local_scale), local_scale, 0.0).astype(np.float32)
+    edge_distances = distances[upper_i, upper_j]
+    allowed_distance = distance_slack * np.maximum(local_scale[upper_i], local_scale[upper_j])
+    candidate_mask = (edge_distances > allowed_distance) & (curvature < negative_curvature_threshold) & (overlap_count <= 1)
+    if not np.any(candidate_mask):
+        return adjacency
+    cleanup = adjacency.copy()
+    degrees = np.sum(cleanup, axis=1).astype(np.int32)
+    min_degree_floor = max(2, min(4, degree // 2 if degree > 2 else 2))
+    candidate_indices = np.flatnonzero(candidate_mask)
+    severity = (edge_distances[candidate_indices] / np.maximum(allowed_distance[candidate_indices], 1e-6)) - curvature[candidate_indices]
+    order = candidate_indices[np.argsort(severity)[::-1]]
+    for edge_index in order.tolist():
+        src = int(upper_i[edge_index])
+        dst = int(upper_j[edge_index])
+        if degrees[src] <= min_degree_floor or degrees[dst] <= min_degree_floor:
+            continue
+        cleanup[src, dst] = False
+        cleanup[dst, src] = False
+        degrees[src] -= 1
+        degrees[dst] -= 1
+    return cleanup
+
+
+def build_boundary_growth_edge_bias(
+    adjacency: np.ndarray,
+    birth_stage: np.ndarray,
+    total_stages: int,
+    weak_bias: float = 0.35,
+) -> np.ndarray:
+    edge_bias = np.ones_like(adjacency, dtype=np.float32)
+    if len(adjacency) == 0 or total_stages <= 0:
+        return edge_bias
+    maturity = weak_bias + (1.0 - weak_bias) * (1.0 - np.asarray(birth_stage, dtype=np.float32) / max(float(total_stages), 1.0))
+    upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
+    values = 0.5 * (maturity[upper_i] + maturity[upper_j])
+    edge_bias[upper_i, upper_j] = values.astype(np.float32)
+    edge_bias[upper_j, upper_i] = values.astype(np.float32)
+    return edge_bias
+
+
 def grow_graph_via_local_inflation(
     graph_prior: str,
     sites: int,
@@ -936,6 +1157,40 @@ def grow_graph_via_local_inflation(
 
     distances = pairwise_periodic_distances(positions)
     return positions.astype(np.float32), adjacency, distances
+
+
+def grow_graph_via_boundary_strain_inflation(
+    graph_prior: str,
+    sites: int,
+    degree: int,
+    rng: np.random.Generator,
+    seed_sites: int,
+    growth_factor: float,
+    relax_rounds: int,
+    smoothing_strength: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    positions = make_position_cloud(seed_sites, rng, graph_prior)
+    adjacency, _ = build_graph_prior_adjacency(graph_prior, positions, degree, rng)
+    birth_stage = np.zeros(seed_sites, dtype=np.int16)
+    stage_index = 0
+    while len(positions) < sites:
+        stage_index += 1
+        stage_target = next_inflation_stage_size(len(positions), sites, growth_factor)
+        positions, adjacency, birth_stage = expand_boundary_strain_stage(
+            positions,
+            adjacency,
+            birth_stage,
+            stage_target,
+            degree,
+            stage_index,
+            rng,
+        )
+        positions, adjacency = relax_inflation_stage(positions, adjacency, degree, relax_rounds, smoothing_strength, rng)
+        adjacency = apply_mild_boundary_ricci_cleanup(positions, adjacency, degree)
+
+    distances = pairwise_periodic_distances(positions)
+    edge_bias = build_boundary_growth_edge_bias(adjacency, birth_stage, stage_index)
+    return positions.astype(np.float32), adjacency, distances, edge_bias
 
 
 def compute_ollivier_ricci_proxy_curvature(adjacency: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -1099,13 +1354,27 @@ def build_locality_seed(
     inflation_relax_rounds: int,
     inflation_smoothing_strength: float,
 ) -> LocalitySeedArtifacts:
+    inflation_mode = normalize_inflation_mode(inflation_mode)
     normalized_seed_sites = normalize_inflation_seed_sites(sites, inflation_seed_sites)
     if normalized_seed_sites is None:
         positions = make_position_cloud(sites, rng, graph_prior)
         adjacency, distances = build_graph_prior_adjacency(graph_prior, positions, degree, rng)
+        edge_bias = np.ones_like(adjacency, dtype=np.float32)
     else:
         if inflation_mode == "staged":
             positions, adjacency, distances = grow_graph_via_local_inflation(
+                graph_prior,
+                sites,
+                degree,
+                rng,
+                normalized_seed_sites,
+                inflation_growth_factor,
+                inflation_relax_rounds,
+                inflation_smoothing_strength,
+            )
+            edge_bias = np.ones_like(adjacency, dtype=np.float32)
+        elif inflation_mode == "boundary-strain":
+            positions, adjacency, distances, edge_bias = grow_graph_via_boundary_strain_inflation(
                 graph_prior,
                 sites,
                 degree,
@@ -1126,8 +1395,8 @@ def build_locality_seed(
                 0,
                 0.0,
             )
+            edge_bias = np.ones_like(adjacency, dtype=np.float32)
     ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
-    edge_bias = np.ones_like(adjacency, dtype=np.float32)
     return LocalitySeedArtifacts(
         positions=positions.astype(np.float32),
         adjacency=adjacency,
@@ -1827,7 +2096,7 @@ class MonteCarloOperatorNetwork:
         self.temperature = config.temperature
         self.anneal_start_temperature = config.anneal_start_temperature
         self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
-        self.inflation_mode = config.inflation_mode
+        self.inflation_mode = normalize_inflation_mode(config.inflation_mode)
         self.inflation_growth_factor = max(1.1, float(config.inflation_growth_factor))
         self.inflation_relax_rounds = max(0, int(config.inflation_relax_rounds))
         self.inflation_smoothing_strength = float(np.clip(config.inflation_smoothing_strength, 0.0, 1.0))
@@ -2340,7 +2609,7 @@ class SU3TensorNetworkMonteCarlo:
         self.temperature = config.temperature
         self.anneal_start_temperature = config.anneal_start_temperature
         self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
-        self.inflation_mode = config.inflation_mode
+        self.inflation_mode = normalize_inflation_mode(config.inflation_mode)
         self.inflation_growth_factor = max(1.1, float(config.inflation_growth_factor))
         self.inflation_relax_rounds = max(0, int(config.inflation_relax_rounds))
         self.inflation_smoothing_strength = float(np.clip(config.inflation_smoothing_strength, 0.0, 1.0))
@@ -3200,6 +3469,7 @@ def run_scaling_sweep(
         gauge_group=config.gauge_group,
         graph_prior=config.graph_prior,
         inflation_seed_sites=config.inflation_seed_sites,
+        inflation_mode=normalize_inflation_mode(config.inflation_mode),
         holographic_bound_scale=config.holographic_bound_scale,
         ricci_flow_steps=config.ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
@@ -3295,6 +3565,7 @@ def run_graph_prior_comparison(
         gauge_group=config.gauge_group,
         priors=normalized_priors,
         inflation_seed_sites=config.inflation_seed_sites,
+        inflation_mode=normalize_inflation_mode(config.inflation_mode),
         holographic_bound_scale=config.holographic_bound_scale,
         ricci_flow_steps=config.ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
@@ -3316,6 +3587,7 @@ def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> 
         f"gauge group: {result.gauge_group}",
         f"priors: {', '.join(result.priors)}",
         f"inflation seed sites: {result.inflation_seed_sites}" if result.inflation_seed_sites is not None else "inflation seed sites: off",
+        f"inflation mode: {result.inflation_mode}",
         f"degree: {result.degree}",
         holographic_line,
         f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
@@ -3338,6 +3610,7 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         f"gauge group: {result.gauge_group}",
         f"graph prior: {result.graph_prior}",
         f"inflation seed sites: {result.inflation_seed_sites}" if result.inflation_seed_sites is not None else "inflation seed sites: off",
+        f"inflation mode: {result.inflation_mode}",
         f"tensor bond dim: {result.tensor_bond_dim}",
         f"degree: {result.degree}",
         holographic_line,
