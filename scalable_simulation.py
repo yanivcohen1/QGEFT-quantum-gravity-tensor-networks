@@ -447,6 +447,7 @@ class MonteCarloSummary:
     holographic_mean_suppression: float
     holographic_overloaded_edge_fraction: float
     ricci_flow_steps: int
+    measurement_ricci_flow_steps: int
     ricci_mean_curvature: float
     ricci_min_curvature: float
     ricci_negative_edge_fraction: float
@@ -480,6 +481,9 @@ class MonteCarloConfig:
     chiral_scale: float = 0.04
     triad_burn_in_scale: float = 1.0
     triad_ramp_fraction: float = 0.0
+    bulk_root_probability: float = 0.25
+    bulk_root_budget: int = 2
+    bulk_root_degree_bias: float = 1.0
     temperature: float = 1.35
     anneal_start_temperature: float | None = None
     inflation_seed_sites: int | None = None
@@ -504,6 +508,10 @@ class MonteCarloConfig:
     ricci_negative_threshold: float = -0.55
     ricci_evaporation_rate: float = 0.85
     ricci_positive_boost: float = 0.35
+    measurement_ricci_flow_steps: int = 0
+    measurement_ricci_start_fraction: float = 0.75
+    measurement_ricci_interval: int = 20
+    measurement_ricci_strength: float = 0.35
     live_plot_enabled: bool = False
     live_plot_interval: int = 12
     live_plot_max_edges: int = 320
@@ -577,6 +585,7 @@ class ScalingSweepResult:
     inflation_mode: str
     holographic_bound_scale: float
     ricci_flow_steps: int
+    measurement_ricci_flow_steps: int
     tensor_bond_dim: int
     degree: int
     triad_burn_in_scale: float
@@ -600,6 +609,7 @@ class ScalingSweepResult:
                 "inflation_mode": self.inflation_mode,
                 "holographic_bound_scale": self.holographic_bound_scale,
                 "ricci_flow_steps": self.ricci_flow_steps,
+                "measurement_ricci_flow_steps": self.measurement_ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
                 "triad_burn_in_scale": self.triad_burn_in_scale,
@@ -662,6 +672,7 @@ class GraphPriorComparisonResult:
     inflation_mode: str
     holographic_bound_scale: float
     ricci_flow_steps: int
+    measurement_ricci_flow_steps: int
     tensor_bond_dim: int
     degree: int
     triad_burn_in_scale: float
@@ -683,6 +694,7 @@ class GraphPriorComparisonResult:
                 "inflation_mode": self.inflation_mode,
                 "holographic_bound_scale": self.holographic_bound_scale,
                 "ricci_flow_steps": self.ricci_flow_steps,
+                "measurement_ricci_flow_steps": self.measurement_ricci_flow_steps,
                 "tensor_bond_dim": self.tensor_bond_dim,
                 "degree": self.degree,
                 "triad_burn_in_scale": self.triad_burn_in_scale,
@@ -746,6 +758,50 @@ def triad_scale_for_sweep(
     ramp_sweeps = max(1, int(np.ceil(burn_in_sweeps * float(np.clip(ramp_fraction, 0.0, 1.0)))))
     progress = min(max(float(sweep) / float(ramp_sweeps), 0.0), 1.0)
     return float(safe_start + (1.0 - safe_start) * progress)
+
+
+def should_run_measurement_ricci_pulse(
+    sweep: int,
+    burn_in_sweeps: int,
+    measurement_sweeps: int,
+    start_fraction: float,
+    interval: int,
+) -> bool:
+    if measurement_sweeps <= 0:
+        return False
+    measurement_index = sweep - burn_in_sweeps
+    if measurement_index < 0:
+        return False
+    safe_start_fraction = float(np.clip(start_fraction, 0.0, 1.0))
+    start_index = int(np.floor(measurement_sweeps * safe_start_fraction))
+    if measurement_index < start_index:
+        return False
+    safe_interval = max(1, int(interval))
+    return (measurement_index - start_index) % safe_interval == 0
+
+
+def rebuild_adjacency_from_edges(sites: int, edge_i: np.ndarray, edge_j: np.ndarray) -> np.ndarray:
+    adjacency = np.zeros((sites, sites), dtype=bool)
+    if len(edge_i) == 0:
+        return adjacency
+    adjacency[edge_i, edge_j] = True
+    adjacency[edge_j, edge_i] = True
+    return adjacency
+
+
+def merge_ricci_diagnostics(base: RicciFlowDiagnostics, update: RicciFlowDiagnostics) -> RicciFlowDiagnostics:
+    if update.steps <= 0:
+        return base
+    if base.steps <= 0:
+        return update
+    return RicciFlowDiagnostics(
+        steps=base.steps + update.steps,
+        mean_curvature=update.mean_curvature,
+        min_curvature=min(base.min_curvature, update.min_curvature),
+        negative_edge_fraction=update.negative_edge_fraction,
+        evaporated_edges=base.evaporated_edges + update.evaporated_edges,
+        strengthened_edges=base.strengthened_edges + update.strengthened_edges,
+    )
 
 
 def normalize_graph_prior_list(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
@@ -885,6 +941,182 @@ def compute_boundary_strain_scores(
     return growth_score, strain_score
 
 
+def compute_unweighted_topological_distances(adjacency: np.ndarray, source: int) -> np.ndarray:
+    if len(adjacency) == 0:
+        return np.empty(0, dtype=np.float32)
+    graph = sp.csr_matrix(adjacency.astype(np.float32))
+    distances = csgraph.shortest_path(graph, directed=False, indices=int(source), unweighted=True)
+    return np.asarray(distances, dtype=np.float32)
+
+
+def select_deep_core_bridge_neighbors(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    parent: int,
+    parent_neighbors: np.ndarray,
+    child_position: np.ndarray,
+    degree: int,
+    boundary_score: np.ndarray,
+) -> np.ndarray:
+    sites = len(positions)
+    if sites < max(24, degree * 2):
+        return np.empty(0, dtype=np.int32)
+    topo_distances = compute_unweighted_topological_distances(adjacency, parent)
+    if len(topo_distances) == 0:
+        return np.empty(0, dtype=np.int32)
+    core_score = 1.0 - boundary_score
+    core_threshold = float(np.quantile(core_score, 0.70)) if len(core_score) >= 8 else float(np.max(core_score))
+    min_topo_distance = max(3, degree // 4)
+    max_topo_distance = max(min_topo_distance + 1, degree // 2 + 2)
+    forbidden = np.zeros(sites, dtype=bool)
+    forbidden[parent] = True
+    forbidden[parent_neighbors.astype(np.int32)] = True
+    eligible_mask = (
+        np.isfinite(topo_distances)
+        & (topo_distances >= float(min_topo_distance))
+        & (topo_distances <= float(max_topo_distance))
+        & (core_score >= core_threshold)
+        & (~forbidden)
+    )
+    candidates = np.flatnonzero(eligible_mask).astype(np.int32)
+    if len(candidates) == 0:
+        return np.empty(0, dtype=np.int32)
+    topo_target = 0.5 * (min_topo_distance + max_topo_distance)
+    topo_alignment = 1.0 / (1.0 + np.abs(topo_distances[candidates] - topo_target))
+    geometry_distance = np.asarray(
+        [np.linalg.norm(periodic_displacement(child_position, positions[candidate])) for candidate in candidates],
+        dtype=np.float32,
+    )
+    geometry_affinity = 1.0 / (1.0 + geometry_distance)
+    ranking = 0.60 * core_score[candidates] + 0.25 * topo_alignment + 0.15 * geometry_affinity
+    anchor_budget = min(max(1, degree // 6), 2, len(candidates))
+    order = np.argsort(ranking)[::-1]
+    return candidates[order[:anchor_budget]].astype(np.int32)
+
+
+def select_seed_bulk_root_neighbors(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    birth_stage: np.ndarray,
+    parent: int,
+    parent_neighbors: np.ndarray,
+    child_position: np.ndarray,
+    degree: int,
+    boundary_score: np.ndarray,
+    rng: np.random.Generator,
+    penetration_probability: float,
+    bulk_root_budget: int,
+    degree_bias: float,
+    local_neighbor_count: int,
+) -> np.ndarray:
+    if len(birth_stage) != len(positions) or len(positions) == 0:
+        return np.empty(0, dtype=np.int32)
+    remaining_slots = max(0, int(degree) - int(local_neighbor_count))
+    if remaining_slots <= 0:
+        return np.empty(0, dtype=np.int32)
+    seed_nodes = np.flatnonzero(np.asarray(birth_stage, dtype=np.int16) == 0).astype(np.int32)
+    if len(seed_nodes) == 0:
+        return np.empty(0, dtype=np.int32)
+    topo_distances = compute_unweighted_topological_distances(adjacency, parent)
+    if len(topo_distances) == 0:
+        return np.empty(0, dtype=np.int32)
+    forbidden = np.zeros(len(positions), dtype=bool)
+    forbidden[parent] = True
+    forbidden[parent_neighbors.astype(np.int32)] = True
+    min_topo_distance = 2
+    max_topo_distance = max(4, degree // 3 + 2)
+    candidates = seed_nodes[
+        np.isfinite(topo_distances[seed_nodes])
+        & (topo_distances[seed_nodes] >= float(min_topo_distance))
+        & (topo_distances[seed_nodes] <= float(max_topo_distance))
+        & (~forbidden[seed_nodes])
+    ]
+    if len(candidates) == 0:
+        candidates = seed_nodes[~forbidden[seed_nodes]]
+    if len(candidates) == 0:
+        return np.empty(0, dtype=np.int32)
+    safe_probability = float(np.clip(penetration_probability, 0.0, 1.0))
+    target_roots = int(rng.binomial(remaining_slots, safe_probability))
+    root_budget = min(max(0, int(bulk_root_budget)), remaining_slots, len(candidates))
+    target_roots = min(target_roots, root_budget)
+    if target_roots <= 0:
+        return np.empty(0, dtype=np.int32)
+    core_score = 1.0 - boundary_score[candidates]
+    topo_target = 0.5 * (min_topo_distance + max_topo_distance)
+    topo_alignment = 1.0 / (1.0 + np.abs(topo_distances[candidates] - topo_target))
+    realized_degree = np.sum(adjacency[candidates], axis=1).astype(np.float32)
+    degree_headroom = np.clip((float(degree) - realized_degree) / max(float(degree), 1.0), 0.0, None)
+    degree_preference = (1.0 + degree_headroom) ** max(float(degree_bias), 0.0)
+    geometry_distance = np.asarray(
+        [np.linalg.norm(periodic_displacement(child_position, positions[candidate])) for candidate in candidates],
+        dtype=np.float32,
+    )
+    geometry_affinity = 1.0 / (1.0 + geometry_distance)
+    ranking = (0.45 * core_score + 0.25 * topo_alignment + 0.10 * geometry_affinity + 0.20 * normalize_series_array(degree_preference))
+    weights = np.clip(ranking, 1e-6, None).astype(np.float64)
+    weights /= np.sum(weights)
+    picked = rng.choice(candidates, size=target_roots, replace=False, p=weights)
+    return np.asarray(picked, dtype=np.int32)
+
+
+def select_boundary_strain_child_neighbors(
+    positions: np.ndarray,
+    adjacency: np.ndarray,
+    birth_stage: np.ndarray,
+    parent: int,
+    parent_neighbors: np.ndarray,
+    child_position: np.ndarray,
+    degree: int,
+    boundary_score: np.ndarray,
+    rng: np.random.Generator,
+    bulk_root_probability: float,
+    bulk_root_budget: int,
+    bulk_root_degree_bias: float,
+) -> np.ndarray:
+    local_candidates = np.unique(np.concatenate([np.asarray([parent], dtype=np.int32), parent_neighbors.astype(np.int32)]))
+    if len(local_candidates) == 0:
+        local_candidates = np.asarray([parent], dtype=np.int32)
+    local_distances = np.asarray(
+        [np.linalg.norm(periodic_displacement(child_position, positions[neighbor])) for neighbor in local_candidates],
+        dtype=np.float32,
+    )
+    local_keep_count = min(max(2, degree // 2), len(local_candidates))
+    inherited = local_candidates[np.argsort(local_distances)[:local_keep_count]]
+    seed_roots = select_seed_bulk_root_neighbors(
+        positions=positions,
+        adjacency=adjacency,
+        birth_stage=birth_stage,
+        parent=parent,
+        parent_neighbors=parent_neighbors,
+        child_position=child_position,
+        degree=degree,
+        boundary_score=boundary_score,
+        rng=rng,
+        penetration_probability=bulk_root_probability,
+        bulk_root_budget=bulk_root_budget,
+        degree_bias=bulk_root_degree_bias,
+        local_neighbor_count=len(inherited),
+    )
+    core_anchors = select_deep_core_bridge_neighbors(
+        positions=positions,
+        adjacency=adjacency,
+        parent=parent,
+        parent_neighbors=parent_neighbors,
+        child_position=child_position,
+        degree=degree,
+        boundary_score=boundary_score,
+    )
+    if len(core_anchors) == 0 and len(seed_roots) == 0:
+        return inherited.astype(np.int32)
+    return np.unique(
+        np.concatenate([
+            inherited.astype(np.int32),
+            seed_roots.astype(np.int32),
+            core_anchors.astype(np.int32),
+        ])
+    ).astype(np.int32)
+
+
 def select_boundary_growth_parents(
     growth_score: np.ndarray,
     stage_additions: int,
@@ -1008,45 +1240,50 @@ def expand_boundary_strain_stage(
     stage_target: int,
     degree: int,
     stage_index: int,
+    bulk_root_probability: float,
+    bulk_root_budget: int,
+    bulk_root_degree_bias: float,
     rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     while len(positions) < stage_target:
-        remaining = stage_target - len(positions)
         growth_score, _ = compute_boundary_strain_scores(positions, adjacency, degree)
-        parents = select_boundary_growth_parents(growth_score, remaining)
+        boundary_score = compute_boundary_shell_scores(positions)
+        parents = select_boundary_growth_parents(growth_score, 1)
         if len(parents) == 0:
             parents = np.arange(len(positions), dtype=np.int32)
         parent_scores = growth_score[parents] + 1e-3
         parent_scores = parent_scores / np.sum(parent_scores)
-        additions = min(max(1, len(parents)), remaining)
-        chosen = rng.choice(parents, size=additions, replace=len(parents) < additions, p=parent_scores)
-        for parent in np.asarray(chosen, dtype=np.int32).tolist():
-            parent_neighbors = np.flatnonzero(adjacency[parent])
-            child_position = spawn_boundary_shell_child_position(positions, int(parent), parent_neighbors, rng)
-            old_sites = len(positions)
-            positions = np.vstack([positions, child_position.astype(np.float32)])
-            birth_stage = np.append(birth_stage, np.int16(stage_index))
-            expanded = np.zeros((old_sites + 1, old_sites + 1), dtype=bool)
-            expanded[:old_sites, :old_sites] = adjacency
-            adjacency = expanded
-
-            candidate_neighbors = np.unique(np.concatenate([np.asarray([parent], dtype=np.int32), parent_neighbors.astype(np.int32)]))
-            child_distances = np.asarray(
-                [np.linalg.norm(periodic_displacement(child_position, positions[neighbor])) for neighbor in candidate_neighbors],
-                dtype=np.float32,
-            )
-            keep_count = min(max(2, degree // 2), len(candidate_neighbors))
-            inherited = candidate_neighbors[np.argsort(child_distances)[:keep_count]]
-            adjacency[old_sites, inherited] = True
-            adjacency[inherited, old_sites] = True
-            enforce_local_degree_budget(
-                adjacency,
-                positions,
-                np.concatenate([inherited, np.asarray([parent, old_sites], dtype=np.int32)]),
-                degree,
-            )
-            if len(positions) >= stage_target:
-                break
+        parent = int(rng.choice(parents, p=parent_scores))
+        parent_neighbors = np.flatnonzero(adjacency[parent])
+        child_position = spawn_boundary_shell_child_position(positions, parent, parent_neighbors, rng)
+        inherited = select_boundary_strain_child_neighbors(
+            positions=positions,
+            adjacency=adjacency,
+            birth_stage=birth_stage,
+            parent=parent,
+            parent_neighbors=parent_neighbors,
+            child_position=child_position,
+            degree=degree,
+            boundary_score=boundary_score,
+            rng=rng,
+            bulk_root_probability=bulk_root_probability,
+            bulk_root_budget=bulk_root_budget,
+            bulk_root_degree_bias=bulk_root_degree_bias,
+        )
+        old_sites = len(positions)
+        positions = np.vstack([positions, child_position.astype(np.float32)])
+        birth_stage = np.append(birth_stage, np.int16(stage_index))
+        expanded = np.zeros((old_sites + 1, old_sites + 1), dtype=bool)
+        expanded[:old_sites, :old_sites] = adjacency
+        adjacency = expanded
+        adjacency[old_sites, inherited] = True
+        adjacency[inherited, old_sites] = True
+        enforce_local_degree_budget(
+            adjacency,
+            positions,
+            np.concatenate([inherited, np.asarray([parent, old_sites], dtype=np.int32)]),
+            degree,
+        )
     return positions.astype(np.float32), adjacency, birth_stage.astype(np.int16)
 
 
@@ -1194,6 +1431,9 @@ def grow_graph_via_boundary_strain_inflation(
     growth_factor: float,
     relax_rounds: int,
     smoothing_strength: float,
+    bulk_root_probability: float,
+    bulk_root_budget: int,
+    bulk_root_degree_bias: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     positions = make_position_cloud(seed_sites, rng, graph_prior)
     adjacency, _ = build_graph_prior_adjacency(graph_prior, positions, degree, rng)
@@ -1209,6 +1449,9 @@ def grow_graph_via_boundary_strain_inflation(
             stage_target,
             degree,
             stage_index,
+            bulk_root_probability,
+            bulk_root_budget,
+            bulk_root_degree_bias,
             rng,
         )
         positions, adjacency = relax_inflation_stage(positions, adjacency, degree, relax_rounds, smoothing_strength, rng)
@@ -1379,6 +1622,9 @@ def build_locality_seed(
     inflation_growth_factor: float,
     inflation_relax_rounds: int,
     inflation_smoothing_strength: float,
+    bulk_root_probability: float,
+    bulk_root_budget: int,
+    bulk_root_degree_bias: float,
 ) -> LocalitySeedArtifacts:
     inflation_mode = normalize_inflation_mode(inflation_mode)
     normalized_seed_sites = normalize_inflation_seed_sites(sites, inflation_seed_sites)
@@ -1409,6 +1655,9 @@ def build_locality_seed(
                 inflation_growth_factor,
                 inflation_relax_rounds,
                 inflation_smoothing_strength,
+                bulk_root_probability,
+                bulk_root_budget,
+                bulk_root_degree_bias,
             )
         else:
             positions, adjacency, distances = grow_graph_via_local_inflation(
@@ -2121,6 +2370,9 @@ class MonteCarloOperatorNetwork:
         self.chiral_scale = config.chiral_scale
         self.triad_burn_in_scale = float(np.clip(config.triad_burn_in_scale, 0.0, 1.0))
         self.triad_ramp_fraction = float(np.clip(config.triad_ramp_fraction, 0.0, 1.0))
+        self.bulk_root_probability = float(np.clip(config.bulk_root_probability, 0.0, 1.0))
+        self.bulk_root_budget = max(0, int(config.bulk_root_budget))
+        self.bulk_root_degree_bias = max(0.0, float(config.bulk_root_degree_bias))
         self.temperature = config.temperature
         self.anneal_start_temperature = config.anneal_start_temperature
         self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
@@ -2144,6 +2396,10 @@ class MonteCarloOperatorNetwork:
         self.ricci_negative_threshold = float(config.ricci_negative_threshold)
         self.ricci_evaporation_rate = float(np.clip(config.ricci_evaporation_rate, 0.0, 1.0))
         self.ricci_positive_boost = max(0.0, float(config.ricci_positive_boost))
+        self.measurement_ricci_flow_steps = max(0, int(config.measurement_ricci_flow_steps))
+        self.measurement_ricci_start_fraction = float(np.clip(config.measurement_ricci_start_fraction, 0.0, 1.0))
+        self.measurement_ricci_interval = max(1, int(config.measurement_ricci_interval))
+        self.measurement_ricci_strength = float(np.clip(config.measurement_ricci_strength, 0.0, 1.0))
         self.backend_name, self.xp = resolve_array_backend(config.backend)
         self.progress_reporter = progress_reporter
         self.live_visualizer = live_visualizer
@@ -2159,7 +2415,7 @@ class MonteCarloOperatorNetwork:
         self._progress(1, 4, "build triads")
         triads, unique_triads = self._build_sparse_triads(edge_i, edge_j)
         self._progress(2, 4, STAGE_MONTE_CARLO)
-        samples, energies = self._sample_spin_configurations(edge_i, edge_j, couplings, local_fields, triads)
+        samples, energies, edge_i, edge_j, couplings = self._sample_spin_configurations(edge_i, edge_j, couplings, local_fields, triads)
         raw_edge_weights = self._edge_covariances(samples, edge_i, edge_j, couplings)
         topological_consensus = assess_topological_three_dimensionality(
             sites=self.sites,
@@ -2249,6 +2505,7 @@ class MonteCarloOperatorNetwork:
             holographic_mean_suppression=self._last_holographic.mean_suppression,
             holographic_overloaded_edge_fraction=self._last_holographic.overloaded_edge_fraction,
             ricci_flow_steps=self._last_ricci.steps,
+            measurement_ricci_flow_steps=self.measurement_ricci_flow_steps,
             ricci_mean_curvature=self._last_ricci.mean_curvature,
             ricci_min_curvature=self._last_ricci.min_curvature,
             ricci_negative_edge_fraction=self._last_ricci.negative_edge_fraction,
@@ -2303,6 +2560,9 @@ class MonteCarloOperatorNetwork:
             self.inflation_growth_factor,
             self.inflation_relax_rounds,
             self.inflation_smoothing_strength,
+            self.bulk_root_probability,
+            self.bulk_root_budget,
+            self.bulk_root_degree_bias,
         )
         if self.ricci_flow_steps > 0:
             adjacency, edge_bias, ricci = apply_combinatorial_ricci_flow(
@@ -2416,11 +2676,8 @@ class MonteCarloOperatorNetwork:
         couplings: np.ndarray,
         local_fields: np.ndarray,
         triads: list[list[tuple[int, int, float]]],
-    ) -> tuple[np.ndarray, np.ndarray]:
-        neighbor_index = [[] for _ in range(self.sites)]
-        for i, j, coupling in zip(edge_i.tolist(), edge_j.tolist(), couplings.tolist()):
-            neighbor_index[i].append((j, coupling))
-            neighbor_index[j].append((i, coupling))
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        neighbor_index = self._build_scalar_neighbor_index(edge_i, edge_j, couplings)
 
         spins = self.rng.choice(np.array([-1, 1], dtype=np.int8), size=self.sites).astype(np.int8)
         samples: list[np.ndarray] = []
@@ -2441,6 +2698,15 @@ class MonteCarloOperatorNetwork:
                 ramp_fraction=self.triad_ramp_fraction,
             )
             self._metropolis_sweep(spins, neighbor_index, local_fields, triads, beta, triad_scale)
+            if self.measurement_ricci_flow_steps > 0 and should_run_measurement_ricci_pulse(
+                sweep=sweep,
+                burn_in_sweeps=self.burn_in_sweeps,
+                measurement_sweeps=self.measurement_sweeps,
+                start_fraction=self.measurement_ricci_start_fraction,
+                interval=self.measurement_ricci_interval,
+            ):
+                edge_i, edge_j, couplings = self._apply_scalar_measurement_ricci_pulse(edge_i, edge_j, couplings)
+                neighbor_index = self._build_scalar_neighbor_index(edge_i, edge_j, couplings)
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
             if self.live_visualizer is not None and self.live_visualizer.should_update(sweep, total_sweeps):
                 dynamic_edge_strengths = np.abs(couplings.astype(np.float64)) * (0.35 + 0.65 * (spins[edge_i] == spins[edge_j]).astype(np.float64))
@@ -2461,7 +2727,42 @@ class MonteCarloOperatorNetwork:
         if not samples:
             samples.append(spins.copy())
             energies.append(self._energy(spins, edge_i, edge_j, couplings, local_fields, triads, 1.0))
-        return np.asarray(samples, dtype=np.int8), np.asarray(energies, dtype=float)
+        return np.asarray(samples, dtype=np.int8), np.asarray(energies, dtype=float), edge_i, edge_j, couplings
+
+    def _build_scalar_neighbor_index(
+        self,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+        couplings: np.ndarray,
+    ) -> list[list[tuple[int, float]]]:
+        neighbor_index = [[] for _ in range(self.sites)]
+        for i, j, coupling in zip(edge_i.tolist(), edge_j.tolist(), couplings.tolist()):
+            neighbor_index[i].append((j, coupling))
+            neighbor_index[j].append((i, coupling))
+        return neighbor_index
+
+    def _apply_scalar_measurement_ricci_pulse(
+        self,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+        couplings: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        adjacency = rebuild_adjacency_from_edges(self.sites, edge_i, edge_j)
+        flowed, edge_bias, ricci = apply_combinatorial_ricci_flow(
+            adjacency=adjacency,
+            degree=self.degree,
+            rng=self.rng,
+            steps=self.measurement_ricci_flow_steps,
+            negative_threshold=self.ricci_negative_threshold,
+            evaporation_rate=self.ricci_evaporation_rate * self.measurement_ricci_strength,
+            positive_boost=self.ricci_positive_boost * self.measurement_ricci_strength,
+        )
+        keep_mask = flowed[edge_i, edge_j]
+        updated_edge_i = edge_i[keep_mask].astype(np.int32)
+        updated_edge_j = edge_j[keep_mask].astype(np.int32)
+        updated_couplings = (couplings[keep_mask] * edge_bias[updated_edge_i, updated_edge_j]).astype(np.float32)
+        self._last_ricci = merge_ricci_diagnostics(self._last_ricci, ricci)
+        return updated_edge_i, updated_edge_j, updated_couplings
 
     def _metropolis_sweep(
         self,
@@ -2644,6 +2945,9 @@ class SU3TensorNetworkMonteCarlo:
         self.chiral_scale = config.chiral_scale
         self.triad_burn_in_scale = float(np.clip(config.triad_burn_in_scale, 0.0, 1.0))
         self.triad_ramp_fraction = float(np.clip(config.triad_ramp_fraction, 0.0, 1.0))
+        self.bulk_root_probability = float(np.clip(config.bulk_root_probability, 0.0, 1.0))
+        self.bulk_root_budget = max(0, int(config.bulk_root_budget))
+        self.bulk_root_degree_bias = max(0.0, float(config.bulk_root_degree_bias))
         self.temperature = config.temperature
         self.anneal_start_temperature = config.anneal_start_temperature
         self.inflation_seed_sites = normalize_inflation_seed_sites(sites, config.inflation_seed_sites)
@@ -2669,6 +2973,10 @@ class SU3TensorNetworkMonteCarlo:
         self.ricci_negative_threshold = float(config.ricci_negative_threshold)
         self.ricci_evaporation_rate = float(np.clip(config.ricci_evaporation_rate, 0.0, 1.0))
         self.ricci_positive_boost = max(0.0, float(config.ricci_positive_boost))
+        self.measurement_ricci_flow_steps = max(0, int(config.measurement_ricci_flow_steps))
+        self.measurement_ricci_start_fraction = float(np.clip(config.measurement_ricci_start_fraction, 0.0, 1.0))
+        self.measurement_ricci_interval = max(1, int(config.measurement_ricci_interval))
+        self.measurement_ricci_strength = float(np.clip(config.measurement_ricci_strength, 0.0, 1.0))
         self.progress_reporter = progress_reporter
         self.live_visualizer = live_visualizer
         self._live_positions: np.ndarray = np.zeros((self.sites, 3), dtype=np.float32)
@@ -2688,7 +2996,7 @@ class SU3TensorNetworkMonteCarlo:
         directed_src, directed_dst, directed_kernel, incoming_edges = self._build_message_graph(edge_i, edge_j, kernels)
         messages = self._run_belief_propagation(directed_src, directed_dst, directed_kernel, incoming_edges, local_fields)
         self._progress(4, 6, STAGE_MONTE_CARLO)
-        samples, energies, marginals = self._sample_color_configurations(
+        samples, energies, marginals, edge_i, edge_j, couplings, link_phases = self._sample_color_configurations(
             edge_i,
             edge_j,
             kernels,
@@ -2696,6 +3004,8 @@ class SU3TensorNetworkMonteCarlo:
             triads,
             incoming_edges,
             messages,
+            couplings,
+            link_phases,
         )
         self._progress(5, 6, "distance tests")
         raw_edge_weights = self._edge_correlations(samples, edge_i, edge_j, couplings)
@@ -2785,6 +3095,7 @@ class SU3TensorNetworkMonteCarlo:
             holographic_mean_suppression=self._last_holographic.mean_suppression,
             holographic_overloaded_edge_fraction=self._last_holographic.overloaded_edge_fraction,
             ricci_flow_steps=self._last_ricci.steps,
+            measurement_ricci_flow_steps=self.measurement_ricci_flow_steps,
             ricci_mean_curvature=self._last_ricci.mean_curvature,
             ricci_min_curvature=self._last_ricci.min_curvature,
             ricci_negative_edge_fraction=self._last_ricci.negative_edge_fraction,
@@ -2840,6 +3151,9 @@ class SU3TensorNetworkMonteCarlo:
             self.inflation_growth_factor,
             self.inflation_relax_rounds,
             self.inflation_smoothing_strength,
+            self.bulk_root_probability,
+            self.bulk_root_budget,
+            self.bulk_root_degree_bias,
         )
         if self.ricci_flow_steps > 0:
             adjacency, edge_bias, ricci = apply_combinatorial_ricci_flow(
@@ -3016,11 +3330,10 @@ class SU3TensorNetworkMonteCarlo:
         triads: list[list[tuple[int, int, float]]],
         incoming_edges: list[list[int]],
         messages: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        neighbors: list[list[tuple[int, np.ndarray]]] = [[] for _ in range(self.sites)]
-        for edge_index, (src, dst) in enumerate(zip(edge_i.tolist(), edge_j.tolist())):
-            neighbors[src].append((dst, kernels[edge_index]))
-            neighbors[dst].append((src, kernels[edge_index].T))
+        couplings: np.ndarray,
+        link_phases: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        neighbors = self._build_su3_neighbors(edge_i, edge_j, kernels)
 
         colors = self.rng.integers(0, self.color_count, size=self.sites, dtype=np.int8)
         samples: list[np.ndarray] = []
@@ -3050,6 +3363,23 @@ class SU3TensorNetworkMonteCarlo:
                 log_prob += anneal_ratio * self._triad_color_logits(colors, site, triads, triad_scale)
                 color_prob = softmax_from_log(log_prob)
                 colors[site] = np.int8(self.rng.choice(self.color_count, p=color_prob))
+            if self.measurement_ricci_flow_steps > 0 and should_run_measurement_ricci_pulse(
+                sweep=sweep,
+                burn_in_sweeps=self.burn_in_sweeps,
+                measurement_sweeps=self.measurement_sweeps,
+                start_fraction=self.measurement_ricci_start_fraction,
+                interval=self.measurement_ricci_interval,
+            ):
+                edge_i, edge_j, couplings, kernels, link_phases, incoming_edges, messages = self._apply_su3_measurement_ricci_pulse(
+                    edge_i,
+                    edge_j,
+                    couplings,
+                    kernels,
+                    link_phases,
+                    local_fields,
+                )
+                neighbors = self._build_su3_neighbors(edge_i, edge_j, kernels)
+                marginals = self._compute_site_marginals(local_bias, incoming_edges, messages)
             self._progress(sweep + 1, total_sweeps, STAGE_MONTE_CARLO)
             if self.live_visualizer is not None and self.live_visualizer.should_update(sweep, total_sweeps):
                 active_edge_strengths = kernels[np.arange(len(edge_i)), colors[edge_i], colors[edge_j]].astype(np.float64)
@@ -3069,7 +3399,58 @@ class SU3TensorNetworkMonteCarlo:
         if not samples:
             samples.append(colors.copy())
             energies.append(self._color_energy(colors, edge_i, edge_j, kernels, local_fields, triads, 1.0))
-        return np.asarray(samples, dtype=np.int8), np.asarray(energies, dtype=float), marginals
+        return np.asarray(samples, dtype=np.int8), np.asarray(energies, dtype=float), marginals, edge_i, edge_j, couplings, link_phases
+
+    def _build_su3_neighbors(
+        self,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+        kernels: np.ndarray,
+    ) -> list[list[tuple[int, np.ndarray]]]:
+        neighbors: list[list[tuple[int, np.ndarray]]] = [[] for _ in range(self.sites)]
+        for edge_index, (src, dst) in enumerate(zip(edge_i.tolist(), edge_j.tolist())):
+            neighbors[src].append((dst, kernels[edge_index]))
+            neighbors[dst].append((src, kernels[edge_index].T))
+        return neighbors
+
+    def _apply_su3_measurement_ricci_pulse(
+        self,
+        edge_i: np.ndarray,
+        edge_j: np.ndarray,
+        couplings: np.ndarray,
+        kernels: np.ndarray,
+        link_phases: np.ndarray,
+        local_fields: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[list[int]], np.ndarray]:
+        del kernels
+        adjacency = rebuild_adjacency_from_edges(self.sites, edge_i, edge_j)
+        flowed, edge_bias, ricci = apply_combinatorial_ricci_flow(
+            adjacency=adjacency,
+            degree=self.degree,
+            rng=self.rng,
+            steps=self.measurement_ricci_flow_steps,
+            negative_threshold=self.ricci_negative_threshold,
+            evaporation_rate=self.ricci_evaporation_rate * self.measurement_ricci_strength,
+            positive_boost=self.ricci_positive_boost * self.measurement_ricci_strength,
+        )
+        keep_mask = flowed[edge_i, edge_j]
+        updated_edge_i = edge_i[keep_mask].astype(np.int32)
+        updated_edge_j = edge_j[keep_mask].astype(np.int32)
+        updated_link_phases = link_phases[keep_mask]
+        updated_couplings = (couplings[keep_mask] * edge_bias[updated_edge_i, updated_edge_j]).astype(np.float32)
+        updated_kernels, _ = self._build_truncated_kernels(updated_couplings, updated_link_phases)
+        directed_src, directed_dst, directed_kernel, incoming_edges = self._build_message_graph(updated_edge_i, updated_edge_j, updated_kernels)
+        messages = self._run_belief_propagation(
+            directed_src,
+            directed_dst,
+            directed_kernel,
+            incoming_edges,
+            local_fields,
+            iterations=4,
+            damping=0.55,
+        )
+        self._last_ricci = merge_ricci_diagnostics(self._last_ricci, ricci)
+        return updated_edge_i, updated_edge_j, updated_couplings, updated_kernels, updated_link_phases, incoming_edges, messages
 
     def _triad_color_logits(
         self,
@@ -3519,6 +3900,7 @@ def run_scaling_sweep(
         inflation_mode=normalize_inflation_mode(config.inflation_mode),
         holographic_bound_scale=config.holographic_bound_scale,
         ricci_flow_steps=config.ricci_flow_steps,
+        measurement_ricci_flow_steps=config.measurement_ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
         triad_burn_in_scale=float(np.clip(config.triad_burn_in_scale, 0.0, 1.0)),
@@ -3555,6 +3937,9 @@ def run_graph_prior_comparison(
             chiral_scale=config.chiral_scale,
             triad_burn_in_scale=config.triad_burn_in_scale,
             triad_ramp_fraction=config.triad_ramp_fraction,
+            bulk_root_probability=config.bulk_root_probability,
+            bulk_root_budget=config.bulk_root_budget,
+            bulk_root_degree_bias=config.bulk_root_degree_bias,
             temperature=config.temperature,
             anneal_start_temperature=config.anneal_start_temperature,
             inflation_seed_sites=config.inflation_seed_sites,
@@ -3579,6 +3964,10 @@ def run_graph_prior_comparison(
             ricci_negative_threshold=config.ricci_negative_threshold,
             ricci_evaporation_rate=config.ricci_evaporation_rate,
             ricci_positive_boost=config.ricci_positive_boost,
+            measurement_ricci_flow_steps=config.measurement_ricci_flow_steps,
+            measurement_ricci_start_fraction=config.measurement_ricci_start_fraction,
+            measurement_ricci_interval=config.measurement_ricci_interval,
+            measurement_ricci_strength=config.measurement_ricci_strength,
         )
         sweep_result, _ = run_scaling_sweep(
             sizes=sizes,
@@ -3619,6 +4008,7 @@ def run_graph_prior_comparison(
         inflation_mode=normalize_inflation_mode(config.inflation_mode),
         holographic_bound_scale=config.holographic_bound_scale,
         ricci_flow_steps=config.ricci_flow_steps,
+        measurement_ricci_flow_steps=config.measurement_ricci_flow_steps,
         tensor_bond_dim=config.tensor_bond_dim,
         degree=config.degree,
         triad_burn_in_scale=float(np.clip(config.triad_burn_in_scale, 0.0, 1.0)),
@@ -3646,6 +4036,7 @@ def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> 
         f"triad ramp fraction: {result.triad_ramp_fraction:.2f}",
         holographic_line,
         f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
+        f"measurement ricci: {result.measurement_ricci_flow_steps} steps" if result.measurement_ricci_flow_steps > 0 else "measurement ricci: off",
         f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
         f"null models: {', '.join(result.null_model_types)} x {result.null_model_samples}" if result.null_model_types and result.null_model_samples > 0 else "null models: off",
         f"3D verdict: {'PASS' if result.overall_three_dimensionality_verdict.passed else 'FAIL'}",
@@ -3672,6 +4063,7 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         f"triad ramp fraction: {result.triad_ramp_fraction:.2f}",
         holographic_line,
         f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
+        f"measurement ricci: {result.measurement_ricci_flow_steps} steps" if result.measurement_ricci_flow_steps > 0 else "measurement ricci: off",
         f"distance powers: {', '.join(f'{alpha:.2f}' for alpha in result.distance_powers)}",
         f"null models: {', '.join(result.null_model_types)} x {result.null_model_samples}" if result.null_model_types and result.null_model_samples > 0 else "null models: off",
         f"alpha_eff(N->inf): {result.asymptotic_fine_structure_proxy:.8f}" if result.asymptotic_fine_structure_proxy is not None else "alpha_eff(N->inf): n/a",

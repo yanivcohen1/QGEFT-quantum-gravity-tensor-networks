@@ -1,0 +1,104 @@
+{
+  "mode": "monte-carlo",
+  "backend": "cpu",
+  "gauge_group": "su3",
+  "graph_prior": "3d-local",
+  "inflation_seed_sites": 128,
+  "inflation_mode": "boundary-strain",
+  "holographic_bound_scale": 0.0,
+  "ricci_flow_steps": 0,
+  "tensor_bond_dim": 2,
+  "degree": 14,
+  "triad_burn_in_scale": 0.1,
+  "triad_ramp_fraction": 0.8,
+  "distance_powers": [
+    1.0
+  ],
+  "null_model_types": [],
+  "null_model_samples": 0,
+  "asymptotic_fine_structure_proxy": 0.023535881265726578,
+  "asymptotic_proton_electron_mass_ratio_proxy": 0.7449160031810595,
+  "asymptotic_light_cone_speed": 0.0028587161974606957,
+  "points": [
+    {
+      "sites": 1024,
+      "gauge_group": "su3",
+      "graph_prior": "3d-local",
+      "distance_model": "E^1.00",
+      "distance_alpha": 1.0,
+      "spectral_dimension": 1.673484688285343,
+      "spectral_dimension_std": 0.11959757508875085,
+      "mean_return_error": 0.0006235479107799048,
+      "holographic_enabled": false,
+      "holographic_mean_suppression": 1.0,
+      "ricci_flow_steps": 0,
+      "ricci_mean_curvature": 0.0,
+      "ricci_negative_edge_fraction": 0.0,
+      "mean_energy": -9443.457581050958,
+      "mean_magnetization": 0.25856119791666676,
+      "color_entropy": 0.9766293949856352,
+      "tensor_residual": 0.031206748059898995,
+      "theta_order": 1.636431669550175,
+      "matter_antimatter_asymmetry": -0.99999999999995,
+      "gravity_power_exponent": -0.0018424511105347718,
+      "gravity_inverse_square_r2": -9.116836903337314,
+      "gravity_inverse_square_mae": 0.46600197637009266,
+      "fine_structure_proxy": 0.023535881265726578,
+      "electron_gap": 3.258224288334729,
+      "proton_gap": 2.4271034143337586,
+      "proton_electron_mass_ratio_proxy": 0.7449160031810595,
+      "effective_light_cone_speed": 0.0028587161974606957,
+      "light_cone_fit_r2": 0.916807866952815,
+      "light_cone_leakage": 0.0,
+      "topological_consensus": {
+        "spectral_dimension_median": 1.6313021525311466,
+        "spectral_dimension_std": 0.23609631992388516,
+        "hausdorff_dimension_median": 1.6649603659236973,
+        "hausdorff_dimension_std": 0.013020227511237204,
+        "three_dimensionality_score": 0.2529817677729858,
+        "graphizations": [
+          {
+            "label": "support",
+            "retained_edge_fraction": 1.0,
+            "spectral_dimension": 1.7260141864129988,
+            "spectral_dimension_std": 0.12494657007274974,
+            "hausdorff_dimension": 1.6649603659236973
+          },
+          {
+            "label": "rank-backbone-50",
+            "retained_edge_fraction": 0.5,
+            "spectral_dimension": 1.6313021525311466,
+            "spectral_dimension_std": 0.12274746530754019,
+            "hausdorff_dimension": 1.6920810449965538
+          },
+          {
+            "label": "rank-backbone-25",
+            "retained_edge_fraction": 0.25,
+            "spectral_dimension": 1.184584441931659,
+            "spectral_dimension_std": 0.2584254789354598,
+            "hausdorff_dimension": 1.6639872944713023
+          }
+        ]
+      },
+      "alternative_distance_models": [
+        {
+          "label": "E^1.00",
+          "alpha": 1.0,
+          "spectral_dimension": 1.673484688285343,
+          "spectral_dimension_std": 0.11959757508875085,
+          "mean_return_error": 0.0006235479107799048,
+          "gravity_power_exponent": -0.0018424511105347718,
+          "gravity_inverse_square_r2": -9.116836903337314,
+          "gravity_inverse_square_mae": 0.46600197637009266,
+          "hausdorff_dimension": 1.8839519949502042,
+          "effective_light_cone_speed": 0.0028587161974606957,
+          "light_cone_fit_r2": 0.916807866952815,
+          "light_cone_leakage": 0.0
+        }
+      ],
+      "null_model_summaries": [],
+      "samples_collected": 20,
+      "seed": 7
+    }
+  ]
+}

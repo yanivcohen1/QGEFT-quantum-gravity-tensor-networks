@@ -47,6 +47,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--triad-scale", type=float, default=None, help="Alias for --chiral-scale in Monte Carlo mode; controls triad coupling strength in the scalar surrogate.")
     parser.add_argument("--triad-burn-in-scale", type=float, default=1.0, help="Initial fraction of the target triad scale used at the start of Monte Carlo burn-in. Values below 1 keep triads soft while new boundary layers thermally relax.")
     parser.add_argument("--triad-ramp-fraction", type=float, default=0.0, help="Fraction of burn-in sweeps over which the triad scale ramps from --triad-burn-in-scale up to the full target triad scale.")
+    parser.add_argument("--bulk-root-probability", type=float, default=0.25, help="Per-connection probability that a new boundary-strain node fills an open neighbor slot with a root back into the original seed core instead of the shell.")
+    parser.add_argument("--bulk-root-budget", type=int, default=2, help="Maximum number of seed-core bulk roots a new boundary-strain node may create.")
+    parser.add_argument("--bulk-root-degree-bias", type=float, default=1.0, help="How strongly bulk-root selection prefers low-degree seed-core nodes over already crowded hubs.")
     parser.add_argument("--degree-penalty-scale", type=float, default=0.0, help="Static suppression strength for couplings attached to nodes whose realized degree exceeds the target degree.")
     parser.add_argument("--holographic-bound-scale", type=float, default=0.0, help="ER=EPR holographic capacity scale. Positive values suppress long-range entanglement links that exceed their local area budget.")
     parser.add_argument("--holographic-penalty-strength", type=float, default=1.0, help="Strength of the suppression applied when an edge exceeds the holographic entanglement bound.")
@@ -54,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ricci-negative-threshold", type=float, default=-0.55, help="Edges with Ricci curvature below this threshold are treated as wormhole candidates.")
     parser.add_argument("--ricci-evaporation-rate", type=float, default=0.85, help="Base probability for evaporating strongly negative-curvature edges during Ricci flow.")
     parser.add_argument("--ricci-positive-boost", type=float, default=0.35, help="Multiplicative strengthening applied to positive-curvature edges during Ricci flow.")
+    parser.add_argument("--measurement-ricci-flow-steps", type=int, default=0, help="Optional mild Ricci-flow steps to pulse during the late measurement sweeps.")
+    parser.add_argument("--measurement-ricci-start-fraction", type=float, default=0.75, help="Fraction of the measurement window after which late Ricci pulses may begin.")
+    parser.add_argument("--measurement-ricci-interval", type=int, default=20, help="How many measurement sweeps to wait between late Ricci pulses.")
+    parser.add_argument("--measurement-ricci-strength", type=float, default=0.35, help="Strength scale applied to evaporation and positive-boost terms for late Ricci pulses.")
     parser.add_argument("--yukawa-scale", type=float, default=0.0, help="Toy Higgs/Yukawa scale for exact mode.")
     parser.add_argument("--domain-wall-height", type=float, default=0.0, help="Toy domain-wall amplitude for exact mode.")
     parser.add_argument("--domain-wall-width", type=float, default=0.18, help="Toy domain-wall width for exact mode.")
@@ -138,6 +145,9 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         chiral_scale=chiral_scale,
         triad_burn_in_scale=args.triad_burn_in_scale,
         triad_ramp_fraction=args.triad_ramp_fraction,
+        bulk_root_probability=args.bulk_root_probability,
+        bulk_root_budget=args.bulk_root_budget,
+        bulk_root_degree_bias=args.bulk_root_degree_bias,
         temperature=1.35 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature,
         anneal_start_temperature=args.anneal_start_temperature,
         inflation_seed_sites=args.inflation_seed_sites,
@@ -162,6 +172,10 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         ricci_negative_threshold=args.ricci_negative_threshold,
         ricci_evaporation_rate=args.ricci_evaporation_rate,
         ricci_positive_boost=args.ricci_positive_boost,
+        measurement_ricci_flow_steps=args.measurement_ricci_flow_steps,
+        measurement_ricci_start_fraction=args.measurement_ricci_start_fraction,
+        measurement_ricci_interval=args.measurement_ricci_interval,
+        measurement_ricci_strength=args.measurement_ricci_strength,
         live_plot_enabled=args.live_plot,
         live_plot_interval=args.live_plot_interval,
         live_plot_max_edges=args.live_plot_max_edges,
