@@ -10,6 +10,7 @@ import time
 from typing import Callable
 
 import numpy as np
+import scipy.stats as stats
 import scipy.sparse as sp
 import scipy.sparse.csgraph as csgraph
 
@@ -405,6 +406,7 @@ class EinsteinHilbertFitDiagnostics:
     proportionality_slope: float
     intercept: float
     pearson_correlation: float
+    pearson_p_value: float
     fit_r2: float
     normalized_mae: float
 
@@ -486,8 +488,14 @@ class MonteCarloSummary:
     eh_proportionality_slope: float
     eh_intercept: float
     eh_pearson_correlation: float
+    eh_pearson_p_value: float
     eh_fit_r2: float
     eh_normalized_mae: float
+    triangle_ricci_mean: float
+    triangle_ricci_std: float
+    triangle_ricci_pearson_correlation: float
+    triangle_ricci_pearson_p_value: float
+    triangle_ricci_fit_r2: float
     gravity_power_exponent: float
     gravity_inverse_square_r2: float
     gravity_inverse_square_mae: float
@@ -603,8 +611,14 @@ class ScalingPoint:
     eh_proportionality_slope: float
     eh_intercept: float
     eh_pearson_correlation: float
+    eh_pearson_p_value: float
     eh_fit_r2: float
     eh_normalized_mae: float
+    triangle_ricci_mean: float
+    triangle_ricci_std: float
+    triangle_ricci_pearson_correlation: float
+    triangle_ricci_pearson_p_value: float
+    triangle_ricci_fit_r2: float
     mean_energy: float
     mean_magnetization: float
     color_entropy: float
@@ -932,6 +946,23 @@ def compute_node_ricci_scalar_proxy(sites: int, edge_i: np.ndarray, edge_j: np.n
     return node_ricci.astype(np.float32)
 
 
+def compute_node_triangle_density_ricci_proxy(sites: int, edge_i: np.ndarray, edge_j: np.ndarray) -> np.ndarray:
+    adjacency = rebuild_adjacency_from_edges(sites, edge_i, edge_j)
+    degrees = np.sum(adjacency, axis=1).astype(np.int32)
+    node_ricci = np.zeros(sites, dtype=np.float64)
+    for node in range(sites):
+        degree = int(degrees[node])
+        if degree < 2:
+            continue
+        neighbors = np.flatnonzero(adjacency[node])
+        subgraph = adjacency[np.ix_(neighbors, neighbors)]
+        realized_neighbor_edges = float(np.sum(subgraph) / 2.0)
+        possible_neighbor_edges = float(degree * (degree - 1) / 2)
+        if possible_neighbor_edges > 0.0:
+            node_ricci[node] = realized_neighbor_edges / possible_neighbor_edges
+    return node_ricci.astype(np.float32)
+
+
 def fit_einstein_hilbert_action_density(action_density: np.ndarray, ricci_scalar: np.ndarray) -> EinsteinHilbertFitDiagnostics:
     density = np.asarray(action_density, dtype=np.float64)
     ricci = np.asarray(ricci_scalar, dtype=np.float64)
@@ -948,6 +979,7 @@ def fit_einstein_hilbert_action_density(action_density: np.ndarray, ricci_scalar
             proportionality_slope=0.0,
             intercept=float(np.mean(density)) if len(density) > 0 else 0.0,
             pearson_correlation=0.0,
+            pearson_p_value=1.0,
             fit_r2=0.0,
             normalized_mae=0.0,
         )
@@ -964,6 +996,7 @@ def fit_einstein_hilbert_action_density(action_density: np.ndarray, ricci_scalar
             proportionality_slope=0.0,
             intercept=intercept,
             pearson_correlation=0.0,
+            pearson_p_value=1.0,
             fit_r2=0.0,
             normalized_mae=float(np.mean(np.abs(residual)) / max(density_std, 1e-12)),
         )
@@ -975,8 +1008,10 @@ def fit_einstein_hilbert_action_density(action_density: np.ndarray, ricci_scalar
     density_std = float(np.std(density))
     ricci_std = float(np.std(ricci))
     correlation = 0.0
+    p_value = 1.0
     if density_std > 1e-12 and ricci_std > 1e-12:
         correlation = float(np.corrcoef(ricci, density)[0, 1])
+        _, p_value = stats.pearsonr(ricci, density)
     return EinsteinHilbertFitDiagnostics(
         node_count=int(len(density)),
         action_density_mean=float(np.mean(density)),
@@ -986,6 +1021,7 @@ def fit_einstein_hilbert_action_density(action_density: np.ndarray, ricci_scalar
         proportionality_slope=float(slope),
         intercept=float(intercept),
         pearson_correlation=correlation,
+        pearson_p_value=float(p_value),
         fit_r2=float(1.0 - np.sum(residual**2) / variance),
         normalized_mae=float(np.mean(np.abs(residual)) / max(density_std, 1e-12)),
     )
@@ -3110,18 +3146,25 @@ class MonteCarloOperatorNetwork:
             mean_return_error=fit_error,
         )
         mean_magnetization = float(np.mean(np.abs(np.mean(samples, axis=1))))
+        action_density = compute_scalar_action_density_by_node(
+            sites=self.sites,
+            samples=samples,
+            edge_i=edge_i,
+            edge_j=edge_j,
+            couplings=couplings,
+            local_fields=local_fields,
+            triads=triads,
+            triad_scale=1.0,
+        )
+        eh_ricci_scalar = compute_node_ricci_scalar_proxy(self.sites, edge_i, edge_j)
+        triangle_ricci_scalar = compute_node_triangle_density_ricci_proxy(self.sites, edge_i, edge_j)
         eh_diagnostics = fit_einstein_hilbert_action_density(
-            action_density=compute_scalar_action_density_by_node(
-                sites=self.sites,
-                samples=samples,
-                edge_i=edge_i,
-                edge_j=edge_j,
-                couplings=couplings,
-                local_fields=local_fields,
-                triads=triads,
-                triad_scale=1.0,
-            ),
-            ricci_scalar=compute_node_ricci_scalar_proxy(self.sites, edge_i, edge_j),
+            action_density=action_density,
+            ricci_scalar=eh_ricci_scalar,
+        )
+        triangle_ricci_diagnostics = fit_einstein_hilbert_action_density(
+            action_density=action_density,
+            ricci_scalar=triangle_ricci_scalar,
         )
         summary = MonteCarloSummary(
             sites=self.sites,
@@ -3167,8 +3210,14 @@ class MonteCarloOperatorNetwork:
             eh_proportionality_slope=eh_diagnostics.proportionality_slope,
             eh_intercept=eh_diagnostics.intercept,
             eh_pearson_correlation=eh_diagnostics.pearson_correlation,
+            eh_pearson_p_value=eh_diagnostics.pearson_p_value,
             eh_fit_r2=eh_diagnostics.fit_r2,
             eh_normalized_mae=eh_diagnostics.normalized_mae,
+            triangle_ricci_mean=triangle_ricci_diagnostics.ricci_scalar_mean,
+            triangle_ricci_std=triangle_ricci_diagnostics.ricci_scalar_std,
+            triangle_ricci_pearson_correlation=triangle_ricci_diagnostics.pearson_correlation,
+            triangle_ricci_pearson_p_value=triangle_ricci_diagnostics.pearson_p_value,
+            triangle_ricci_fit_r2=triangle_ricci_diagnostics.fit_r2,
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
@@ -3802,18 +3851,25 @@ class SU3TensorNetworkMonteCarlo:
             spectral_dimension=spectral_dimension,
             tensor_residual=tensor_residual,
         )
+        action_density = compute_su3_action_density_by_node(
+            sites=self.sites,
+            samples=samples,
+            edge_i=edge_i,
+            edge_j=edge_j,
+            kernels=kernels,
+            local_fields=local_fields,
+            triads=triads,
+            triad_scale=1.0,
+        )
+        eh_ricci_scalar = compute_node_ricci_scalar_proxy(self.sites, edge_i, edge_j)
+        triangle_ricci_scalar = compute_node_triangle_density_ricci_proxy(self.sites, edge_i, edge_j)
         eh_diagnostics = fit_einstein_hilbert_action_density(
-            action_density=compute_su3_action_density_by_node(
-                sites=self.sites,
-                samples=samples,
-                edge_i=edge_i,
-                edge_j=edge_j,
-                kernels=kernels,
-                local_fields=local_fields,
-                triads=triads,
-                triad_scale=1.0,
-            ),
-            ricci_scalar=compute_node_ricci_scalar_proxy(self.sites, edge_i, edge_j),
+            action_density=action_density,
+            ricci_scalar=eh_ricci_scalar,
+        )
+        triangle_ricci_diagnostics = fit_einstein_hilbert_action_density(
+            action_density=action_density,
+            ricci_scalar=triangle_ricci_scalar,
         )
         summary = MonteCarloSummary(
             sites=self.sites,
@@ -3859,8 +3915,14 @@ class SU3TensorNetworkMonteCarlo:
             eh_proportionality_slope=eh_diagnostics.proportionality_slope,
             eh_intercept=eh_diagnostics.intercept,
             eh_pearson_correlation=eh_diagnostics.pearson_correlation,
+            eh_pearson_p_value=eh_diagnostics.pearson_p_value,
             eh_fit_r2=eh_diagnostics.fit_r2,
             eh_normalized_mae=eh_diagnostics.normalized_mae,
+            triangle_ricci_mean=triangle_ricci_diagnostics.ricci_scalar_mean,
+            triangle_ricci_std=triangle_ricci_diagnostics.ricci_scalar_std,
+            triangle_ricci_pearson_correlation=triangle_ricci_diagnostics.pearson_correlation,
+            triangle_ricci_pearson_p_value=triangle_ricci_diagnostics.pearson_p_value,
+            triangle_ricci_fit_r2=triangle_ricci_diagnostics.fit_r2,
             gravity_power_exponent=gravity_exponent,
             gravity_inverse_square_r2=gravity_r2,
             gravity_inverse_square_mae=gravity_mae,
@@ -4732,8 +4794,14 @@ def run_scaling_sweep(
                 eh_proportionality_slope=summary.eh_proportionality_slope,
                 eh_intercept=summary.eh_intercept,
                 eh_pearson_correlation=summary.eh_pearson_correlation,
+                eh_pearson_p_value=summary.eh_pearson_p_value,
                 eh_fit_r2=summary.eh_fit_r2,
                 eh_normalized_mae=summary.eh_normalized_mae,
+                triangle_ricci_mean=summary.triangle_ricci_mean,
+                triangle_ricci_std=summary.triangle_ricci_std,
+                triangle_ricci_pearson_correlation=summary.triangle_ricci_pearson_correlation,
+                triangle_ricci_pearson_p_value=summary.triangle_ricci_pearson_p_value,
+                triangle_ricci_fit_r2=summary.triangle_ricci_fit_r2,
                 mean_energy=summary.mean_energy,
                 mean_magnetization=summary.mean_magnetization,
                 color_entropy=summary.color_entropy,
@@ -4974,9 +5042,13 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         )
         lines.append(
             f"      EH fit nodes={point.eh_node_count} slope={point.eh_proportionality_slope:.5f} intercept={point.eh_intercept:.5f} "
-            f"corr={point.eh_pearson_correlation:.5f} R^2={point.eh_fit_r2:.5f} nMAE={point.eh_normalized_mae:.5f} "
+            f"corr={point.eh_pearson_correlation:.5f} p={point.eh_pearson_p_value:.3e} R^2={point.eh_fit_r2:.5f} nMAE={point.eh_normalized_mae:.5f} "
             f"rho={point.eh_action_density_mean:.5f}±{point.eh_action_density_std:.5f} "
             f"R={point.eh_ricci_scalar_mean:.5f}±{point.eh_ricci_scalar_std:.5f}"
+        )
+        lines.append(
+            f"      triangle-Ricci corr={point.triangle_ricci_pearson_correlation:.5f} p={point.triangle_ricci_pearson_p_value:.3e} "
+            f"R^2={point.triangle_ricci_fit_r2:.5f} R_tri={point.triangle_ricci_mean:.5f}±{point.triangle_ricci_std:.5f}"
         )
         lines.append(
             f"      topo d_s~{point.topological_consensus.spectral_dimension_median:.3f}±{point.topological_consensus.spectral_dimension_std:.3f} "
