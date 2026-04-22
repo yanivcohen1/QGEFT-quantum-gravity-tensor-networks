@@ -410,11 +410,21 @@ class EinsteinHilbertFitDiagnostics:
 
 
 @dataclass(frozen=True)
+class BoundaryStrainControls:
+    bulk_root_probability: float
+    bulk_root_budget: int
+    bulk_root_degree_bias: float
+    causal_foliation: bool
+    causal_max_layer_span: int
+
+
+@dataclass(frozen=True)
 class LocalitySeedArtifacts:
     positions: np.ndarray
     adjacency: np.ndarray
     distances: np.ndarray
     edge_bias: np.ndarray
+    birth_stage: np.ndarray
     ricci: RicciFlowDiagnostics
 
 
@@ -510,6 +520,8 @@ class MonteCarloConfig:
     bulk_root_probability: float = 0.25
     bulk_root_budget: int = 2
     bulk_root_degree_bias: float = 1.0
+    causal_foliation: bool = True
+    causal_max_layer_span: int = 1
     temperature: float = 1.35
     anneal_start_temperature: float | None = None
     inflation_seed_sites: int | None = None
@@ -624,6 +636,8 @@ class ScalingSweepResult:
     graph_prior: str
     inflation_seed_sites: int | None
     inflation_mode: str
+    causal_foliation: bool
+    causal_max_layer_span: int
     holographic_bound_scale: float
     ricci_flow_steps: int
     measurement_ricci_flow_steps: int
@@ -651,6 +665,8 @@ class ScalingSweepResult:
                 "graph_prior": self.graph_prior,
                 "inflation_seed_sites": self.inflation_seed_sites,
                 "inflation_mode": self.inflation_mode,
+                "causal_foliation": self.causal_foliation,
+                "causal_max_layer_span": self.causal_max_layer_span,
                 "holographic_bound_scale": self.holographic_bound_scale,
                 "ricci_flow_steps": self.ricci_flow_steps,
                 "measurement_ricci_flow_steps": self.measurement_ricci_flow_steps,
@@ -717,6 +733,8 @@ class GraphPriorComparisonResult:
     priors: tuple[str, ...]
     inflation_seed_sites: int | None
     inflation_mode: str
+    causal_foliation: bool
+    causal_max_layer_span: int
     holographic_bound_scale: float
     ricci_flow_steps: int
     measurement_ricci_flow_steps: int
@@ -739,6 +757,8 @@ class GraphPriorComparisonResult:
                 "priors": list(self.priors),
                 "inflation_seed_sites": self.inflation_seed_sites,
                 "inflation_mode": self.inflation_mode,
+                "causal_foliation": self.causal_foliation,
+                "causal_max_layer_span": self.causal_max_layer_span,
                 "holographic_bound_scale": self.holographic_bound_scale,
                 "ricci_flow_steps": self.ricci_flow_steps,
                 "measurement_ricci_flow_steps": self.measurement_ricci_flow_steps,
@@ -1267,9 +1287,8 @@ def select_boundary_strain_child_neighbors(
     degree: int,
     boundary_score: np.ndarray,
     rng: np.random.Generator,
-    bulk_root_probability: float,
-    bulk_root_budget: int,
-    bulk_root_degree_bias: float,
+    stage_index: int,
+    controls: BoundaryStrainControls,
 ) -> np.ndarray:
     local_candidates = np.unique(np.concatenate([np.asarray([parent], dtype=np.int32), parent_neighbors.astype(np.int32)]))
     if len(local_candidates) == 0:
@@ -1290,9 +1309,9 @@ def select_boundary_strain_child_neighbors(
         degree=degree,
         boundary_score=boundary_score,
         rng=rng,
-        penetration_probability=bulk_root_probability,
-        bulk_root_budget=bulk_root_budget,
-        degree_bias=bulk_root_degree_bias,
+        penetration_probability=controls.bulk_root_probability,
+        bulk_root_budget=controls.bulk_root_budget,
+        degree_bias=controls.bulk_root_degree_bias,
         local_neighbor_count=len(inherited),
     )
     core_anchors = select_deep_core_bridge_neighbors(
@@ -1305,14 +1324,22 @@ def select_boundary_strain_child_neighbors(
         boundary_score=boundary_score,
     )
     if len(core_anchors) == 0 and len(seed_roots) == 0:
-        return inherited.astype(np.int32)
-    return np.unique(
-        np.concatenate([
-            inherited.astype(np.int32),
-            seed_roots.astype(np.int32),
-            core_anchors.astype(np.int32),
-        ])
-    ).astype(np.int32)
+        combined = inherited.astype(np.int32)
+    else:
+        combined = np.unique(
+            np.concatenate([
+                inherited.astype(np.int32),
+                seed_roots.astype(np.int32),
+                core_anchors.astype(np.int32),
+            ])
+        ).astype(np.int32)
+    if not controls.causal_foliation or len(combined) == 0:
+        return combined.astype(np.int32)
+    min_allowed_stage = max(0, int(stage_index) - max(0, int(controls.causal_max_layer_span)))
+    allowed = combined[np.asarray(birth_stage[combined], dtype=np.int16) >= np.int16(min_allowed_stage)]
+    if len(allowed) > 0:
+        return allowed.astype(np.int32)
+    return np.asarray([parent], dtype=np.int32)
 
 
 def select_boundary_growth_parents(
@@ -1438,15 +1465,18 @@ def expand_boundary_strain_stage(
     stage_target: int,
     degree: int,
     stage_index: int,
-    bulk_root_probability: float,
-    bulk_root_budget: int,
-    bulk_root_degree_bias: float,
+    controls: BoundaryStrainControls,
     rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     while len(positions) < stage_target:
         growth_score, _ = compute_boundary_strain_scores(positions, adjacency, degree)
         boundary_score = compute_boundary_shell_scores(positions)
         parents = select_boundary_growth_parents(growth_score, 1)
+        if controls.causal_foliation and len(parents) > 0:
+            min_parent_stage = max(0, int(stage_index) - max(0, int(controls.causal_max_layer_span)))
+            recent_parents = parents[np.asarray(birth_stage[parents], dtype=np.int16) >= np.int16(min_parent_stage)]
+            if len(recent_parents) > 0:
+                parents = recent_parents.astype(np.int32)
         if len(parents) == 0:
             parents = np.arange(len(positions), dtype=np.int32)
         parent_scores = growth_score[parents] + 1e-3
@@ -1464,9 +1494,8 @@ def expand_boundary_strain_stage(
             degree=degree,
             boundary_score=boundary_score,
             rng=rng,
-            bulk_root_probability=bulk_root_probability,
-            bulk_root_budget=bulk_root_budget,
-            bulk_root_degree_bias=bulk_root_degree_bias,
+            stage_index=stage_index,
+            controls=controls,
         )
         old_sites = len(positions)
         positions = np.vstack([positions, child_position.astype(np.float32)])
@@ -1474,6 +1503,9 @@ def expand_boundary_strain_stage(
         expanded = np.zeros((old_sites + 1, old_sites + 1), dtype=bool)
         expanded[:old_sites, :old_sites] = adjacency
         adjacency = expanded
+        if controls.causal_foliation:
+            for candidate in inherited.tolist():
+                assert_causal_edge_or_raise(old_sites, int(candidate), birth_stage, controls.causal_max_layer_span)
         adjacency[old_sites, inherited] = True
         adjacency[inherited, old_sites] = True
         enforce_local_degree_budget(
@@ -1483,6 +1515,182 @@ def expand_boundary_strain_stage(
             degree,
         )
     return positions.astype(np.float32), adjacency, birth_stage.astype(np.int16)
+
+
+def causal_edge_is_allowed(
+    src: int,
+    dst: int,
+    birth_stage: np.ndarray | None,
+    causal_foliation: bool,
+    causal_max_layer_span: int,
+) -> bool:
+    if not causal_foliation or birth_stage is None or len(birth_stage) == 0:
+        return True
+    return abs(int(birth_stage[src]) - int(birth_stage[dst])) <= max(0, int(causal_max_layer_span))
+
+
+def assert_causal_edge_or_raise(
+    src: int,
+    dst: int,
+    birth_stage: np.ndarray | None,
+    causal_max_layer_span: int,
+) -> None:
+    if birth_stage is None or len(birth_stage) == 0:
+        return
+    span = abs(int(birth_stage[src]) - int(birth_stage[dst]))
+    if span > max(0, int(causal_max_layer_span)):
+        raise RuntimeError(
+            f"CRITICAL CAUSAL LEAK! Function tried to connect node {src} "
+            f"(layer {int(birth_stage[src])}) with node {dst} "
+            f"(layer {int(birth_stage[dst])}). Span: {span}"
+        )
+
+
+def enforce_causal_layering(
+    adjacency: np.ndarray,
+    birth_stage: np.ndarray | None,
+    causal_foliation: bool,
+    causal_max_layer_span: int,
+) -> np.ndarray:
+    if not causal_foliation or birth_stage is None or len(birth_stage) != len(adjacency):
+        return adjacency
+    layered = adjacency.copy()
+    upper_i, upper_j = np.nonzero(np.triu(layered, k=1))
+    if len(upper_i) == 0:
+        return layered
+    invalid = np.abs(np.asarray(birth_stage[upper_i], dtype=np.int16) - np.asarray(birth_stage[upper_j], dtype=np.int16)) > np.int16(max(0, int(causal_max_layer_span)))
+    if not np.any(invalid):
+        return layered
+    layered[upper_i[invalid], upper_j[invalid]] = False
+    layered[upper_j[invalid], upper_i[invalid]] = False
+    return layered
+
+
+def collect_invalid_causal_edges(
+    adjacency: np.ndarray,
+    birth_stage: np.ndarray,
+    causal_max_layer_span: int,
+) -> list[tuple[int, int]]:
+    upper_i, upper_j = np.nonzero(np.triu(adjacency, k=1))
+    if len(upper_i) == 0:
+        return []
+    max_span = np.int16(max(0, int(causal_max_layer_span)))
+    invalid = np.abs(np.asarray(birth_stage[upper_i], dtype=np.int16) - np.asarray(birth_stage[upper_j], dtype=np.int16)) > max_span
+    return list(zip(upper_i[invalid].tolist(), upper_j[invalid].tolist()))
+
+
+def remove_invalid_causal_edges(
+    adjacency: np.ndarray,
+    invalid_edges: list[tuple[int, int]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    pruned = adjacency.copy()
+    degrees = np.sum(pruned, axis=1).astype(np.int32)
+    deficits = np.zeros(len(pruned), dtype=np.int32)
+    for src, dst in invalid_edges:
+        if not pruned[src, dst]:
+            continue
+        pruned[src, dst] = False
+        pruned[dst, src] = False
+        degrees[src] -= 1
+        degrees[dst] -= 1
+        deficits[src] += 1
+        deficits[dst] += 1
+    return pruned, degrees, deficits
+
+
+def select_causal_rewire_candidates(
+    node: int,
+    adjacency: np.ndarray,
+    degrees: np.ndarray,
+    deficits: np.ndarray,
+    birth_stage: np.ndarray,
+    degree: int,
+    causal_max_layer_span: int,
+) -> np.ndarray:
+    legal = np.flatnonzero(~adjacency[node]).astype(np.int32)
+    legal = legal[legal != node]
+    if len(legal) == 0:
+        return legal
+    spans = np.abs(np.asarray(birth_stage[legal], dtype=np.int16) - np.int16(birth_stage[node]))
+    legal = legal[spans <= np.int16(max(0, int(causal_max_layer_span)))]
+    if len(legal) == 0:
+        return legal
+    deficit_candidates = legal[deficits[legal] > 0]
+    if len(deficit_candidates) > 0:
+        return deficit_candidates
+    headroom_candidates = legal[degrees[legal] < max(1, int(degree))]
+    return headroom_candidates if len(headroom_candidates) > 0 else legal
+
+
+def fill_causal_rewire_deficits(
+    adjacency: np.ndarray,
+    positions: np.ndarray,
+    birth_stage: np.ndarray,
+    degree: int,
+    rng: np.random.Generator,
+    causal_max_layer_span: int,
+    degrees: np.ndarray,
+    deficits: np.ndarray,
+) -> np.ndarray:
+    rewired = adjacency.copy()
+    for node in rng.permutation(len(rewired)).tolist():
+        while deficits[node] > 0:
+            candidates = select_causal_rewire_candidates(
+                node=node,
+                adjacency=rewired,
+                degrees=degrees,
+                deficits=deficits,
+                birth_stage=birth_stage,
+                degree=degree,
+                causal_max_layer_span=causal_max_layer_span,
+            )
+            if len(candidates) == 0:
+                break
+            distances = np.asarray(
+                [np.linalg.norm(periodic_displacement(positions[node], positions[candidate])) for candidate in candidates],
+                dtype=np.float32,
+            )
+            shortlist = candidates[np.argsort(distances)[: min(len(candidates), 8)]]
+            partner = int(rng.choice(shortlist))
+            assert_causal_edge_or_raise(node, partner, birth_stage, causal_max_layer_span)
+            rewired[node, partner] = True
+            rewired[partner, node] = True
+            degrees[node] += 1
+            degrees[partner] += 1
+            deficits[node] -= 1
+            if deficits[partner] > 0:
+                deficits[partner] -= 1
+    return rewired
+
+
+def prune_and_rewire_causally(
+    adjacency: np.ndarray,
+    positions: np.ndarray,
+    birth_stage: np.ndarray | None,
+    degree: int,
+    rng: np.random.Generator,
+    causal_foliation: bool,
+    causal_max_layer_span: int,
+) -> np.ndarray:
+    if not causal_foliation or birth_stage is None or len(birth_stage) != len(adjacency):
+        return adjacency
+    invalid_edges = collect_invalid_causal_edges(adjacency, birth_stage, causal_max_layer_span)
+    if not invalid_edges:
+        return adjacency
+    pruned, degrees, deficits = remove_invalid_causal_edges(adjacency, invalid_edges)
+    rewired = fill_causal_rewire_deficits(
+        adjacency=pruned,
+        positions=positions,
+        birth_stage=birth_stage,
+        degree=degree,
+        rng=rng,
+        causal_max_layer_span=causal_max_layer_span,
+        degrees=degrees,
+        deficits=deficits,
+    )
+    rewired = enforce_causal_layering(rewired, birth_stage, causal_foliation, causal_max_layer_span)
+    enforce_local_degree_budget(rewired, positions, np.arange(len(rewired), dtype=np.int32), degree)
+    return rewired
 
 
 def collect_local_rewiring_candidates(adjacency: np.ndarray, node: int) -> np.ndarray:
@@ -1498,6 +1706,9 @@ def rewire_to_local_geometry(
     positions: np.ndarray,
     adjacency: np.ndarray,
     degree: int,
+    birth_stage: np.ndarray | None = None,
+    causal_foliation: bool = False,
+    causal_max_layer_span: int = 0,
 ) -> np.ndarray:
     sites = len(positions)
     rewired = adjacency.copy()
@@ -1505,11 +1716,25 @@ def rewire_to_local_geometry(
         candidates = collect_local_rewiring_candidates(adjacency, node)
         if len(candidates) == 0:
             continue
+        if birth_stage is not None and causal_foliation:
+            candidates = np.asarray(
+                [
+                    candidate
+                    for candidate in candidates.tolist()
+                    if causal_edge_is_allowed(node, int(candidate), birth_stage, causal_foliation, causal_max_layer_span)
+                ],
+                dtype=np.int32,
+            )
+            if len(candidates) == 0:
+                continue
         distances = np.asarray(
             [np.linalg.norm(periodic_displacement(positions[node], positions[candidate])) for candidate in candidates],
             dtype=np.float32,
         )
         keep = candidates[np.argsort(distances)[: min(degree, len(candidates))]]
+        if birth_stage is not None and causal_foliation:
+            for candidate in keep.tolist():
+                assert_causal_edge_or_raise(node, int(candidate), birth_stage, causal_max_layer_span)
         rewired[node, keep] = True
     rewired = np.logical_or(rewired, rewired.T)
     enforce_local_degree_budget(rewired, positions, np.arange(sites, dtype=np.int32), degree)
@@ -1523,6 +1748,9 @@ def relax_inflation_stage(
     rounds: int,
     smoothing_strength: float,
     rng: np.random.Generator,
+    birth_stage: np.ndarray | None = None,
+    causal_foliation: bool = False,
+    causal_max_layer_span: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
     effective_rounds = max(0, int(rounds))
     strength = float(np.clip(smoothing_strength, 0.0, 1.0))
@@ -1537,7 +1765,14 @@ def relax_inflation_stage(
             jitter = 0.01 * rng.normal(size=3).astype(np.float32)
             updated_positions[node] = np.mod(positions[node] + strength * mean_offset + jitter, 1.0).astype(np.float32)
         positions = updated_positions
-        adjacency = rewire_to_local_geometry(positions, adjacency, degree)
+        adjacency = rewire_to_local_geometry(
+            positions,
+            adjacency,
+            degree,
+            birth_stage=birth_stage,
+            causal_foliation=causal_foliation,
+            causal_max_layer_span=causal_max_layer_span,
+        )
     return positions.astype(np.float32), adjacency
 
 
@@ -1629,10 +1864,8 @@ def grow_graph_via_boundary_strain_inflation(
     growth_factor: float,
     relax_rounds: int,
     smoothing_strength: float,
-    bulk_root_probability: float,
-    bulk_root_budget: int,
-    bulk_root_degree_bias: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    controls: BoundaryStrainControls,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     positions = make_position_cloud(seed_sites, rng, graph_prior)
     adjacency, _ = build_graph_prior_adjacency(graph_prior, positions, degree, rng)
     birth_stage = np.zeros(seed_sites, dtype=np.int16)
@@ -1647,17 +1880,27 @@ def grow_graph_via_boundary_strain_inflation(
             stage_target,
             degree,
             stage_index,
-            bulk_root_probability,
-            bulk_root_budget,
-            bulk_root_degree_bias,
+            controls,
             rng,
         )
-        positions, adjacency = relax_inflation_stage(positions, adjacency, degree, relax_rounds, smoothing_strength, rng)
+        positions, adjacency = relax_inflation_stage(
+            positions,
+            adjacency,
+            degree,
+            relax_rounds,
+            smoothing_strength,
+            rng,
+            birth_stage=birth_stage,
+            causal_foliation=controls.causal_foliation,
+            causal_max_layer_span=controls.causal_max_layer_span,
+        )
+        adjacency = enforce_causal_layering(adjacency, birth_stage, controls.causal_foliation, controls.causal_max_layer_span)
         adjacency = apply_mild_boundary_ricci_cleanup(positions, adjacency, degree)
+        adjacency = enforce_causal_layering(adjacency, birth_stage, controls.causal_foliation, controls.causal_max_layer_span)
 
     distances = pairwise_periodic_distances(positions)
     edge_bias = build_boundary_growth_edge_bias(adjacency, birth_stage, stage_index)
-    return positions.astype(np.float32), adjacency, distances, edge_bias
+    return positions.astype(np.float32), adjacency, distances, edge_bias, birth_stage.astype(np.int16)
 
 
 def compute_ollivier_ricci_proxy_curvature(adjacency: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -1820,9 +2063,7 @@ def build_locality_seed(
     inflation_growth_factor: float,
     inflation_relax_rounds: int,
     inflation_smoothing_strength: float,
-    bulk_root_probability: float,
-    bulk_root_budget: int,
-    bulk_root_degree_bias: float,
+    controls: BoundaryStrainControls,
 ) -> LocalitySeedArtifacts:
     inflation_mode = normalize_inflation_mode(inflation_mode)
     normalized_seed_sites = normalize_inflation_seed_sites(sites, inflation_seed_sites)
@@ -1830,6 +2071,7 @@ def build_locality_seed(
         positions = make_position_cloud(sites, rng, graph_prior)
         adjacency, distances = build_graph_prior_adjacency(graph_prior, positions, degree, rng)
         edge_bias = np.ones_like(adjacency, dtype=np.float32)
+        birth_stage = np.zeros(sites, dtype=np.int16)
     else:
         if inflation_mode == "staged":
             positions, adjacency, distances = grow_graph_via_local_inflation(
@@ -1843,8 +2085,9 @@ def build_locality_seed(
                 inflation_smoothing_strength,
             )
             edge_bias = np.ones_like(adjacency, dtype=np.float32)
+            birth_stage = np.zeros(len(positions), dtype=np.int16)
         elif inflation_mode == "boundary-strain":
-            positions, adjacency, distances, edge_bias = grow_graph_via_boundary_strain_inflation(
+            positions, adjacency, distances, edge_bias, birth_stage = grow_graph_via_boundary_strain_inflation(
                 graph_prior,
                 sites,
                 degree,
@@ -1853,9 +2096,7 @@ def build_locality_seed(
                 inflation_growth_factor,
                 inflation_relax_rounds,
                 inflation_smoothing_strength,
-                bulk_root_probability,
-                bulk_root_budget,
-                bulk_root_degree_bias,
+                controls,
             )
         else:
             positions, adjacency, distances = grow_graph_via_local_inflation(
@@ -1869,12 +2110,24 @@ def build_locality_seed(
                 0.0,
             )
             edge_bias = np.ones_like(adjacency, dtype=np.float32)
+            birth_stage = np.zeros(len(positions), dtype=np.int16)
+    adjacency = prune_and_rewire_causally(
+        adjacency=adjacency,
+        positions=positions,
+        birth_stage=birth_stage,
+        degree=degree,
+        rng=rng,
+        causal_foliation=controls.causal_foliation,
+        causal_max_layer_span=controls.causal_max_layer_span,
+    )
+    distances = pairwise_periodic_distances(positions)
     ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
     return LocalitySeedArtifacts(
         positions=positions.astype(np.float32),
         adjacency=adjacency,
         distances=distances,
         edge_bias=edge_bias,
+        birth_stage=birth_stage.astype(np.int16),
         ricci=ricci,
     )
 
@@ -2476,11 +2729,13 @@ def propose_edge_relocation(
     edge_j: np.ndarray,
     edge_set: set[tuple[int, int]],
     rng: np.random.Generator,
+    node_layers: np.ndarray | None = None,
+    causal_max_layer_span: int | None = None,
     max_attempts: int = 32,
-) -> tuple[int, tuple[int, int], tuple[int, int]] | None:
+) -> tuple[tuple[int, tuple[int, int], tuple[int, int]] | None, int]:
     if len(edge_i) < 1 or sites < 4:
-        return None
-    for _ in range(max_attempts):
+        return None, 0
+    for attempt_index in range(max_attempts):
         edge_index = int(rng.integers(len(edge_i)))
         old_edge = tuple(sorted((int(edge_i[edge_index]), int(edge_j[edge_index]))))
         candidate_nodes = rng.choice(sites, size=2, replace=False)
@@ -2489,8 +2744,30 @@ def propose_edge_relocation(
             continue
         if len({old_edge[0], old_edge[1], new_edge[0], new_edge[1]}) < 4:
             continue
-        return edge_index, old_edge, new_edge
-    return None
+        if not check_causal_validity((new_edge,), node_layers, causal_max_layer_span):
+            continue
+        if node_layers is not None:
+            old_span = abs(int(node_layers[old_edge[0]]) - int(node_layers[old_edge[1]]))
+            new_span = abs(int(node_layers[new_edge[0]]) - int(node_layers[new_edge[1]]))
+            if old_span != new_span:
+                continue
+        return (edge_index, old_edge, new_edge), attempt_index + 1
+    return None, max_attempts
+
+
+def check_causal_validity(
+    new_edges: tuple[tuple[int, int], ...],
+    node_layers: np.ndarray | None,
+    causal_max_layer_span: int | None,
+) -> bool:
+    if node_layers is None or causal_max_layer_span is None:
+        return True
+    max_span = int(causal_max_layer_span)
+    for src, dst in new_edges:
+        layer_diff = abs(int(node_layers[src]) - int(node_layers[dst]))
+        if layer_diff > max_span:
+            return False
+    return True
 
 
 def pair_hotness(left_density: float, right_density: float) -> float:
@@ -2751,10 +3028,14 @@ class MonteCarloOperatorNetwork:
         self.measurement_ricci_start_fraction = float(np.clip(config.measurement_ricci_start_fraction, 0.0, 1.0))
         self.measurement_ricci_interval = max(1, int(config.measurement_ricci_interval))
         self.measurement_ricci_strength = float(np.clip(config.measurement_ricci_strength, 0.0, 1.0))
+        self.causal_foliation = bool(config.causal_foliation)
+        self.causal_max_layer_span = max(0, int(config.causal_max_layer_span))
         self.backend_name, self.xp = resolve_array_backend(config.backend)
         self.progress_reporter = progress_reporter
         self.live_visualizer = live_visualizer
         self._live_positions: np.ndarray = np.zeros((self.sites, 3), dtype=np.float32)
+        self._birth_stage: np.ndarray = np.zeros(self.sites, dtype=np.int16)
+        self._node_layers: np.ndarray = self._birth_stage
         self.rng = np.random.default_rng(seed)
         self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
         self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
@@ -2928,6 +3209,13 @@ class MonteCarloOperatorNetwork:
         self.progress_reporter.update(current, total, stage)
 
     def _build_sparse_algebraic_locality(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        controls = BoundaryStrainControls(
+            bulk_root_probability=self.bulk_root_probability,
+            bulk_root_budget=self.bulk_root_budget,
+            bulk_root_degree_bias=self.bulk_root_degree_bias,
+            causal_foliation=self.causal_foliation,
+            causal_max_layer_span=self.causal_max_layer_span,
+        )
         locality = build_locality_seed(
             self.graph_prior,
             self.sites,
@@ -2938,10 +3226,10 @@ class MonteCarloOperatorNetwork:
             self.inflation_growth_factor,
             self.inflation_relax_rounds,
             self.inflation_smoothing_strength,
-            self.bulk_root_probability,
-            self.bulk_root_budget,
-            self.bulk_root_degree_bias,
+            controls,
         )
+        self._birth_stage = locality.birth_stage.astype(np.int16)
+        self._node_layers = self._birth_stage
         if self.ricci_flow_steps > 0:
             adjacency, edge_bias, ricci = apply_combinatorial_ricci_flow(
                 locality.adjacency,
@@ -2957,6 +3245,7 @@ class MonteCarloOperatorNetwork:
                 adjacency=adjacency,
                 distances=locality.distances,
                 edge_bias=edge_bias,
+                birth_stage=locality.birth_stage,
                 ricci=ricci,
             )
         positions_np = locality.positions
@@ -3159,8 +3448,16 @@ class MonteCarloOperatorNetwork:
         node_density = compute_scalar_node_entanglement_density(self.sites, spins, edge_i, edge_j, couplings)
         accepted = False
         for _ in range(self.edge_swap_attempts_per_sweep):
-            proposal = propose_edge_relocation(self.sites, edge_i, edge_j, edge_set, self.rng)
-            self._edge_swap_attempts += 1
+            proposal, proposal_attempts = propose_edge_relocation(
+                self.sites,
+                edge_i,
+                edge_j,
+                edge_set,
+                self.rng,
+                node_layers=self._node_layers if self.causal_foliation else None,
+                causal_max_layer_span=self.causal_max_layer_span if self.causal_foliation else None,
+            )
+            self._edge_swap_attempts += proposal_attempts
             if proposal is None:
                 continue
             edge_index, old_edge, new_edge = proposal
@@ -3410,9 +3707,13 @@ class SU3TensorNetworkMonteCarlo:
         self.measurement_ricci_start_fraction = float(np.clip(config.measurement_ricci_start_fraction, 0.0, 1.0))
         self.measurement_ricci_interval = max(1, int(config.measurement_ricci_interval))
         self.measurement_ricci_strength = float(np.clip(config.measurement_ricci_strength, 0.0, 1.0))
+        self.causal_foliation = bool(config.causal_foliation)
+        self.causal_max_layer_span = max(0, int(config.causal_max_layer_span))
         self.progress_reporter = progress_reporter
         self.live_visualizer = live_visualizer
         self._live_positions: np.ndarray = np.zeros((self.sites, 3), dtype=np.float32)
+        self._birth_stage: np.ndarray = np.zeros(self.sites, dtype=np.int16)
+        self._node_layers: np.ndarray = self._birth_stage
         self.rng = np.random.default_rng(seed)
         self._last_ricci = RicciFlowDiagnostics(steps=0, mean_curvature=0.0, min_curvature=0.0, negative_edge_fraction=0.0, evaporated_edges=0, strengthened_edges=0)
         self._last_holographic = HolographicDiagnostics(False, 1.0, 0.0, 0.0)
@@ -3601,6 +3902,13 @@ class SU3TensorNetworkMonteCarlo:
         self.progress_reporter.update(current, total, stage)
 
     def _build_su3_locality(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        controls = BoundaryStrainControls(
+            bulk_root_probability=self.bulk_root_probability,
+            bulk_root_budget=self.bulk_root_budget,
+            bulk_root_degree_bias=self.bulk_root_degree_bias,
+            causal_foliation=self.causal_foliation,
+            causal_max_layer_span=self.causal_max_layer_span,
+        )
         locality = build_locality_seed(
             self.graph_prior,
             self.sites,
@@ -3611,10 +3919,10 @@ class SU3TensorNetworkMonteCarlo:
             self.inflation_growth_factor,
             self.inflation_relax_rounds,
             self.inflation_smoothing_strength,
-            self.bulk_root_probability,
-            self.bulk_root_budget,
-            self.bulk_root_degree_bias,
+            controls,
         )
+        self._birth_stage = locality.birth_stage.astype(np.int16)
+        self._node_layers = self._birth_stage
         if self.ricci_flow_steps > 0:
             adjacency, edge_bias, ricci = apply_combinatorial_ricci_flow(
                 locality.adjacency,
@@ -3630,6 +3938,7 @@ class SU3TensorNetworkMonteCarlo:
                 adjacency=adjacency,
                 distances=locality.distances,
                 edge_bias=edge_bias,
+                birth_stage=locality.birth_stage,
                 ricci=ricci,
             )
         positions = locality.positions
@@ -3802,8 +4111,16 @@ class SU3TensorNetworkMonteCarlo:
         node_density = compute_su3_node_entanglement_density(self.sites, colors, edge_i, edge_j, kernels)
         accepted = False
         for _ in range(self.edge_swap_attempts_per_sweep):
-            proposal = propose_edge_relocation(self.sites, edge_i, edge_j, edge_set, self.rng)
-            self._edge_swap_attempts += 1
+            proposal, proposal_attempts = propose_edge_relocation(
+                self.sites,
+                edge_i,
+                edge_j,
+                edge_set,
+                self.rng,
+                node_layers=self._node_layers if self.causal_foliation else None,
+                causal_max_layer_span=self.causal_max_layer_span if self.causal_foliation else None,
+            )
+            self._edge_swap_attempts += proposal_attempts
             if proposal is None:
                 continue
             edge_index, old_edge, new_edge = proposal
@@ -4450,6 +4767,8 @@ def run_scaling_sweep(
         graph_prior=config.graph_prior,
         inflation_seed_sites=config.inflation_seed_sites,
         inflation_mode=normalize_inflation_mode(config.inflation_mode),
+        causal_foliation=bool(config.causal_foliation),
+        causal_max_layer_span=max(0, int(config.causal_max_layer_span)),
         holographic_bound_scale=config.holographic_bound_scale,
         ricci_flow_steps=config.ricci_flow_steps,
         measurement_ricci_flow_steps=config.measurement_ricci_flow_steps,
@@ -4495,6 +4814,8 @@ def run_graph_prior_comparison(
             bulk_root_probability=config.bulk_root_probability,
             bulk_root_budget=config.bulk_root_budget,
             bulk_root_degree_bias=config.bulk_root_degree_bias,
+            causal_foliation=config.causal_foliation,
+            causal_max_layer_span=config.causal_max_layer_span,
             temperature=config.temperature,
             anneal_start_temperature=config.anneal_start_temperature,
             inflation_seed_sites=config.inflation_seed_sites,
@@ -4564,6 +4885,8 @@ def run_graph_prior_comparison(
         priors=normalized_priors,
         inflation_seed_sites=config.inflation_seed_sites,
         inflation_mode=normalize_inflation_mode(config.inflation_mode),
+        causal_foliation=bool(config.causal_foliation),
+        causal_max_layer_span=max(0, int(config.causal_max_layer_span)),
         holographic_bound_scale=config.holographic_bound_scale,
         ricci_flow_steps=config.ricci_flow_steps,
         measurement_ricci_flow_steps=config.measurement_ricci_flow_steps,
@@ -4589,6 +4912,7 @@ def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> 
         f"priors: {', '.join(result.priors)}",
         f"inflation seed sites: {result.inflation_seed_sites}" if result.inflation_seed_sites is not None else "inflation seed sites: off",
         f"inflation mode: {result.inflation_mode}",
+        f"causal foliation: on (max span {result.causal_max_layer_span})" if result.causal_foliation else "causal foliation: off",
         f"degree: {result.degree}",
         f"triad burn-in scale: {result.triad_burn_in_scale:.2f}",
         f"triad ramp fraction: {result.triad_ramp_fraction:.2f}",
@@ -4618,6 +4942,7 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         f"graph prior: {result.graph_prior}",
         f"inflation seed sites: {result.inflation_seed_sites}" if result.inflation_seed_sites is not None else "inflation seed sites: off",
         f"inflation mode: {result.inflation_mode}",
+        f"causal foliation: on (max span {result.causal_max_layer_span})" if result.causal_foliation else "causal foliation: off",
         f"tensor bond dim: {result.tensor_bond_dim}",
         f"degree: {result.degree}",
         f"triad burn-in scale: {result.triad_burn_in_scale:.2f}",

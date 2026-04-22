@@ -50,6 +50,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bulk-root-probability", type=float, default=0.25, help="Per-connection probability that a new boundary-strain node fills an open neighbor slot with a root back into the original seed core instead of the shell.")
     parser.add_argument("--bulk-root-budget", type=int, default=2, help="Maximum number of seed-core bulk roots a new boundary-strain node may create.")
     parser.add_argument("--bulk-root-degree-bias", type=float, default=1.0, help="How strongly bulk-root selection prefers low-degree seed-core nodes over already crowded hubs.")
+    parser.add_argument("--disable-causal-foliation", action="store_true", help="Disable the local CDT-style layer constraint in boundary-strain inflation. By default, new links are restricted to the same shell or nearby earlier shells.")
+    parser.add_argument("--causal-max-layer-span", type=int, default=1, help="Maximum allowed birth-layer separation for a link when causal foliation is active. The default 1 approximates CDT-like nearest-slice causality.")
     parser.add_argument("--degree-penalty-scale", type=float, default=0.0, help="Static suppression strength for couplings attached to nodes whose realized degree exceeds the target degree.")
     parser.add_argument("--holographic-bound-scale", type=float, default=0.0, help="ER=EPR holographic capacity scale. Positive values suppress long-range entanglement links that exceed their local area budget.")
     parser.add_argument("--holographic-penalty-strength", type=float, default=1.0, help="Strength of the suppression applied when an edge exceeds the holographic entanglement bound.")
@@ -151,6 +153,8 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         bulk_root_probability=args.bulk_root_probability,
         bulk_root_budget=args.bulk_root_budget,
         bulk_root_degree_bias=args.bulk_root_degree_bias,
+        causal_foliation=not args.disable_causal_foliation,
+        causal_max_layer_span=args.causal_max_layer_span,
         temperature=1.35 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature,
         anneal_start_temperature=args.anneal_start_temperature,
         inflation_seed_sites=args.inflation_seed_sites,
