@@ -230,6 +230,7 @@ measures a chiral phase observable that biases positive versus negative charge s
 - `emergent_simulation.py`: sparse exact fermion solver and diagnostics
 - `scalable_simulation.py`: sparse Monte Carlo surrogate for hundreds to thousands of sites
 - `main.py`: CLI entrypoint
+- `verify_einstein_relation_on_quantum_computer.py`: single-file Qiskit check of the toy Einstein relation $\Delta S \propto \Delta E$ on a 4-site ring Hamiltonian
 
 ## Quick Start
 
@@ -241,13 +242,44 @@ The sequence below is the shortest practical route for reproducing the main nume
 python -m pip install -r requirements.txt
 ```
 
+This now installs both the classical numerical stack and the Qiskit packages required by the single-file quantum verification script.
+
 For CUDA-backed Monte Carlo runs, also install a matching CuPy build:
 
 ```powershell
 python -m pip install cupy-cuda12x
 ```
 
-### 2. Reproduce the simplest large-$N$ diffusion baseline
+### 2. Run the single-file Einstein-relation quantum check
+
+```powershell
+python verify_einstein_relation_on_quantum_computer.py
+```
+
+What this script does:
+
+- builds a 4-site QGEFT toy Hamiltonian directly inside one file,
+- diagonalizes it exactly to prepare the ground state,
+- applies a small entangling perturbation across the bipartition cut,
+- measures both the energy shift $\Delta E$ and the entanglement-entropy shift $\Delta S$,
+- repeats the check for several perturbation strengths and tests whether $\Delta S / \Delta E$ stays approximately constant.
+
+Runtime behavior:
+
+- if a saved IBM Runtime account exists, the script will try to use an IBM simulator backend,
+- otherwise it falls back automatically to a local `StatevectorEstimator`, so it still runs from a single file without extra setup.
+
+Current validated local outcome:
+
+- for perturbations `0.01`, `0.03`, and `0.05`, the repository currently reproduces a stable ratio $\Delta S / \Delta E \approx 1.08$,
+- the relative spread between those runs is about `0.05%`,
+- the script exits with code `0` only when at least two perturbations pass and the linear-response ratio remains stable.
+
+Interpretation:
+
+This is a toy-model consistency test, not a derivation of Einstein gravity from first principles. The script checks whether a small boundary-crossing perturbation produces a linear entanglement/energy response compatible with a first-law-style relation in this finite model.
+
+### 3. Reproduce the simplest large-$N$ diffusion baseline
 
 ```powershell
 python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-group none --backend cupy --progress-mode log
@@ -255,7 +287,7 @@ python main.py --mode monte-carlo --size-scan 256,512,1024,2048,4096 --gauge-gro
 
 This run reproduces the basic finite-size diffusion crossover discussed in the Results section.
 
-### 3. Reproduce the graph-prior and null-model stress test
+### 4. Reproduce the graph-prior and null-model stress test
 
 ```powershell
 python main.py --mode monte-carlo --size-scan 512,1024,2048,4096 --gauge-group none --graph-prior-scan 3d-local,small-world --degree 8 --walker-count 256 --max-walk-steps 28 --backend cupy --progress-mode log --distance-powers 0.5,1.0,2.0 --null-models shuffle,rewired --null-model-samples 16
@@ -263,7 +295,7 @@ python main.py --mode monte-carlo --size-scan 512,1024,2048,4096 --gauge-group n
 
 This run reproduces the topology-only Hausdorff trend and the explicit graph-prior robustness checks.
 
-### 4. Reproduce the strongest late `SU(3)` volumetric branch
+### 5. Reproduce the strongest late `SU(3)` volumetric branch
 
 ```powershell
 python main.py --mode monte-carlo --size-scan 1024 --gauge-group su3 --graph-prior-scan 3d-local,small-world --degree 16 --burn-in-sweeps 600 --measurement-sweeps 300 --sample-interval 20 --walker-count 128 --max-walk-steps 80 --backend cupy --progress-mode log --inflation-seed-sites 128 --anneal-start-temperature 10.0 --degree-penalty-scale 0.3 --triad-scale 1.0 --ricci-flow-steps 1 --ricci-negative-threshold -0.70
@@ -271,7 +303,7 @@ python main.py --mode monte-carlo --size-scan 1024 --gauge-group su3 --graph-pri
 
 This is the most direct route to the robust weighted large-$N$ branch with $d_H \approx 2.6$ in the earlier static campaign.
 
-### 4b. Reproduce the strongest inflationary `SU(3)` volumetric branch
+### 5b. Reproduce the strongest inflationary `SU(3)` volumetric branch
 
 ```powershell
 python main.py --mode monte-carlo --sites 2048 --gauge-group su3 --tensor-bond-dim 2 --degree 16 --inflation-seed-sites 256 --inflation-mode boundary-strain --bulk-root-probability 0.2 --bulk-root-budget 2 --bulk-root-degree-bias 1.5 --triad-scale 1.5 --triad-burn-in-scale 0.1 --triad-ramp-fraction 0.8 --burn-in-sweeps 600 --measurement-sweeps 300 --sample-interval 10 --walker-count 256 --max-walk-steps 48 --measurement-ricci-flow-steps 1 --measurement-ricci-strength 0.1 --backend cupy --progress-mode log
@@ -279,7 +311,7 @@ python main.py --mode monte-carlo --sites 2048 --gauge-group su3 --tensor-bond-d
 
 This run is the current best finite-size route to the smooth volumetric `boundary-strain` branch discussed in the Results section.
 
-### 5. Reproduce a small-system exact `SU(3)` benchmark
+### 6. Reproduce a small-system exact `SU(3)` benchmark
 
 ```powershell
 python main.py --mode exact --sites 12 --gauge-group su3 --filling 3 --color-filling 1,1,1 --eig-count 6
