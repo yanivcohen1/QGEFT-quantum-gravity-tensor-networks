@@ -95,6 +95,11 @@ def compute_entanglement_entropy(circuit, num_qubits):
     return float(np.real(entropy(reduced_density_matrix)))
 
 
+def log_progress(current_step, total_steps, message):
+    progress_percent = int(round((current_step / total_steps) * 100))
+    print(f"[PROGRESS {progress_percent:>3}%] {message}")
+
+
 def build_energy_evaluator(hamiltonian):
     """
     Return a callable that evaluates the energy of a given circuit.
@@ -298,7 +303,10 @@ def save_runtime_plot(results, backend_label, output_path):
 
 
 def main():
+    total_steps = 9
+
     # 1. Physical system parameters
+    log_progress(1, total_steps, "Initializing physical system parameters")
     num_sites = 4
     hopping_strength = 1.0
     mass = 0.2
@@ -311,6 +319,7 @@ def main():
         u_matrix[neighbor_index, site_index] = 1.0
 
     # 2. Build the Hamiltonian
+    log_progress(2, total_steps, "Building QGEFT Hamiltonian")
     print("Building Hamiltonian...")
     hamiltonian = build_qgeft_hamiltonian(
         num_sites,
@@ -322,6 +331,7 @@ def main():
 
     # 3. Find the exact ground state for circuit preparation
     # (For larger realistic systems this would use VQE; here we use exact diagonalization for a clean check.)
+    log_progress(3, total_steps, "Computing exact ground state")
     print("Computing ground state...")
     eigenvalues, eigenstates = np.linalg.eigh(hamiltonian.to_matrix())
     ground_state_vector = eigenstates[:, np.argmin(eigenvalues)]
@@ -329,11 +339,18 @@ def main():
     base_circuit = QuantumCircuit(num_sites)
     base_circuit.initialize(ground_state_vector, range(num_sites))
 
+    log_progress(4, total_steps, "Selecting runtime backend")
     energy_evaluator, backend_label = build_energy_evaluator(hamiltonian)
 
     # 4. Run the Einstein-style check for several small perturbation strengths
     results = []
-    for delta_param in (0.01, 0.03, 0.05):
+    perturbation_values = (0.01, 0.03, 0.05)
+    for index, delta_param in enumerate(perturbation_values, start=1):
+        log_progress(
+            4 + index,
+            total_steps,
+            f"Running perturbation {index}/{len(perturbation_values)} with delta={delta_param}",
+        )
         results.append(
             verify_einstein_relation(
                 base_circuit,
@@ -343,7 +360,9 @@ def main():
             )
         )
 
+    log_progress(8, total_steps, "Summarizing linear-response results")
     all_passed = summarize_linearity(results)
+    log_progress(9, total_steps, "Saving runtime plot")
     save_runtime_plot(
         results,
         backend_label,
