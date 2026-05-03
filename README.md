@@ -177,6 +177,16 @@ completed in about `2554 s` and produced a stable mean separation near `1.853`, 
 
 The final low-temperature return to `d = 2` is scientifically useful rather than disappointing. In the present discrete surrogate it suggests a competition between attractive clustering and a short-distance exclusion or packing effect of the surrounding graph, so the low-action state need not be a permanently collapsed dimer. The safest claim is therefore: `Phase 2` now supports an annealed entropic-gravity picture in which matter nodes actively explore and repeatedly occupy near-contact states, while the surrounding graph reorganizes through shared neighbors instead of collapsing into an uncontrolled hub singularity.
 
+The same `gravity-test` path now also supports a fixed-distance potential scan. In that mode the code prepares four short runs with the mass pair constrained to chosen graph separations and plots the mean bare vacuum energy against the imposed distance:
+
+```powershell
+python main.py --mode gravity-test --sites 256 --degree 16 --burn-in-sweeps 400 --measurement-sweeps 80 --sample-interval 20 --temperature 0.2 --gravity-mass-degree 48 --lambda-coupling 0.05 --graph-prior erdos-renyi --gravity-potential-distances 1,2,3,4 --plot-dir plots/gravity_potential --progress-mode log
+```
+
+This writes a JSON summary plus `Mass-Distance Potential` plot. The right interpretation is again narrow: if the mean bare energy rises with the imposed graph distance, then within this discrete surrogate the vacuum energetics favor shorter mass separation. That is evidence for an attractive effective potential in the model, not by itself a proof of continuum Newtonian or Einstein gravity.
+
+![Mass-Distance Potential Well](plots/gravity_potential_smoke/gravity_potential_smoke_potential_well.png)
+
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. The current codebase is stronger than the earliest version because it now includes graph-prior comparisons, null-model baselines, alternative distance prescriptions, and topology-only diagnostics. Even so, those additions do not eliminate the basic interpretive risks; they only sharpen where the remaining weak points are. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
 

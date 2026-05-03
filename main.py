@@ -117,6 +117,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gravity-mass-nodes", type=str, default="0,1", help="Gravity Phase 2 only: comma-separated node ids used as the two static heavy masses.")
     parser.add_argument("--gravity-mass-degree", type=int, default=24, help="Gravity Phase 2 only: target degree imposed on each static heavy mass.")
     parser.add_argument("--lambda-coupling", type=float, default=0.5, help="Gravity Phase 2 only: quadratic mass-term coupling lambda for deviations from the target mass degree.")
+    parser.add_argument("--gravity-potential-distances", type=str, default="", help="Gravity Phase 2 only: optional comma-separated fixed graph distances for a Mass-Distance Potential scan, for example 1,2,3,4.")
     parser.add_argument("--live-plot", action="store_true", help="Open a live tensor-network visualization during Monte Carlo sampling. When --plot-dir is also set, frame snapshots are written there as well.")
     parser.add_argument("--live-plot-interval", type=int, default=12, help="How many Monte Carlo sweeps to skip between live tensor-network updates.")
     parser.add_argument("--live-plot-max-edges", type=int, default=320, help="Maximum number of strongest edges rendered in each live tensor-network frame.")
@@ -167,6 +168,22 @@ def parse_temperature_scan(raw: str) -> list[float]:
     return values
 
 
+def parse_positive_int_list(raw: str) -> tuple[int, ...]:
+    if not raw.strip():
+        return ()
+    values: list[int] = []
+    for token in raw.split(","):
+        stripped = token.strip()
+        if not stripped:
+            continue
+        value = int(stripped)
+        if value < 1:
+            raise ValueError("distance values must be positive integers")
+        if value not in values:
+            values.append(value)
+    return tuple(values)
+
+
 def parse_string_list(raw: str) -> tuple[str, ...]:
     if not raw.strip():
         return ()
@@ -183,6 +200,12 @@ def parse_node_pair(raw: str) -> tuple[int, int]:
 def default_gravity_json_path(args: argparse.Namespace, sizes: list[int]) -> Path:
     size_label = f"scan_{'_'.join(str(size) for size in sizes)}" if sizes else f"N{args.sites}"
     mass_a, mass_b = parse_node_pair(args.gravity_mass_nodes)
+    potential_distances = parse_positive_int_list(args.gravity_potential_distances)
+    if potential_distances:
+        distance_label = "_".join(str(distance) for distance in potential_distances)
+        return Path(
+            f"gravity_potential_{size_label}_{args.graph_prior}_mdeg{args.gravity_mass_degree}_nodes{mass_a}_{mass_b}_d{distance_label}.json"
+        )
     return Path(
         f"gravity_phase2_{size_label}_{args.graph_prior}_mdeg{args.gravity_mass_degree}_nodes{mass_a}_{mass_b}.json"
     )
@@ -341,6 +364,7 @@ def run_vacuum_phase1_mode(args: argparse.Namespace) -> None:
 def run_gravity_test_mode(args: argparse.Namespace) -> None:
     sizes = parse_size_scan(args.size_scan)
     target_sizes = sizes if sizes else [args.sites]
+    potential_distances = parse_positive_int_list(args.gravity_potential_distances)
     progress_mode = "off" if args.no_progress else args.progress_mode
     gravity_temperature = 0.3 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature
     gravity_anneal_start = (
@@ -378,6 +402,7 @@ def run_gravity_test_mode(args: argparse.Namespace) -> None:
             seed=args.seed,
             config=config,
             progress_mode=progress_mode,
+            potential_distances=potential_distances,
         ),
     )
     print(render_gravity_phase2_report(sweep))
@@ -385,7 +410,7 @@ def run_gravity_test_mode(args: argparse.Namespace) -> None:
     write_gravity_phase2_json(json_path, sweep)
     print(f"wrote gravity JSON to {json_path}")
     if args.plot_dir is not None:
-        prefix = "gravity_phase2" if sizes else f"gravity_phase2_{args.sites}"
+        prefix = "gravity_potential" if potential_distances else ("gravity_phase2" if sizes else f"gravity_phase2_{args.sites}")
         save_gravity_phase2_visualizations(sweep, args.plot_dir, prefix=prefix)
 
 

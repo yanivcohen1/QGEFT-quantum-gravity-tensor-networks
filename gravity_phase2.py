@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import importlib
 import json
 from pathlib import Path
@@ -33,6 +33,7 @@ class GravityPhase2Config:
     mass_nodes: tuple[int, int] = (0, 1)
     mass_degree: int = 24
     mass_coupling: float = 0.5
+    fixed_distance: int | None = None
 
 
 @dataclass
@@ -44,6 +45,8 @@ class DistanceMeasurement:
     mass_b_degree: int
     shared_neighbors: int
     plaquettes_touching_masses: int
+    bare_energy: float
+    mass_penalty_energy: float
     total_energy: float
 
 
@@ -55,12 +58,15 @@ class GravityPhase2Point:
     degree: int
     mass_nodes: tuple[int, int]
     mass_degree: int
+    fixed_distance_target: int | None
     edge_count: int
     samples_collected: int
     initial_distance: int | None
     final_distance: int | None
     min_distance: int | None
     mean_distance: float | None
+    mean_bare_energy: float
+    bare_energy_std: float
     mean_total_energy: float
     total_energy_std: float
     distance_trend: LinearLawFit
@@ -82,6 +88,7 @@ class GravityPhase2SweepResult:
     mass_nodes: tuple[int, int]
     mass_degree: int
     mass_coupling: float
+    potential_distances: tuple[int, ...]
     points: list[GravityPhase2Point]
     global_distance_trend: LinearLawFit
 
@@ -101,6 +108,7 @@ class GravityPhase2SweepResult:
                 "mass_nodes": list(self.mass_nodes),
                 "mass_degree": self.mass_degree,
                 "mass_coupling": self.mass_coupling,
+                "potential_distances": list(self.potential_distances),
                 "global_distance_trend": asdict(self.global_distance_trend),
                 "points": [
                     {
@@ -149,6 +157,7 @@ class SU3GravityPhase2Experiment:
             else self.config.temperature
         )
         measurements = [self._measure_distance_state(adjacency, edge_phases, sweep=0, sweep_temperature=initial_temperature)]
+        sampled_bare_energies = [measurements[0].bare_energy]
         sampled_energies = [measurements[0].total_energy]
         for sweep in range(total_sweeps):
             sweep_temperature = temperature_for_sweep(
@@ -169,6 +178,7 @@ class SU3GravityPhase2Experiment:
                     sweep_temperature=sweep_temperature,
                 )
                 measurements.append(measurement)
+                sampled_bare_energies.append(measurement.bare_energy)
                 sampled_energies.append(measurement.total_energy)
         self.progress_reporter.finish()
         distances = [measurement.graph_distance for measurement in measurements if measurement.graph_distance is not None]
@@ -180,12 +190,15 @@ class SU3GravityPhase2Experiment:
             degree=self.config.degree,
             mass_nodes=self.mass_nodes,
             mass_degree=self.config.mass_degree,
+            fixed_distance_target=self.config.fixed_distance,
             edge_count=len(edge_phases),
             samples_collected=len(measurements),
             initial_distance=measurements[0].graph_distance if measurements else None,
             final_distance=measurements[-1].graph_distance if measurements else None,
             min_distance=min(distances) if distances else None,
             mean_distance=float(np.mean(distances)) if distances else None,
+            mean_bare_energy=float(np.mean(sampled_bare_energies)) if sampled_bare_energies else 0.0,
+            bare_energy_std=float(np.std(sampled_bare_energies)) if sampled_bare_energies else 0.0,
             mean_total_energy=float(np.mean(sampled_energies)) if sampled_energies else 0.0,
             total_energy_std=float(np.std(sampled_energies)) if sampled_energies else 0.0,
             distance_trend=distance_trend,
@@ -214,27 +227,124 @@ class SU3GravityPhase2Experiment:
         return locality.positions.astype(np.float32), locality.adjacency.copy()
 
     def _imprint_static_masses(self, adjacency: np.ndarray) -> None:
+        if self.config.fixed_distance is not None:
+            self._imprint_fixed_distance_masses(adjacency, self.config.fixed_distance)
+            return
+        self._imprint_default_static_masses(adjacency)
+
+    def _imprint_default_static_masses(self, adjacency: np.ndarray) -> None:
         mass_a, mass_b = self.mass_nodes
         if adjacency[mass_a, mass_b]:
             adjacency[mass_a, mass_b] = False
             adjacency[mass_b, mass_a] = False
         self._remove_shared_mass_neighbors(adjacency)
         self._force_shared_mass_neighbor(adjacency)
+        self._top_up_mass_degrees(adjacency)
+
+    def _imprint_fixed_distance_masses(self, adjacency: np.ndarray, target_distance: int) -> None:
+        if target_distance < 1:
+            raise ValueError("fixed gravity distance must be at least 1")
+        protected_path = self._build_protected_mass_path(adjacency, target_distance)
+        protected_edges = {
+            tuple(sorted((left, right)))
+            for left, right in zip(protected_path, protected_path[1:])
+        }
+        self._remove_shared_mass_neighbors(adjacency, protected_nodes=set(protected_path[1:-1]))
+        self._remove_unprotected_path_shortcuts(adjacency, protected_path, protected_edges)
+        self._prune_shorter_mass_paths(adjacency, target_distance, protected_edges)
+        self._top_up_mass_degrees(adjacency, target_distance=target_distance)
+        self._prune_shorter_mass_paths(adjacency, target_distance, protected_edges)
+
+    def _build_protected_mass_path(self, adjacency: np.ndarray, target_distance: int) -> list[int]:
+        mass_a, mass_b = self.mass_nodes
+        if target_distance == 1:
+            adjacency[mass_a, mass_b] = True
+            adjacency[mass_b, mass_a] = True
+            return [mass_a, mass_b]
+        if adjacency[mass_a, mass_b]:
+            adjacency[mass_a, mass_b] = False
+            adjacency[mass_b, mass_a] = False
+        bridge_count = target_distance - 1
+        candidates = [node for node in range(self.sites) if node not in self.mass_nodes]
+        if len(candidates) < bridge_count:
+            raise ValueError("not enough nodes to build the requested fixed-distance chain")
+        degrees = np.sum(adjacency, axis=1).astype(np.int32)
+        ranked = sorted(candidates, key=lambda node: (int(degrees[node]), float(self.rng.random())))
+        bridge_nodes = ranked[:bridge_count]
+        path = [mass_a, *bridge_nodes, mass_b]
+        for left, right in zip(path, path[1:]):
+            adjacency[left, right] = True
+            adjacency[right, left] = True
+        return path
+
+    def _remove_unprotected_path_shortcuts(
+        self,
+        adjacency: np.ndarray,
+        protected_path: list[int],
+        protected_edges: set[tuple[int, int]],
+    ) -> None:
+        protected_nodes = set(protected_path)
+        for node in protected_nodes:
+            for other in list(np.flatnonzero(adjacency[node]).tolist()):
+                edge = tuple(sorted((int(node), int(other))))
+                if edge in protected_edges:
+                    continue
+                if int(other) in protected_nodes:
+                    adjacency[node, other] = False
+                    adjacency[other, node] = False
+        for mass in self.mass_nodes:
+            for other in list(np.flatnonzero(adjacency[mass]).tolist()):
+                edge = tuple(sorted((int(mass), int(other))))
+                if edge in protected_edges:
+                    continue
+                if int(other) in protected_nodes:
+                    adjacency[mass, other] = False
+                    adjacency[other, mass] = False
+
+    def _top_up_mass_degrees(self, adjacency: np.ndarray, target_distance: int | None = None) -> None:
         target_degree = min(max(self.config.mass_degree, self.config.degree), self.sites - 1)
         degrees = np.sum(adjacency, axis=1).astype(np.int32)
         for mass in self.mass_nodes:
             while int(degrees[mass]) < target_degree:
-                candidate = self._choose_mass_neighbor(adjacency, degrees, mass)
+                candidate = self._choose_mass_neighbor(
+                    adjacency,
+                    degrees,
+                    mass,
+                    target_distance=target_distance,
+                )
                 if candidate is None:
                     break
                 adjacency[mass, candidate] = True
                 adjacency[candidate, mass] = True
+                if target_distance is not None and self._mass_distance(adjacency) != target_distance:
+                    adjacency[mass, candidate] = False
+                    adjacency[candidate, mass] = False
+                    blocked = degrees.copy()
+                    blocked[candidate] += self.sites
+                    candidate = self._choose_mass_neighbor(
+                        adjacency,
+                        blocked,
+                        mass,
+                        target_distance=target_distance,
+                    )
+                    if candidate is None:
+                        break
+                    adjacency[mass, candidate] = True
+                    adjacency[candidate, mass] = True
+                    if self._mass_distance(adjacency) != target_distance:
+                        adjacency[mass, candidate] = False
+                        adjacency[candidate, mass] = False
+                        break
                 degrees[mass] += 1
                 degrees[candidate] += 1
-    def _remove_shared_mass_neighbors(self, adjacency: np.ndarray) -> None:
+
+    def _remove_shared_mass_neighbors(self, adjacency: np.ndarray, protected_nodes: set[int] | None = None) -> None:
         mass_a, mass_b = self.mass_nodes
+        protected_nodes = protected_nodes or set()
         shared = np.flatnonzero(adjacency[mass_a] & adjacency[mass_b])
         for index, neighbor in enumerate(shared.tolist()):
+            if int(neighbor) in protected_nodes:
+                continue
             keep_mass = mass_a if index % 2 == 0 else mass_b
             drop_mass = mass_b if keep_mass == mass_a else mass_a
             adjacency[drop_mass, neighbor] = False
@@ -255,6 +365,7 @@ class SU3GravityPhase2Experiment:
         adjacency: np.ndarray,
         degrees: np.ndarray,
         mass: int,
+        target_distance: int | None = None,
     ) -> int | None:
         other_mass = self.mass_nodes[1] if mass == self.mass_nodes[0] else self.mass_nodes[0]
         candidates = [
@@ -263,7 +374,7 @@ class SU3GravityPhase2Experiment:
             if node != mass
             and node != other_mass
             and not adjacency[mass, node]
-            and not adjacency[other_mass, node]
+            and (target_distance == 1 or not adjacency[other_mass, node])
         ]
         if not candidates:
             candidates = [
@@ -275,6 +386,64 @@ class SU3GravityPhase2Experiment:
             return None
         ranked = sorted(candidates, key=lambda node: (int(degrees[node]), float(self.rng.random())))
         return int(ranked[0])
+
+    def _find_shortest_mass_path(self, adjacency: np.ndarray) -> list[int] | None:
+        mass_a, mass_b = self.mass_nodes
+        parents = np.full(self.sites, -1, dtype=np.int32)
+        queue = [mass_a]
+        parents[mass_a] = mass_a
+        head = 0
+        while head < len(queue):
+            node = queue[head]
+            head += 1
+            if node == mass_b:
+                break
+            for neighbor in np.flatnonzero(adjacency[node]).tolist():
+                if parents[neighbor] != -1:
+                    continue
+                parents[neighbor] = node
+                queue.append(int(neighbor))
+        if parents[mass_b] == -1:
+            return None
+        path = [mass_b]
+        cursor = mass_b
+        while cursor != mass_a:
+            cursor = int(parents[cursor])
+            path.append(cursor)
+        path.reverse()
+        return path
+
+    def _prune_shorter_mass_paths(
+        self,
+        adjacency: np.ndarray,
+        target_distance: int,
+        protected_edges: set[tuple[int, int]],
+    ) -> None:
+        for _ in range(max(self.sites * self.sites, 1)):
+            distance = self._mass_distance(adjacency)
+            if distance == target_distance:
+                return
+            if distance is None or distance > target_distance:
+                break
+            path = self._find_shortest_mass_path(adjacency)
+            if path is None or len(path) < 2:
+                break
+            removable_edge: tuple[int, int] | None = None
+            for left, right in zip(path, path[1:]):
+                edge = tuple(sorted((int(left), int(right))))
+                if edge in protected_edges:
+                    continue
+                removable_edge = edge
+                break
+            if removable_edge is None:
+                break
+            adjacency[removable_edge[0], removable_edge[1]] = False
+            adjacency[removable_edge[1], removable_edge[0]] = False
+        realized = self._mass_distance(adjacency)
+        if realized != target_distance:
+            raise ValueError(
+                f"failed to realize fixed mass distance {target_distance}; got {realized}"
+            )
 
     def _adjacency_to_edges(self, adjacency: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         edge_i, edge_j = np.nonzero(np.triu(adjacency, k=1))
@@ -332,8 +501,11 @@ class SU3GravityPhase2Experiment:
         )
 
     def _total_energy(self, adjacency: np.ndarray, edge_phases: dict[tuple[int, int], np.ndarray]) -> float:
-        bare_energy = float(sum(self._triangle_energy(triangle, edge_phases) for triangle in self._enumerate_all_triangles(adjacency)))
+        bare_energy = self._total_bare_energy(adjacency, edge_phases)
         return bare_energy + self._mass_penalty_energy(adjacency)
+
+    def _total_bare_energy(self, adjacency: np.ndarray, edge_phases: dict[tuple[int, int], np.ndarray]) -> float:
+        return float(sum(self._triangle_energy(triangle, edge_phases) for triangle in self._enumerate_all_triangles(adjacency)))
 
     def _run_link_updates(
         self,
@@ -398,6 +570,14 @@ class SU3GravityPhase2Experiment:
             adjacency[new_edge[0], new_edge[1]] = True
             adjacency[new_edge[1], new_edge[0]] = True
             edge_phases[new_edge] = carried_phase
+            if self.config.fixed_distance is not None and self._mass_distance(adjacency) != self.config.fixed_distance:
+                edge_phases.pop(new_edge)
+                adjacency[new_edge[0], new_edge[1]] = False
+                adjacency[new_edge[1], new_edge[0]] = False
+                adjacency[old_edge[0], old_edge[1]] = True
+                adjacency[old_edge[1], old_edge[0]] = True
+                edge_phases[old_edge] = carried_phase
+                continue
             after_triangles = self._triangles_touching_nodes(adjacency, touched_nodes)
             new_energy = sum(self._triangle_energy(triangle, edge_phases) for triangle in after_triangles)
             new_energy += self._mass_penalty_energy(adjacency)
@@ -457,6 +637,8 @@ class SU3GravityPhase2Experiment:
         degrees = np.sum(adjacency, axis=1).astype(int)
         shared_neighbors = int(np.count_nonzero(adjacency[mass_a] & adjacency[mass_b]))
         triangles = self._triangles_touching_nodes(adjacency, set(self.mass_nodes))
+        bare_energy = self._total_bare_energy(adjacency, edge_phases)
+        mass_penalty = self._mass_penalty_energy(adjacency)
         return DistanceMeasurement(
             sweep=sweep,
             temperature=float(sweep_temperature),
@@ -465,7 +647,9 @@ class SU3GravityPhase2Experiment:
             mass_b_degree=int(degrees[mass_b]),
             shared_neighbors=shared_neighbors,
             plaquettes_touching_masses=len(triangles),
-            total_energy=self._total_energy(adjacency, edge_phases),
+            bare_energy=bare_energy,
+            mass_penalty_energy=mass_penalty,
+            total_energy=bare_energy + mass_penalty,
         )
 
 
@@ -474,22 +658,36 @@ def run_gravity_phase2_sweep(
     seed: int,
     config: GravityPhase2Config,
     progress_mode: str = "bar",
+    potential_distances: tuple[int, ...] = (),
 ) -> GravityPhase2SweepResult:
     points: list[GravityPhase2Point] = []
-    for offset, size in enumerate(sizes):
-        experiment = SU3GravityPhase2Experiment(
-            sites=size,
-            seed=seed + 37 * offset,
-            config=config,
-            progress_mode=progress_mode,
-        )
-        points.append(experiment.run())
+    if potential_distances:
+        if len(sizes) != 1:
+            raise ValueError("fixed-distance potential scans currently support exactly one system size")
+        size = sizes[0]
+        for offset, distance in enumerate(potential_distances):
+            experiment = SU3GravityPhase2Experiment(
+                sites=size,
+                seed=seed + 37 * offset,
+                config=replace(config, fixed_distance=int(distance)),
+                progress_mode=progress_mode,
+            )
+            points.append(experiment.run())
+    else:
+        for offset, size in enumerate(sizes):
+            experiment = SU3GravityPhase2Experiment(
+                sites=size,
+                seed=seed + 37 * offset,
+                config=config,
+                progress_mode=progress_mode,
+            )
+            points.append(experiment.run())
     global_distance_trend = fit_linear_law(
         np.asarray([measurement.sweep for point in points for measurement in point.measurements if measurement.graph_distance is not None], dtype=float),
         np.asarray([float(measurement.graph_distance) for point in points for measurement in point.measurements if measurement.graph_distance is not None], dtype=float),
     )
     return GravityPhase2SweepResult(
-        mode="gravity-test",
+        mode="gravity-potential" if potential_distances else "gravity-test",
         graph_prior=config.graph_prior,
         degree=config.degree,
         temperature=config.temperature,
@@ -502,6 +700,7 @@ def run_gravity_phase2_sweep(
         mass_nodes=config.mass_nodes,
         mass_degree=config.mass_degree,
         mass_coupling=config.mass_coupling,
+        potential_distances=tuple(int(distance) for distance in potential_distances),
         points=points,
         global_distance_trend=global_distance_trend,
     )
@@ -509,7 +708,7 @@ def run_gravity_phase2_sweep(
 
 def render_gravity_phase2_report(result: GravityPhase2SweepResult) -> str:
     lines = [
-        "Gravity Phase 2 Report",
+        "Gravity Phase 2 Report" if not result.potential_distances else "Gravity Mass-Distance Potential Report",
         "=" * 22,
         f"graph prior: {result.graph_prior}",
         f"background degree: {result.degree}",
@@ -522,20 +721,30 @@ def render_gravity_phase2_report(result: GravityPhase2SweepResult) -> str:
         f"edge relocations/sweep: {result.edge_swap_attempts_per_sweep}",
         f"global distance trend: slope={result.global_distance_trend.slope:.6f} intercept={result.global_distance_trend.intercept:.6f} R^2={result.global_distance_trend.r2:.5f}",
         f"mass coupling lambda: {result.mass_coupling:.3f}",
-        "sites | seed | initial d | final d | min d | mean d | trend slope | Etotal",
     ]
+    if result.potential_distances:
+        lines.append(f"fixed distances: {', '.join(str(distance) for distance in result.potential_distances)}")
+        lines.append("target d | realized mean d | bare energy | total energy | sigma(bare)")
+    else:
+        lines.append("sites | seed | initial d | final d | min d | mean d | trend slope | Etotal")
     for point in result.points:
         initial_distance = str(point.initial_distance) if point.initial_distance is not None else "disc"
         final_distance = str(point.final_distance) if point.final_distance is not None else "disc"
         min_distance = str(point.min_distance) if point.min_distance is not None else "disc"
         mean_distance = f"{point.mean_distance:.3f}" if point.mean_distance is not None else "n/a"
-        lines.append(
-            f"{point.sites:5d} | {point.seed:4d} | {initial_distance:9s} | {final_distance:7s} | {min_distance:5s} | {mean_distance:6s} | {point.distance_trend.slope:11.6f} | {point.mean_total_energy:6.4f}"
-        )
+        if result.potential_distances:
+            target_distance = point.fixed_distance_target if point.fixed_distance_target is not None else -1
+            lines.append(
+                f"{target_distance:8d} | {mean_distance:15s} | {point.mean_bare_energy:11.4f} | {point.mean_total_energy:12.4f} | {point.bare_energy_std:10.4f}"
+            )
+        else:
+            lines.append(
+                f"{point.sites:5d} | {point.seed:4d} | {initial_distance:9s} | {final_distance:7s} | {min_distance:5s} | {mean_distance:6s} | {point.distance_trend.slope:11.6f} | {point.mean_total_energy:6.4f}"
+            )
         if point.measurements:
             profile = ", ".join(
                 f"s={entry.sweep}: d={entry.graph_distance if entry.graph_distance is not None else 'disc'} T={entry.temperature:.3f} "
-                f"deg=({entry.mass_a_degree},{entry.mass_b_degree}) tri={entry.plaquettes_touching_masses} shared={entry.shared_neighbors}"
+                f"deg=({entry.mass_a_degree},{entry.mass_b_degree}) tri={entry.plaquettes_touching_masses} shared={entry.shared_neighbors} Ebare={entry.bare_energy:.4f}"
                 for entry in point.measurements
             )
             lines.append(f"      tracker: {profile}")
@@ -589,4 +798,24 @@ def save_gravity_phase2_visualizations(
     figure.savefig(plaquette_path, dpi=180)
     plt.close(figure)
     paths.append(plaquette_path)
+
+    if result.potential_distances:
+        figure, axis = plt.subplots(figsize=(7.6, 5.2))
+        target_distances = np.asarray([point.fixed_distance_target for point in result.points if point.fixed_distance_target is not None], dtype=float)
+        bare_energies = np.asarray([point.mean_bare_energy for point in result.points if point.fixed_distance_target is not None], dtype=float)
+        bare_std = np.asarray([point.bare_energy_std for point in result.points if point.fixed_distance_target is not None], dtype=float)
+        total_energies = np.asarray([point.mean_total_energy for point in result.points if point.fixed_distance_target is not None], dtype=float)
+        axis.errorbar(target_distances, bare_energies, yerr=bare_std, fmt="o-", color="#1d3557", capsize=4, linewidth=2.2, label="mean bare energy")
+        axis.plot(target_distances, total_energies, "s--", color="#e76f51", linewidth=1.9, label="mean total energy")
+        axis.set_xlabel("Fixed mass distance d")
+        axis.set_ylabel("Energy")
+        axis.set_title("Mass-Distance Potential")
+        axis.set_xticks(target_distances)
+        axis.grid(True, alpha=0.25)
+        axis.legend(loc="best")
+        figure.tight_layout()
+        potential_path = output_dir / f"{prefix}_mass_distance_potential.png"
+        figure.savefig(potential_path, dpi=180)
+        plt.close(figure)
+        paths.append(potential_path)
     return paths
