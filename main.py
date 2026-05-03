@@ -23,6 +23,14 @@ from scalable_simulation import (
     save_scaling_visualizations,
     write_scaling_json,
 )
+from gravity_phase2 import (
+    GravityPhase2Config,
+    GravityPhase2SweepResult,
+    render_gravity_phase2_report,
+    run_gravity_phase2_sweep,
+    save_gravity_phase2_visualizations,
+    write_gravity_phase2_json,
+)
 from vacuum_phase1 import (
     VacuumPhase1Config,
     VacuumPhase1SweepResult,
@@ -41,7 +49,7 @@ from vacuum_phase1 import (
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate an emergent operator network toy model.")
-    parser.add_argument("--mode", choices=["exact", "monte-carlo", "vacuum-phase1"], default="exact", help="Choose the exact solver, the scalable Monte Carlo surrogate, or the dedicated bare-action vacuum Phase 1 experiment.")
+    parser.add_argument("--mode", choices=["exact", "monte-carlo", "vacuum-phase1", "gravity-test"], default="exact", help="Choose the exact solver, the scalable Monte Carlo surrogate, the dedicated bare-action vacuum Phase 1 experiment, or the gravity Phase 2 distance-tracker experiment.")
     parser.add_argument("--sites", type=int, default=8, help="Number of operator sites / qubits.")
     parser.add_argument("--gauge-group", choices=["none", "su2", "su3"], default="su2", help="Classical gauge background carried by link matrices in exact mode.")
     parser.add_argument("--eig-count", type=int, default=10, help="Number of low-energy eigenpairs to compute in exact mode.")
@@ -106,6 +114,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vacuum-link-updates-per-sweep", type=int, default=128, help="Bare-action Phase 1 only: how many local SU(3) link updates to propose per sweep.")
     parser.add_argument("--vacuum-link-update-step", type=float, default=0.18, help="Bare-action Phase 1 only: Gaussian step size for SU(3) diagonal phase proposals.")
     parser.add_argument("--vacuum-radius-count", type=int, default=6, help="Bare-action Phase 1 only: number of blind-observer radii to probe from the graph center.")
+    parser.add_argument("--gravity-mass-nodes", type=str, default="0,1", help="Gravity Phase 2 only: comma-separated node ids used as the two static heavy masses.")
+    parser.add_argument("--gravity-mass-degree", type=int, default=24, help="Gravity Phase 2 only: target degree imposed on each static heavy mass.")
+    parser.add_argument("--lambda-coupling", type=float, default=0.5, help="Gravity Phase 2 only: quadratic mass-term coupling lambda for deviations from the target mass degree.")
+    parser.add_argument("--gravity-potential-distances", type=str, default="", help="Gravity Phase 2 only: optional comma-separated fixed graph distances for a Mass-Distance Potential scan, for example 1,2,3,4.")
     parser.add_argument("--live-plot", action="store_true", help="Open a live tensor-network visualization during Monte Carlo sampling. When --plot-dir is also set, frame snapshots are written there as well.")
     parser.add_argument("--live-plot-interval", type=int, default=12, help="How many Monte Carlo sweeps to skip between live tensor-network updates.")
     parser.add_argument("--live-plot-max-edges", type=int, default=320, help="Maximum number of strongest edges rendered in each live tensor-network frame.")
@@ -156,10 +168,47 @@ def parse_temperature_scan(raw: str) -> list[float]:
     return values
 
 
+def parse_positive_int_list(raw: str) -> tuple[int, ...]:
+    if not raw.strip():
+        return ()
+    values: list[int] = []
+    for token in raw.split(","):
+        stripped = token.strip()
+        if not stripped:
+            continue
+        value = int(stripped)
+        if value < 1:
+            raise ValueError("distance values must be positive integers")
+        if value not in values:
+            values.append(value)
+    return tuple(values)
+
+
 def parse_string_list(raw: str) -> tuple[str, ...]:
     if not raw.strip():
         return ()
     return tuple(token.strip().lower() for token in raw.split(",") if token.strip())
+
+
+def parse_node_pair(raw: str) -> tuple[int, int]:
+    values = tuple(int(token.strip()) for token in raw.split(",") if token.strip())
+    if len(values) != 2 or values[0] == values[1]:
+        raise ValueError("gravity mass nodes must contain exactly two distinct integers")
+    return values
+
+
+def default_gravity_json_path(args: argparse.Namespace, sizes: list[int]) -> Path:
+    size_label = f"scan_{'_'.join(str(size) for size in sizes)}" if sizes else f"N{args.sites}"
+    mass_a, mass_b = parse_node_pair(args.gravity_mass_nodes)
+    potential_distances = parse_positive_int_list(args.gravity_potential_distances)
+    if potential_distances:
+        distance_label = "_".join(str(distance) for distance in potential_distances)
+        return Path(
+            f"gravity_potential_{size_label}_{args.graph_prior}_mdeg{args.gravity_mass_degree}_nodes{mass_a}_{mass_b}_d{distance_label}.json"
+        )
+    return Path(
+        f"gravity_phase2_{size_label}_{args.graph_prior}_mdeg{args.gravity_mass_degree}_nodes{mass_a}_{mass_b}.json"
+    )
 
 
 def run_monte_carlo_mode(args: argparse.Namespace) -> None:
@@ -312,6 +361,59 @@ def run_vacuum_phase1_mode(args: argparse.Namespace) -> None:
         save_vacuum_phase1_visualizations(sweep, args.plot_dir, prefix=prefix)
 
 
+def run_gravity_test_mode(args: argparse.Namespace) -> None:
+    sizes = parse_size_scan(args.size_scan)
+    target_sizes = sizes if sizes else [args.sites]
+    potential_distances = parse_positive_int_list(args.gravity_potential_distances)
+    progress_mode = "off" if args.no_progress else args.progress_mode
+    gravity_temperature = 0.3 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature
+    gravity_anneal_start = (
+        GravityPhase2Config.anneal_start_temperature
+        if args.anneal_start_temperature is None
+        else args.anneal_start_temperature
+    )
+    gravity_burn_in = 8000 if args.burn_in_sweeps == 180 else args.burn_in_sweeps
+    gravity_measurement = 100 if args.measurement_sweeps == 420 else args.measurement_sweeps
+    gravity_interval = 100 if args.sample_interval == 6 else args.sample_interval
+    gravity_edge_relocations = (
+        GravityPhase2Config.edge_swap_attempts_per_sweep
+        if args.edge_swap_attempts_per_sweep is None
+        else args.edge_swap_attempts_per_sweep
+    )
+    config = GravityPhase2Config(
+        degree=args.degree,
+        graph_prior=args.graph_prior,
+        temperature=gravity_temperature,
+        anneal_start_temperature=gravity_anneal_start,
+        burn_in_sweeps=gravity_burn_in,
+        measurement_sweeps=gravity_measurement,
+        sample_interval=gravity_interval,
+        edge_swap_attempts_per_sweep=gravity_edge_relocations,
+        link_updates_per_sweep=args.vacuum_link_updates_per_sweep,
+        link_update_step=args.vacuum_link_update_step,
+        mass_nodes=parse_node_pair(args.gravity_mass_nodes),
+        mass_degree=args.gravity_mass_degree,
+        mass_coupling=args.lambda_coupling,
+    )
+    sweep = cast(
+        GravityPhase2SweepResult,
+        run_gravity_phase2_sweep(
+            sizes=target_sizes,
+            seed=args.seed,
+            config=config,
+            progress_mode=progress_mode,
+            potential_distances=potential_distances,
+        ),
+    )
+    print(render_gravity_phase2_report(sweep))
+    json_path = args.json_out if args.json_out is not None else default_gravity_json_path(args, sizes)
+    write_gravity_phase2_json(json_path, sweep)
+    print(f"wrote gravity JSON to {json_path}")
+    if args.plot_dir is not None:
+        prefix = "gravity_potential" if potential_distances else ("gravity_phase2" if sizes else f"gravity_phase2_{args.sites}")
+        save_gravity_phase2_visualizations(sweep, args.plot_dir, prefix=prefix)
+
+
 def main() -> None:
     args = build_parser().parse_args()
     if args.chiral_scale is None:
@@ -327,6 +429,9 @@ def main() -> None:
         return
     if args.mode == "vacuum-phase1":
         run_vacuum_phase1_mode(args)
+        return
+    if args.mode == "gravity-test":
+        run_gravity_test_mode(args)
         return
 
     if args.scan_seeds > 0:

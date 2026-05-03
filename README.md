@@ -167,6 +167,26 @@ This is an encouraging sign that the topology-only volume-growth observable beco
 
 From a practical computing perspective, these `SU(3)` tests show that `N=2048` is reachable in the current deep-surrogate workflow, but only at substantial wall-clock cost when one simultaneously pushes coordination number, burn-in length, measurement depth, diffusion horizon, and late Ricci smoothing. Simpler scalar runs can reach larger `N` more easily, but for the heavier `SU(3)` parameter searches the remaining discrepancy still looks structural rather than merely statistical. Further smoothing of the residual "holes in the sponge" will likely require either substantially more compute or a different growth architecture rather than another small parameter retuning.
 
+There is now also a dedicated `gravity-test` branch that addresses a narrower and more dynamical question than the volumetric `SU(3)` runs: whether two explicit high-degree mass nodes embedded in an annealed sparse background show reproducible entropic attraction under local graph updates. A representative `Phase 2` run,
+
+```powershell
+python main.py --mode gravity-test --sites 256 --degree 16 --burn-in-sweeps 10000 --temperature 0.2 --gravity-mass-degree 48 --lambda-coupling 0.05 --graph-prior erdos-renyi --progress-mode log
+```
+
+completed in about `2554 s` and produced a stable mean separation near `1.853`, a final separation `d = 2`, a minimum observed separation `d_{min} = 1`, and an essentially flat global trend (`slope \approx 10^{-6}`, `R^2 \approx 1.4 \times 10^{-4}`). The key feature is not a monotonic final-state collapse but the repeated tunneling of the mass pair into direct contact (`d = 1`) during several extended windows of the anneal, together with shared-neighbor counts that reach the mid-teens. The careful interpretation is that this branch now shows a reproducible finite-size attraction mechanism: the entanglement-weighted geometry repeatedly finds low-action states in which the two masses either touch directly or are separated by only one shell of highly shared support. That is stronger than a purely kinematic curvature signal, but still narrower than a derivation of a continuum gravitational force law.
+
+The final low-temperature return to `d = 2` is scientifically useful rather than disappointing. In the present discrete surrogate it suggests a competition between attractive clustering and a short-distance exclusion or packing effect of the surrounding graph, so the low-action state need not be a permanently collapsed dimer. The safest claim is therefore: `Phase 2` now supports an annealed entropic-gravity picture in which matter nodes actively explore and repeatedly occupy near-contact states, while the surrounding graph reorganizes through shared neighbors instead of collapsing into an uncontrolled hub singularity.
+
+The same `gravity-test` path now also supports a fixed-distance potential scan. In that mode the code prepares four short runs with the mass pair constrained to chosen graph separations and plots the mean bare vacuum energy against the imposed distance:
+
+```powershell
+python main.py --mode gravity-test --sites 256 --degree 16 --burn-in-sweeps 400 --measurement-sweeps 80 --sample-interval 20 --temperature 0.2 --gravity-mass-degree 48 --lambda-coupling 0.05 --graph-prior erdos-renyi --gravity-potential-distances 1,2,3,4 --plot-dir plots/gravity_potential --progress-mode log
+```
+
+This writes a JSON summary plus `Mass-Distance Potential` plot. The right interpretation is again narrow: if the mean bare energy rises with the imposed graph distance, then within this discrete surrogate the vacuum energetics favor shorter mass separation. That is evidence for an attractive effective potential in the model, not by itself a proof of continuum Newtonian or Einstein gravity.
+
+![Mass-Distance Potential Well](plots/gravity_potential_smoke/gravity_potential_smoke_potential_well.png)
+
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. The current codebase is stronger than the earliest version because it now includes graph-prior comparisons, null-model baselines, alternative distance prescriptions, and topology-only diagnostics. Even so, those additions do not eliminate the basic interpretive risks; they only sharpen where the remaining weak points are. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
 
@@ -441,6 +461,17 @@ These runs cover the later exploration campaign: staged inflation, synthetic see
 * **What improved:** Some of these extensions regularized the geometry, reduced prior spread, or improved one observable at a time.
 * **What failed structurally:** Whenever $d_H$ improved substantially, $d_s$ often collapsed; whenever $d_s$ approached $3$, the Hausdorff sector usually became unstable or prior-dominated.
 * **Why this matters:** These failures are scientifically useful. They suggest that the current limitation is not just bad parameter tuning, but a structural shortcoming of the static prebuilt-graph architecture.
+
+### 8. `Phase 2` Gravity Test With Explicit Mass Nodes
+**Command:**
+```bash
+python main.py --mode gravity-test --sites 256 --degree 16 --burn-in-sweeps 10000 --temperature 0.2 --gravity-mass-degree 48 --lambda-coupling 0.05 --graph-prior erdos-renyi --progress-mode log
+```
+**Interpretation:**
+This run is the clearest current `Phase 2` evidence that the surrogate can exhibit active mass-to-mass attraction rather than only static curvature proxies.
+* **Repeated near-contact events:** The mass pair reached `d = 1` multiple times during annealing and in some windows remained there for hundreds of sweeps, which is the strongest current sign that the local action admits metastable near-contact states.
+* **Shared-neighbor buildup:** During the same run the two masses accumulated large numbers of shared neighbors, at times reaching double-digit overlap. In the discrete language of this model, that is the cleanest current curvature/backreaction signal: the surrounding graph reorganizes to compress the informational separation between the masses.
+* **Careful final-state reading:** The final state returned to `d = 2`, so the README should not claim irreversible collapse or a literal Newtonian force law. The defensible statement is narrower: this branch now demonstrates a finite-size annealed attraction mechanism with tunneling into direct contact, followed by low-temperature restabilization at one graph step of separation.
 
 ***
 
