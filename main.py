@@ -4,6 +4,7 @@ import argparse
 from math import isclose
 from pathlib import Path
 import sys
+from typing import cast
 
 from emergent_simulation import (
     ExactMassConfig,
@@ -22,11 +23,25 @@ from scalable_simulation import (
     save_scaling_visualizations,
     write_scaling_json,
 )
+from vacuum_phase1 import (
+    VacuumPhase1Config,
+    VacuumPhase1SweepResult,
+    VacuumPhase1TemperatureScanResult,
+    normalize_vacuum_null_models,
+    render_vacuum_phase1_report,
+    render_vacuum_phase1_temperature_scan_report,
+    run_vacuum_phase1_sweep,
+    run_vacuum_phase1_temperature_scan,
+    save_vacuum_phase1_visualizations,
+    save_vacuum_phase1_temperature_scan_visualizations,
+    write_vacuum_phase1_json,
+    write_vacuum_phase1_temperature_scan_json,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate an emergent operator network toy model.")
-    parser.add_argument("--mode", choices=["exact", "monte-carlo"], default="exact", help="Choose the exact small-N solver or the scalable Monte Carlo surrogate.")
+    parser.add_argument("--mode", choices=["exact", "monte-carlo", "vacuum-phase1"], default="exact", help="Choose the exact solver, the scalable Monte Carlo surrogate, or the dedicated bare-action vacuum Phase 1 experiment.")
     parser.add_argument("--sites", type=int, default=8, help="Number of operator sites / qubits.")
     parser.add_argument("--gauge-group", choices=["none", "su2", "su3"], default="su2", help="Classical gauge background carried by link matrices in exact mode.")
     parser.add_argument("--eig-count", type=int, default=10, help="Number of low-energy eigenpairs to compute in exact mode.")
@@ -35,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tensor-bond-dim", type=int, default=2, help="Bond dimension for the SU(3) tensor-network-assisted Monte Carlo surrogate.")
     parser.add_argument("--seed", type=int, default=7, help="Random seed.")
     parser.add_argument("--temperature", type=float, default=0.35, help="Effective temperature.")
+    parser.add_argument("--temperature-scan", type=str, default="", help="Bare-action Phase 1 only: comma-separated temperatures to scan, for example 0.1,0.3,0.5,0.7.")
     parser.add_argument("--anneal-start-temperature", type=float, default=None, help="Optional high starting temperature for burn-in simulated annealing in Monte Carlo mode.")
     parser.add_argument("--inflation-seed-sites", type=int, default=None, help="Optional synthetic-inflation seed size. When set below the target N, the graph is grown locally from this small seed instead of being initialized at full size.")
     parser.add_argument("--inflation-mode", choices=["legacy", "staged", "boundary-strain"], default="legacy", help="Inflation builder to use when --inflation-seed-sites is enabled. 'staged' grows in bursts with local smoothing between stages; 'boundary-strain' grows a weak outer shell from high-boundary/high-strain nodes, then applies short relaxation and mild Ricci cleanup each stage.")
@@ -71,12 +87,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scan-seeds", type=int, default=0, help="If > 0, run this many consecutive seeds and rank the emergent regimes.")
     parser.add_argument("--plot-dir", type=Path, default=None, help="Optional directory for visualization PNG files.")
     parser.add_argument("--degree", type=int, default=8, help="Sparse algebraic degree for Monte Carlo mode.")
-    parser.add_argument("--graph-prior", choices=["3d-local", "random-regular", "small-world"], default="3d-local", help="Graph prior for Monte Carlo locality construction.")
+    parser.add_argument("--graph-prior", choices=["3d-local", "random-regular", "small-world", "erdos-renyi"], default="3d-local", help="Graph prior for Monte Carlo locality construction.")
     parser.add_argument("--backend", choices=["auto", "cpu", "cupy"], default="auto", help="Array backend for Monte Carlo mode. 'auto' prefers CuPy on a CUDA GPU when available.")
     parser.add_argument("--burn-in-sweeps", type=int, default=180, help="Burn-in sweeps for Monte Carlo mode.")
     parser.add_argument("--measurement-sweeps", type=int, default=420, help="Measurement sweeps for Monte Carlo mode.")
     parser.add_argument("--sample-interval", type=int, default=6, help="Sampling interval in sweeps for Monte Carlo mode.")
-    parser.add_argument("--edge-swap-attempts-per-sweep", type=int, default=0, help="How many edge-relocation proposals to attempt after each Monte Carlo sweep. Each proposal removes one existing edge and proposes one new edge, then accepts or rejects it by a local Metropolis action test.")
+    parser.add_argument("--edge-swap-attempts-per-sweep", type=int, default=None, help="How many edge-relocation proposals to attempt after each sweep. In monte-carlo mode the default is 0; in vacuum-phase1 the default comes from that mode's own configuration.")
     parser.add_argument("--edge-swap-entanglement-bias", type=float, default=0.75, help="How strongly edge swaps prefer to assign stronger links to high-entanglement nodes and reject rewires into cold regions.")
     parser.add_argument("--cosmological-constant", type=float, default=0.0, help="Strength of the harmonic volume regularizer Lambda that penalizes node degrees moving away from the target background degree.")
     parser.add_argument("--walker-count", type=int, default=512, help="Number of random walkers for spectral-dimension estimation.")
@@ -87,6 +103,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--null-models", type=str, default="", help="Optional comma-separated null models to compare against: shuffle, rewired.")
     parser.add_argument("--null-model-samples", type=int, default=0, help="Number of randomized realizations per null model in Monte Carlo mode.")
     parser.add_argument("--null-rewire-swaps", type=int, default=4, help="Approximate number of degree-preserving swap attempts per edge for the rewired null model.")
+    parser.add_argument("--vacuum-link-updates-per-sweep", type=int, default=128, help="Bare-action Phase 1 only: how many local SU(3) link updates to propose per sweep.")
+    parser.add_argument("--vacuum-link-update-step", type=float, default=0.18, help="Bare-action Phase 1 only: Gaussian step size for SU(3) diagonal phase proposals.")
+    parser.add_argument("--vacuum-radius-count", type=int, default=6, help="Bare-action Phase 1 only: number of blind-observer radii to probe from the graph center.")
     parser.add_argument("--live-plot", action="store_true", help="Open a live tensor-network visualization during Monte Carlo sampling. When --plot-dir is also set, frame snapshots are written there as well.")
     parser.add_argument("--live-plot-interval", type=int, default=12, help="How many Monte Carlo sweeps to skip between live tensor-network updates.")
     parser.add_argument("--live-plot-max-edges", type=int, default=320, help="Maximum number of strongest edges rendered in each live tensor-network frame.")
@@ -119,6 +138,22 @@ def parse_float_list(raw: str, default: tuple[float, ...]) -> tuple[float, ...]:
         return default
     values = tuple(float(token.strip()) for token in raw.split(",") if token.strip())
     return values if values else default
+
+
+def parse_temperature_scan(raw: str) -> list[float]:
+    if not raw.strip():
+        return []
+    values: list[float] = []
+    for token in raw.split(","):
+        stripped = token.strip()
+        if not stripped:
+            continue
+        value = float(stripped)
+        if value <= 0.0:
+            raise ValueError("temperature scan values must be positive")
+        if all(abs(existing - value) > 1e-12 for existing in values):
+            values.append(value)
+    return values
 
 
 def parse_string_list(raw: str) -> tuple[str, ...]:
@@ -165,7 +200,7 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         burn_in_sweeps=args.burn_in_sweeps,
         measurement_sweeps=args.measurement_sweeps,
         sample_interval=args.sample_interval,
-        edge_swap_attempts_per_sweep=args.edge_swap_attempts_per_sweep,
+        edge_swap_attempts_per_sweep=0 if args.edge_swap_attempts_per_sweep is None else args.edge_swap_attempts_per_sweep,
         edge_swap_entanglement_bias=args.edge_swap_entanglement_bias,
         cosmological_constant=args.cosmological_constant,
         walker_count=args.walker_count,
@@ -217,6 +252,66 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         save_scaling_visualizations(artifacts, sweep, args.plot_dir, prefix=prefix)
 
 
+def run_vacuum_phase1_mode(args: argparse.Namespace) -> None:
+    sizes = parse_size_scan(args.size_scan)
+    target_sizes = sizes if sizes else [args.sites]
+    progress_mode = "off" if args.no_progress else args.progress_mode
+    temperature_scan = parse_temperature_scan(args.temperature_scan)
+    vacuum_edge_relocations = (
+        VacuumPhase1Config.edge_swap_attempts_per_sweep
+        if args.edge_swap_attempts_per_sweep is None
+        else args.edge_swap_attempts_per_sweep
+    )
+    config = VacuumPhase1Config(
+        degree=args.degree,
+        graph_prior=args.graph_prior,
+        temperature=args.temperature,
+        anneal_start_temperature=args.anneal_start_temperature,
+        burn_in_sweeps=args.burn_in_sweeps,
+        measurement_sweeps=args.measurement_sweeps,
+        sample_interval=args.sample_interval,
+        edge_swap_attempts_per_sweep=vacuum_edge_relocations,
+        link_updates_per_sweep=args.vacuum_link_updates_per_sweep,
+        link_update_step=args.vacuum_link_update_step,
+        radius_count=args.vacuum_radius_count,
+        null_model_types=normalize_vacuum_null_models(parse_string_list(args.null_models)),
+        null_model_samples=max(0, args.null_model_samples if args.null_model_samples > 0 else 4),
+    )
+    if temperature_scan:
+        scan = cast(
+            VacuumPhase1TemperatureScanResult,
+            run_vacuum_phase1_temperature_scan(
+                temperatures=temperature_scan,
+                sizes=target_sizes,
+                seed=args.seed,
+                config=config,
+                progress_mode=progress_mode,
+            ),
+        )
+        print(render_vacuum_phase1_temperature_scan_report(scan))
+        if args.json_out is not None:
+            write_vacuum_phase1_temperature_scan_json(args.json_out, scan)
+        if args.plot_dir is not None:
+            prefix = "vacuum_phase1_temperature_scan" if sizes else f"vacuum_phase1_temperature_scan_{args.sites}"
+            save_vacuum_phase1_temperature_scan_visualizations(scan, args.plot_dir, prefix=prefix)
+        return
+    sweep = cast(
+        VacuumPhase1SweepResult,
+        run_vacuum_phase1_sweep(
+            sizes=target_sizes,
+            seed=args.seed,
+            config=config,
+            progress_mode=progress_mode,
+        ),
+    )
+    print(render_vacuum_phase1_report(sweep))
+    if args.json_out is not None:
+        write_vacuum_phase1_json(args.json_out, sweep)
+    if args.plot_dir is not None:
+        prefix = "vacuum_phase1" if sizes else f"vacuum_phase1_{args.sites}"
+        save_vacuum_phase1_visualizations(sweep, args.plot_dir, prefix=prefix)
+
+
 def main() -> None:
     args = build_parser().parse_args()
     if args.chiral_scale is None:
@@ -229,6 +324,9 @@ def main() -> None:
     )
     if args.mode == "monte-carlo":
         run_monte_carlo_mode(args)
+        return
+    if args.mode == "vacuum-phase1":
+        run_vacuum_phase1_mode(args)
         return
 
     if args.scan_seeds > 0:

@@ -59,6 +59,48 @@ $$
 
 with substantially reduced spread between `3d-local` and `small-world` priors. A representative late run,
 
+There is now also a dedicated bare-action `vacuum-phase1` branch aimed at a different question: whether a minimal local `SU(3)` plaquette dynamics already produces a Blind-Observer entropy law that prefers boundary area over enclosed volume, and whether that signal survives null-model attacks. The reference command is
+
+```powershell
+python main.py --mode vacuum-phase1 --size-scan 256,512,1024 --temperature 0.3 --anneal-start-temperature 0.6 --burn-in-sweeps 8000 --measurement-sweeps 100 --sample-interval 10 --null-models shuffle,erdos-renyi --graph-prior erdos-renyi --progress-mode log --json-out vacuum_phase1_golden_run.json
+```
+
+In that branch each graph edge carries a diagonal `SU(3)` phase, and the local bare action is a triangle surrogate,
+
+$$
+E_{\triangle}(a,b,c) = 1 - \frac{1}{3}\,\Re\,\mathrm{Tr}(U_{ab}U_{bc}U_{ca}),
+$$
+
+so the experiment measures whether annealed low-action triangle holonomies induce an entropic area law. The Blind Observer chooses a central node, grows graph balls `A(r)`, builds a reduced `3 \times 3` density matrix from boundary-link states and internal triangle loop states, and compares
+
+$$
+S(A_r) \approx a_A + b_A |\partial A(r)|
+$$
+
+against
+
+$$
+S(A_r) \approx a_V + b_V V(r).
+$$
+
+The most interesting point in the current golden run is `N=1024`: the area-law fit is strong (`slope \approx 3.09 \times 10^{-5}`, `R^2 \approx 0.848`), while the volume-law fit is weak (`R^2 \approx 0.173`). At the same size both null ensembles tilt the wrong way in mean area slope: `shuffle` gives about `-5.8 \times 10^{-5}` and `erdos-renyi` about `-6.3 \times 10^{-5}`. The narrow claim is therefore not that quantum gravity is solved, but that this bare local `SU(3)` surrogate develops a reproducible area-law branch that cleanly separates from the two noise baselines by `N=1024`.
+
+For paper-ready figures, run
+
+```powershell
+python plot_vacuum_phase1_report.py vacuum_phase1_golden_run.json --output-dir plots/vacuum_phase1 --prefix vacuum_phase1_golden
+```
+
+This generates both PNG and PDF figures for the Blind-Observer profiles, the null-model rejection plot, and a scaling summary. The narrative draft for this branch is collected in [VACUUM_PHASE1_REPORT.md](d:/Temp/physics/VACUUM_PHASE1_REPORT.md).
+
+![Vacuum Phase 1 Blind Observer Profiles](plots/vacuum_phase1/vacuum_phase1_golden_blind_observer_profiles.png)
+
+The blind-observer profiles show the actual entropy samples used in the fit. By `N=1024`, the area-organized profile remains structured while the volume alternative is no longer the cleaner description.
+
+![Vacuum Phase 1 Null-Model Rejection](plots/vacuum_phase1/vacuum_phase1_golden_null_model_rejection.png)
+
+The null-model rejection plot is the key result of the branch: the observed area-law slope stays positive while both `shuffle` and `erdos-renyi` null baselines drift negative at `N=1024`, and the area-fit quality clearly dominates the volume-fit quality.
+
 ```powershell
 python main.py --mode monte-carlo --size-scan 1024 --gauge-group su3 --graph-prior-scan 3d-local,small-world --degree 18 --burn-in-sweeps 500 --measurement-sweeps 250 --sample-interval 25 --walker-count 128 --max-walk-steps 80 --backend cupy --progress-mode log --inflation-seed-sites 128 --anneal-start-temperature 15.0 --degree-penalty-scale 0.3 --triad-scale 1.0 --json-out ultimate_quantum_manifold.json
 ```
@@ -644,6 +686,33 @@ The same caution applies to time and relativity: `c_eff` is only a bounded-speed
 propagation diagnostic extracted from transfer-matrix spreading on the emergent
 graph. It is a necessary consistency check for causal emergence, not a proof of
 Lorentz invariance, relativistic kinematics, or the Einstein equations.
+
+## Vacuum Phase 1 Bare-Action Mode
+
+The repository now also includes a dedicated `--mode vacuum-phase1` path aimed at
+the first-stage vacuum protocol:
+
+- the graph is initialized with no inflation, no boundary-strain controls, and no Ricci pulses,
+- the annealing action is reduced to a pure `SU(3)` plaquette surrogate built from minimal graph triangles,
+- link relocations are accepted or rejected only from the local bare-action change,
+- the "blind observer" measures graph-radius regions around a central node and reports `S(A)` against boundary area `|∂A|`, together with a comparison against region volume,
+- the available null models are `shuffle` and `erdos-renyi`.
+
+This mode is still a sparse-graph surrogate. In particular, because the scalable
+engine is not a full lattice gauge implementation, the bare plaquette term is
+realized on minimal graph cycles (triangles) rather than on a fixed hypercubic
+lattice.
+
+Representative command:
+
+```powershell
+python main.py --mode vacuum-phase1 --sites 512 --size-scan 512,1024,2048 --graph-prior 3d-local --degree 16 --temperature 0.9 --burn-in-sweeps 180 --measurement-sweeps 90 --sample-interval 6 --edge-swap-attempts-per-sweep 128 --vacuum-link-updates-per-sweep 256 --vacuum-radius-count 8 --null-models shuffle,erdos-renyi --null-model-samples 8 --progress-mode log --json-out vacuum_phase1.json --plot-dir plots
+```
+
+The report prints, for each system size, the mean bare plaquette energy, the
+observer profile `(radius, area, volume, entropy)`, the fitted area-law and
+volume-law lines, and the null-model averages. When `--plot-dir` is provided, it
+writes a global `S(A)` collapse plot plus a size-versus-slope plot.
 
 ## Exact Sparse Solver
 

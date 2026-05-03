@@ -1,0 +1,259 @@
+{
+  "mode": "vacuum-phase1",
+  "graph_prior": "erdos-renyi",
+  "degree": 8,
+  "temperature": 0.3,
+  "anneal_start_temperature": 0.6,
+  "burn_in_sweeps": 8000,
+  "measurement_sweeps": 100,
+  "sample_interval": 10,
+  "edge_swap_attempts_per_sweep": 256,
+  "link_updates_per_sweep": 128,
+  "radius_count": 6,
+  "null_model_types": [
+    "shuffle",
+    "erdos-renyi"
+  ],
+  "null_model_samples": 4,
+  "collapse_area_law": {
+    "slope": 0.0004449692893938951,
+    "intercept": 0.5657965125144795,
+    "r2": 0.16468880122956775
+  },
+  "points": [
+    {
+      "sites": 256,
+      "seed": 7,
+      "graph_prior": "erdos-renyi",
+      "degree": 8,
+      "center_node": 25,
+      "edge_count": 1024,
+      "plaquette_count": 12,
+      "samples_collected": 10,
+      "mean_bare_energy": 4.590184651720634,
+      "bare_energy_std": 1.1858680857897386,
+      "area_law": {
+        "slope": 8.825621860385169e-05,
+        "intercept": 1.053746203481752,
+        "r2": 0.6044790834614938
+      },
+      "volume_law": {
+        "slope": -0.00017590856887414396,
+        "intercept": 1.0933201094770915,
+        "r2": 0.6948802512902102
+      },
+      "null_model_summaries": [
+        {
+          "model": "shuffle",
+          "samples": 4,
+          "area_law_slope_mean": 3.065801704708785e-05,
+          "area_law_slope_std": 1.9685226623376236e-05,
+          "area_law_r2_mean": 0.6568412208602115,
+          "area_law_r2_std": 0.23876407809039213,
+          "volume_law_slope_mean": 9.712543585763959e-06,
+          "volume_law_slope_std": 2.8539814685280177e-05,
+          "volume_law_r2_mean": 0.29986851422995175,
+          "volume_law_r2_std": 0.3406949275213821
+        },
+        {
+          "model": "erdos-renyi",
+          "samples": 4,
+          "area_law_slope_mean": 1.6964578499837066e-05,
+          "area_law_slope_std": 1.4777509633776638e-05,
+          "area_law_r2_mean": 0.5369205337050417,
+          "area_law_r2_std": 0.36578158217096923,
+          "volume_law_slope_mean": 2.2554259422430824e-05,
+          "volume_law_slope_std": 3.002789989002304e-05,
+          "volume_law_r2_mean": 0.3632233040733786,
+          "volume_law_r2_std": 0.3768080072935209
+        }
+      ],
+      "measurements": [
+        {
+          "radius": 1,
+          "area": 118.5,
+          "volume": 15.2,
+          "entropy": 1.0814869489570704
+        },
+        {
+          "radius": 2,
+          "area": 443.4,
+          "volume": 114.8,
+          "entropy": 1.0889881045166863
+        },
+        {
+          "radius": 3,
+          "area": 24.1,
+          "volume": 250.9,
+          "entropy": 1.0424817010733567
+        },
+        {
+          "radius": 4,
+          "area": 0.0,
+          "volume": 256.0,
+          "entropy": 0.0
+        }
+      ]
+    },
+    {
+      "sites": 512,
+      "seed": 44,
+      "graph_prior": "erdos-renyi",
+      "degree": 8,
+      "center_node": 270,
+      "edge_count": 2048,
+      "plaquette_count": 20,
+      "samples_collected": 10,
+      "mean_bare_energy": 5.155459693444213,
+      "bare_energy_std": 1.4723065007985745,
+      "area_law": {
+        "slope": 0.0008983656205755224,
+        "intercept": 0.5382262587167239,
+        "r2": 0.35866721659243206
+      },
+      "volume_law": {
+        "slope": -0.001207217896808537,
+        "intercept": 1.1300602874934635,
+        "r2": 0.392306960813922
+      },
+      "null_model_summaries": [
+        {
+          "model": "shuffle",
+          "samples": 4,
+          "area_law_slope_mean": -7.228512087613474e-07,
+          "area_law_slope_std": 2.9794525810180962e-05,
+          "area_law_r2_mean": 0.33949277108534504,
+          "area_law_r2_std": 0.38175696028147865,
+          "volume_law_slope_mean": 4.6586683110820986e-05,
+          "volume_law_slope_std": 2.2381530196813016e-05,
+          "volume_law_r2_mean": 0.6095681148895562,
+          "volume_law_r2_std": 0.33828746690553985
+        },
+        {
+          "model": "erdos-renyi",
+          "samples": 4,
+          "area_law_slope_mean": -1.1147119352746192e-05,
+          "area_law_slope_std": 3.971088705742789e-05,
+          "area_law_r2_mean": 0.21194279310777164,
+          "area_law_r2_std": 0.24691831979369971,
+          "volume_law_slope_mean": 0.00011710805821597785,
+          "volume_law_slope_std": 4.882070070781327e-05,
+          "volume_law_r2_mean": 0.8392462423678341,
+          "volume_law_r2_std": 0.08744349216086086
+        }
+      ],
+      "measurements": [
+        {
+          "radius": 1,
+          "area": 141.7,
+          "volume": 18.5,
+          "entropy": 1.0154819132092725
+        },
+        {
+          "radius": 2,
+          "area": 715.7,
+          "volume": 143.0,
+          "entropy": 1.0219651063952813
+        },
+        {
+          "radius": 3,
+          "area": 249.8,
+          "volume": 463.6,
+          "entropy": 1.0206667594787546
+        },
+        {
+          "radius": 4,
+          "area": 0.2,
+          "volume": 511.8,
+          "entropy": 0.08964134400891965
+        },
+        {
+          "radius": 5,
+          "area": 0.0,
+          "volume": 512.0,
+          "entropy": 0.0
+        }
+      ]
+    },
+    {
+      "sites": 1024,
+      "seed": 81,
+      "graph_prior": "erdos-renyi",
+      "degree": 8,
+      "center_node": 107,
+      "edge_count": 4096,
+      "plaquette_count": 31,
+      "samples_collected": 10,
+      "mean_bare_energy": 5.226974773943203,
+      "bare_energy_std": 0.6261906969034696,
+      "area_law": {
+        "slope": 3.092054184004538e-05,
+        "intercept": 0.8257781875322853,
+        "r2": 0.8479459900312954
+      },
+      "volume_law": {
+        "slope": -1.8282141803750635e-05,
+        "intercept": 0.8530908384044519,
+        "r2": 0.1728110184045355
+      },
+      "null_model_summaries": [
+        {
+          "model": "shuffle",
+          "samples": 4,
+          "area_law_slope_mean": -5.830973949845698e-05,
+          "area_law_slope_std": 1.3905381330141981e-05,
+          "area_law_r2_mean": 0.2402623997470786,
+          "area_law_r2_std": 0.08013898330868935,
+          "volume_law_slope_mean": 0.00013182672662979467,
+          "volume_law_slope_std": 2.1572985010980038e-05,
+          "volume_law_r2_mean": 0.6699614220929544,
+          "volume_law_r2_std": 0.08275379250884636
+        },
+        {
+          "model": "erdos-renyi",
+          "samples": 4,
+          "area_law_slope_mean": -6.349809902566972e-05,
+          "area_law_slope_std": 5.007613282322452e-05,
+          "area_law_r2_mean": 0.4202458116304859,
+          "area_law_r2_std": 0.1210160963575091,
+          "volume_law_slope_mean": 0.0001311585796036094,
+          "volume_law_slope_std": 5.450267557300684e-05,
+          "volume_law_r2_mean": 0.7399414062693794,
+          "volume_law_r2_std": 0.14534919967811394
+        }
+      ],
+      "measurements": [
+        {
+          "radius": 1,
+          "area": 147.5,
+          "volume": 19.0,
+          "entropy": 0.840188308269455
+        },
+        {
+          "radius": 2,
+          "area": 936.6,
+          "volume": 157.2,
+          "entropy": 0.8570621383980157
+        },
+        {
+          "radius": 3,
+          "area": 1298.9,
+          "volume": 738.3,
+          "entropy": 0.8631903314358944
+        },
+        {
+          "radius": 4,
+          "area": 6.0,
+          "volume": 1020.8,
+          "entropy": 0.8165411464816443
+        },
+        {
+          "radius": 5,
+          "area": 0.0,
+          "volume": 1023.5,
+          "entropy": 0.0
+        }
+      ]
+    }
+  ]
+}

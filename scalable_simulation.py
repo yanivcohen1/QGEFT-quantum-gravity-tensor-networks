@@ -811,9 +811,9 @@ def normalize_null_model_types(values: tuple[str, ...] | list[str]) -> tuple[str
 
 def normalize_graph_prior(value: str) -> str:
     normalized = value.strip().lower()
-    allowed = {"3d-local", "random-regular", "small-world"}
+    allowed = {"3d-local", "random-regular", "small-world", "erdos-renyi"}
     if normalized not in allowed:
-        raise ValueError("graph prior must be one of: 3d-local, random-regular, small-world")
+        raise ValueError("graph prior must be one of: 3d-local, random-regular, small-world, erdos-renyi")
     return normalized
 
 
@@ -2624,6 +2624,30 @@ def build_small_world_adjacency(sites: int, degree: int, rng: np.random.Generato
     return adjacency
 
 
+def build_erdos_renyi_adjacency(sites: int, degree: int, rng: np.random.Generator) -> np.ndarray:
+    if sites < 2:
+        raise ValueError("erdos-renyi prior requires at least 2 sites")
+    max_edges = sites * (sites - 1) // 2
+    target_edges = int(np.clip(round(sites * max(degree, 1) / 2.0), sites - 1, max_edges))
+    adjacency = np.zeros((sites, sites), dtype=bool)
+    possible_i, possible_j = np.nonzero(np.triu(np.ones((sites, sites), dtype=bool), k=1))
+    chosen = rng.choice(len(possible_i), size=target_edges, replace=False)
+    adjacency[possible_i[chosen], possible_j[chosen]] = True
+    adjacency[possible_j[chosen], possible_i[chosen]] = True
+
+    degrees = np.sum(adjacency, axis=1).astype(np.int32)
+    isolated = np.flatnonzero(degrees == 0)
+    for node in isolated.tolist():
+        candidates = np.setdiff1d(np.arange(sites, dtype=np.int32), np.asarray([node], dtype=np.int32), assume_unique=False)
+        available = candidates[~adjacency[node, candidates]]
+        if len(available) == 0:
+            continue
+        partner = int(available[int(rng.integers(len(available)))])
+        adjacency[node, partner] = True
+        adjacency[partner, node] = True
+    return adjacency
+
+
 def build_graph_prior_adjacency(
     graph_prior: str,
     positions: np.ndarray,
@@ -2637,6 +2661,8 @@ def build_graph_prior_adjacency(
         adjacency = build_random_regular_adjacency(len(positions), degree, rng)
     elif graph_prior == "small-world":
         adjacency = build_small_world_adjacency(len(positions), degree, rng)
+    elif graph_prior == "erdos-renyi":
+        adjacency = build_erdos_renyi_adjacency(len(positions), degree, rng)
     else:
         raise ValueError("unsupported graph prior")
     return adjacency, distances
