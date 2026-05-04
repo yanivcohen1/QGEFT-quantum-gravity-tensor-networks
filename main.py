@@ -45,11 +45,24 @@ from vacuum_phase1 import (
     write_vacuum_phase1_json,
     write_vacuum_phase1_temperature_scan_json,
 )
+from unified_phase3 import (
+    UnifiedPhase3Config,
+    UnifiedPhase3SweepResult,
+    extract_warm_start_state,
+    render_unified_phase3_report,
+    render_unified_phase3_temperature_scan_report,
+    run_unified_phase3_sweep,
+    run_unified_phase3_temperature_scan,
+    save_unified_phase3_visualizations,
+    save_unified_phase3_temperature_scan_visualizations,
+    write_unified_phase3_json,
+    write_unified_phase3_temperature_scan_json,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate an emergent operator network toy model.")
-    parser.add_argument("--mode", choices=["exact", "monte-carlo", "vacuum-phase1", "gravity-test"], default="exact", help="Choose the exact solver, the scalable Monte Carlo surrogate, the dedicated bare-action vacuum Phase 1 experiment, or the gravity Phase 2 distance-tracker experiment.")
+    parser.add_argument("--mode", choices=["exact", "monte-carlo", "vacuum-phase1", "gravity-test", "unified-phase3"], default="exact", help="Choose the exact solver, the scalable Monte Carlo surrogate, the dedicated bare-action vacuum Phase 1 experiment, the gravity Phase 2 distance-tracker experiment, or the unified SU(3)xSU(2)xU(1) Phase 3 experiment.")
     parser.add_argument("--sites", type=int, default=8, help="Number of operator sites / qubits.")
     parser.add_argument("--gauge-group", choices=["none", "su2", "su3"], default="su2", help="Classical gauge background carried by link matrices in exact mode.")
     parser.add_argument("--eig-count", type=int, default=10, help="Number of low-energy eigenpairs to compute in exact mode.")
@@ -118,6 +131,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gravity-mass-degree", type=int, default=24, help="Gravity Phase 2 only: target degree imposed on each static heavy mass.")
     parser.add_argument("--lambda-coupling", type=float, default=0.5, help="Gravity Phase 2 only: quadratic mass-term coupling lambda for deviations from the target mass degree.")
     parser.add_argument("--gravity-potential-distances", type=str, default="", help="Gravity Phase 2 only: optional comma-separated fixed graph distances for a Mass-Distance Potential scan, for example 1,2,3,4.")
+    parser.add_argument("--phase3-beta3", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_3 for the SU(3) triangle action.")
+    parser.add_argument("--phase3-beta2", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_2 for the SU(2) triangle action.")
+    parser.add_argument("--phase3-beta1", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_1 for the U(1) triangle action.")
+    parser.add_argument("--warm-start", type=Path, default=None, help="Unified Phase 3 only: resume from a serialized final state saved in a prior unified-phase3 JSON output.")
+    parser.add_argument("--phase3-su2-update-step", type=float, default=0.18, help="Unified Phase 3 only: Gaussian step size for diagonal SU(2) proposals.")
+    parser.add_argument("--phase3-u1-update-step", type=float, default=0.18, help="Unified Phase 3 only: Gaussian step size for U(1) hypercharge phase proposals.")
     parser.add_argument("--live-plot", action="store_true", help="Open a live tensor-network visualization during Monte Carlo sampling. When --plot-dir is also set, frame snapshots are written there as well.")
     parser.add_argument("--live-plot-interval", type=int, default=12, help="How many Monte Carlo sweeps to skip between live tensor-network updates.")
     parser.add_argument("--live-plot-max-edges", type=int, default=320, help="Maximum number of strongest edges rendered in each live tensor-network frame.")
@@ -208,6 +227,14 @@ def default_gravity_json_path(args: argparse.Namespace, sizes: list[int]) -> Pat
         )
     return Path(
         f"gravity_phase2_{size_label}_{args.graph_prior}_mdeg{args.gravity_mass_degree}_nodes{mass_a}_{mass_b}.json"
+    )
+
+
+def default_unified_phase3_json_path(args: argparse.Namespace, sizes: list[int]) -> Path:
+    size_label = f"scan_{'_'.join(str(size) for size in sizes)}" if sizes else f"N{args.sites}"
+    mass_a, mass_b = parse_node_pair(args.gravity_mass_nodes)
+    return Path(
+        f"unified_phase3_{size_label}_{args.graph_prior}_mdeg{args.gravity_mass_degree}_nodes{mass_a}_{mass_b}_b{args.phase3_beta3:.2f}_{args.phase3_beta2:.2f}_{args.phase3_beta1:.2f}.json"
     )
 
 
@@ -414,6 +441,75 @@ def run_gravity_test_mode(args: argparse.Namespace) -> None:
         save_gravity_phase2_visualizations(sweep, args.plot_dir, prefix=prefix)
 
 
+def run_unified_phase3_mode(args: argparse.Namespace) -> None:
+    sizes = parse_size_scan(args.size_scan)
+    target_sizes = sizes if sizes else [args.sites]
+    progress_mode = "off" if args.no_progress else args.progress_mode
+    temperature_scan = parse_temperature_scan(args.temperature_scan)
+    phase3_temperature = 0.3 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature
+    phase3_anneal_start = 0.6 if args.anneal_start_temperature is None else args.anneal_start_temperature
+    phase3_edge_relocations = (
+        UnifiedPhase3Config.edge_swap_attempts_per_sweep
+        if args.edge_swap_attempts_per_sweep is None
+        else args.edge_swap_attempts_per_sweep
+    )
+    config = UnifiedPhase3Config(
+        degree=args.degree,
+        graph_prior=args.graph_prior,
+        temperature=phase3_temperature,
+        anneal_start_temperature=phase3_anneal_start,
+        burn_in_sweeps=args.burn_in_sweeps,
+        measurement_sweeps=args.measurement_sweeps,
+        sample_interval=args.sample_interval,
+        edge_swap_attempts_per_sweep=phase3_edge_relocations,
+        link_updates_per_sweep=args.vacuum_link_updates_per_sweep,
+        su3_update_step=args.vacuum_link_update_step,
+        su2_update_step=args.phase3_su2_update_step,
+        u1_update_step=args.phase3_u1_update_step,
+        radius_count=args.vacuum_radius_count,
+        mass_nodes=parse_node_pair(args.gravity_mass_nodes),
+        mass_degree=args.gravity_mass_degree,
+        mass_coupling=args.lambda_coupling,
+        beta3=args.phase3_beta3,
+        beta2=args.phase3_beta2,
+        beta1=args.phase3_beta1,
+    )
+    warm_start_state = extract_warm_start_state(args.warm_start, target_sizes[0]) if args.warm_start is not None else None
+    if temperature_scan:
+        scan = run_unified_phase3_temperature_scan(
+            temperatures=temperature_scan,
+            sizes=target_sizes,
+            seed=args.seed,
+            config=config,
+            warm_start_state=warm_start_state,
+            progress_mode=progress_mode,
+        )
+        print(render_unified_phase3_temperature_scan_report(scan))
+        if args.json_out is not None:
+            write_unified_phase3_temperature_scan_json(args.json_out, scan)
+        if args.plot_dir is not None:
+            prefix = "unified_phase3_temperature_scan" if sizes else f"unified_phase3_temperature_scan_{args.sites}"
+            save_unified_phase3_temperature_scan_visualizations(scan, args.plot_dir, prefix=prefix)
+        return
+    sweep = cast(
+        UnifiedPhase3SweepResult,
+        run_unified_phase3_sweep(
+            sizes=target_sizes,
+            seed=args.seed,
+            config=config,
+            warm_start_state=warm_start_state,
+            progress_mode=progress_mode,
+        ),
+    )
+    print(render_unified_phase3_report(sweep))
+    json_path = args.json_out if args.json_out is not None else default_unified_phase3_json_path(args, sizes)
+    write_unified_phase3_json(json_path, sweep)
+    print(f"wrote unified Phase 3 JSON to {json_path}")
+    if args.plot_dir is not None:
+        prefix = "unified_phase3" if sizes else f"unified_phase3_{args.sites}"
+        save_unified_phase3_visualizations(sweep, args.plot_dir, prefix=prefix)
+
+
 def main() -> None:
     args = build_parser().parse_args()
     if args.chiral_scale is None:
@@ -432,6 +528,9 @@ def main() -> None:
         return
     if args.mode == "gravity-test":
         run_gravity_test_mode(args)
+        return
+    if args.mode == "unified-phase3":
+        run_unified_phase3_mode(args)
         return
 
     if args.scan_seeds > 0:
