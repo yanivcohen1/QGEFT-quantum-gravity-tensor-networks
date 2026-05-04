@@ -91,7 +91,7 @@ For paper-ready figures, run
 python plot_vacuum_phase1_report.py vacuum_phase1_golden_run.json --output-dir plots/vacuum_phase1 --prefix vacuum_phase1_golden
 ```
 
-This generates both PNG and PDF figures for the Blind-Observer profiles, the null-model rejection plot, and a scaling summary. The narrative draft for this branch is collected in [VACUUM_PHASE1_REPORT.md](d:/Temp/physics/VACUUM_PHASE1_REPORT.md).
+This generates both PNG and PDF figures for the Blind-Observer profiles, the null-model rejection plot, and a scaling summary. The narrative draft for this branch is collected in [VACUUM_PHASE1_REPORT.md](VACUUM_PHASE1_REPORT.md).
 
 ![Vacuum Phase 1 Blind Observer Profiles](plots/vacuum_phase1/vacuum_phase1_golden_blind_observer_profiles.png)
 
@@ -213,7 +213,7 @@ $$
 
 which is negative in all three channels. This is the clearest current finite-size evidence in the repository for a `decoupling without collapse` scenario: sector locking weakens sharply under sequential injection, yet the area-law quality does not collapse with it.
 
-To regenerate the figure directly from the stored JSON outputs, run
+To regenerate the figure directly from the stored Phase 3 JSON outputs, including the single-temperature scan files committed here, run
 
 ```powershell
 python plot_phase3_correlation_comparison.py phase3_N256_simultaneous_final.json phase3_N256_sequential_final.json --output-dir plots/phase3_correlation_comparison --prefix phase3_N256_simultaneous_vs_sequential
