@@ -4,7 +4,7 @@ This note organizes the current `vacuum_phase1_golden_run.json` result into a pa
 
 ## 1. QGEFT Construction Used in Phase 1
 
-The dedicated `vacuum-phase1` mode in [vacuum_phase1.py](d:/Temp/physics/vacuum_phase1.py) strips the broader Monte Carlo surrogate down to a bare local `SU(3)` plaquette experiment on a sparse graph. The graph itself is drawn from the chosen prior, and each undirected edge `(i,j)` carries a diagonal `SU(3)` phase vector
+The dedicated `vacuum-phase1` mode in [vacuum_phase1.py](vacuum_phase1.py) strips the broader Monte Carlo surrogate down to a bare local `SU(3)` plaquette experiment on a sparse graph. The graph itself is drawn from the chosen prior, and each undirected edge `(i,j)` carries a diagonal `SU(3)` phase vector
 
 $$
 U_{ij} = \mathrm{diag}\left(e^{i\theta_1}, e^{i\theta_2}, e^{-i(\theta_1 + \theta_2)}\right).
@@ -18,7 +18,7 @@ $$
 E_{\triangle}(a,b,c) = 1 - \frac{1}{3}\,\Re\,\mathrm{Tr}\left(U_{ab} U_{bc} U_{ca}\right),
 $$
 
-summed over all graph triangles. This makes each plaquette the minimal local gauge loop available on the sparse support graph. A low-energy configuration is therefore one in which the loop holonomies align so that the traced triangle product stays close to the identity. In code, this is the pair `_triangle_energy` plus `_total_bare_energy` in [vacuum_phase1.py](d:/Temp/physics/vacuum_phase1.py).
+summed over all graph triangles. This makes each plaquette the minimal local gauge loop available on the sparse support graph. A low-energy configuration is therefore one in which the loop holonomies align so that the traced triangle product stays close to the identity. In code, this is the pair `_triangle_energy` plus `_total_bare_energy` in [vacuum_phase1.py](vacuum_phase1.py).
 
 ## 2. Experimental Methodology
 
