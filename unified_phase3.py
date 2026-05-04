@@ -165,6 +165,81 @@ class UnifiedPhase3SweepResult:
         )
 
 
+@dataclass
+class UnifiedPhase3TemperatureScanPoint:
+    temperature: float
+    mean_area_law_slope: float
+    mean_area_law_r2: float
+    mean_mean_distance: float | None
+    mean_distance_trend_slope: float
+    mean_abs_sector_correlation: float
+    cofreezing_score: float
+    regime: str
+    sweep: UnifiedPhase3SweepResult
+
+
+@dataclass
+class UnifiedPhase3TemperatureScanResult:
+    mode: str
+    graph_prior: str
+    degree: int
+    anneal_start_temperature: float | None
+    burn_in_sweeps: int
+    measurement_sweeps: int
+    sample_interval: int
+    edge_swap_attempts_per_sweep: int
+    link_updates_per_sweep: int
+    radius_count: int
+    mass_nodes: tuple[int, int]
+    mass_degree: int
+    mass_coupling: float
+    beta3: float
+    beta2: float
+    beta1: float
+    temperatures: tuple[float, ...]
+    cofreezing_temperature: float | None
+    points: list[UnifiedPhase3TemperatureScanPoint]
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "mode": self.mode,
+                "graph_prior": self.graph_prior,
+                "degree": self.degree,
+                "anneal_start_temperature": self.anneal_start_temperature,
+                "burn_in_sweeps": self.burn_in_sweeps,
+                "measurement_sweeps": self.measurement_sweeps,
+                "sample_interval": self.sample_interval,
+                "edge_swap_attempts_per_sweep": self.edge_swap_attempts_per_sweep,
+                "link_updates_per_sweep": self.link_updates_per_sweep,
+                "radius_count": self.radius_count,
+                "mass_nodes": list(self.mass_nodes),
+                "mass_degree": self.mass_degree,
+                "mass_coupling": self.mass_coupling,
+                "beta3": self.beta3,
+                "beta2": self.beta2,
+                "beta1": self.beta1,
+                "temperatures": list(self.temperatures),
+                "cofreezing_temperature": self.cofreezing_temperature,
+                "points": [
+                    {
+                        "temperature": point.temperature,
+                        "mean_area_law_slope": point.mean_area_law_slope,
+                        "mean_area_law_r2": point.mean_area_law_r2,
+                        "mean_mean_distance": point.mean_mean_distance,
+                        "mean_distance_trend_slope": point.mean_distance_trend_slope,
+                        "mean_abs_sector_correlation": point.mean_abs_sector_correlation,
+                        "cofreezing_score": point.cofreezing_score,
+                        "regime": point.regime,
+                        "sweep": json.loads(point.sweep.to_json()),
+                    }
+                    for point in self.points
+                ],
+            },
+            indent=2,
+        )
+
+
 def su2_diagonal_vector(angle: float) -> np.ndarray:
     return np.asarray([
         np.exp(1.0j * angle),
@@ -180,6 +255,69 @@ def safe_correlation(x_values: list[float], y_values: list[float]) -> float:
     if np.std(x_array) <= 1e-12 or np.std(y_array) <= 1e-12:
         return 0.0
     return float(np.corrcoef(x_array, y_array)[0, 1])
+
+
+def classify_unified_phase3_temperature_regime(
+    mean_area_law_r2: float,
+    mean_abs_sector_correlation: float,
+    mean_distance_trend_slope: float,
+    area_threshold: float = 0.8,
+    sector_threshold: float = 0.55,
+    distance_slope_threshold: float = 0.02,
+) -> str:
+    if (
+        mean_area_law_r2 >= area_threshold
+        and mean_abs_sector_correlation >= sector_threshold
+        and abs(mean_distance_trend_slope) <= distance_slope_threshold
+    ):
+        return "co-frozen"
+    if mean_abs_sector_correlation >= sector_threshold:
+        return "sector-locked"
+    if mean_area_law_r2 >= area_threshold:
+        return "area-law only"
+    return "mixed"
+
+
+def summarize_unified_phase3_temperature_scan_point(
+    temperature: float,
+    sweep: UnifiedPhase3SweepResult,
+) -> UnifiedPhase3TemperatureScanPoint:
+    mean_area_law_slope = float(np.mean([point.area_law.slope for point in sweep.points])) if sweep.points else 0.0
+    mean_area_law_r2 = float(np.mean([point.area_law.r2 for point in sweep.points])) if sweep.points else 0.0
+    mean_mean_distance = float(np.mean([point.mean_distance for point in sweep.points if point.mean_distance is not None])) if any(point.mean_distance is not None for point in sweep.points) else None
+    mean_distance_trend_slope = float(np.mean([point.distance_trend.slope for point in sweep.points])) if sweep.points else 0.0
+    mean_abs_sector_correlation = float(
+        np.mean(
+            [
+                np.mean(
+                    [
+                        abs(point.su3_su2_correlation),
+                        abs(point.su3_u1_correlation),
+                        abs(point.su2_u1_correlation),
+                    ]
+                )
+                for point in sweep.points
+            ]
+        )
+    ) if sweep.points else 0.0
+    distance_stability = max(0.0, 1.0 - min(abs(mean_distance_trend_slope) / 0.05, 1.0))
+    cofreezing_score = float((mean_area_law_r2 + mean_abs_sector_correlation + distance_stability) / 3.0)
+    regime = classify_unified_phase3_temperature_regime(
+        mean_area_law_r2=mean_area_law_r2,
+        mean_abs_sector_correlation=mean_abs_sector_correlation,
+        mean_distance_trend_slope=mean_distance_trend_slope,
+    )
+    return UnifiedPhase3TemperatureScanPoint(
+        temperature=temperature,
+        mean_area_law_slope=mean_area_law_slope,
+        mean_area_law_r2=mean_area_law_r2,
+        mean_mean_distance=mean_mean_distance,
+        mean_distance_trend_slope=mean_distance_trend_slope,
+        mean_abs_sector_correlation=mean_abs_sector_correlation,
+        cofreezing_score=cofreezing_score,
+        regime=regime,
+        sweep=sweep,
+    )
 
 
 class UnifiedGaugePhase3Experiment:
@@ -796,6 +934,67 @@ def run_unified_phase3_sweep(
     )
 
 
+def run_unified_phase3_temperature_scan(
+    temperatures: list[float],
+    sizes: list[int],
+    seed: int,
+    config: UnifiedPhase3Config,
+    progress_mode: str = "bar",
+) -> UnifiedPhase3TemperatureScanResult:
+    scan_points: list[UnifiedPhase3TemperatureScanPoint] = []
+    for temperature_index, temperature in enumerate(temperatures):
+        sweep_config = UnifiedPhase3Config(
+            degree=config.degree,
+            graph_prior=config.graph_prior,
+            temperature=temperature,
+            anneal_start_temperature=config.anneal_start_temperature,
+            burn_in_sweeps=config.burn_in_sweeps,
+            measurement_sweeps=config.measurement_sweeps,
+            sample_interval=config.sample_interval,
+            edge_swap_attempts_per_sweep=config.edge_swap_attempts_per_sweep,
+            link_updates_per_sweep=config.link_updates_per_sweep,
+            su3_update_step=config.su3_update_step,
+            su2_update_step=config.su2_update_step,
+            u1_update_step=config.u1_update_step,
+            radius_count=config.radius_count,
+            mass_nodes=config.mass_nodes,
+            mass_degree=config.mass_degree,
+            mass_coupling=config.mass_coupling,
+            beta3=config.beta3,
+            beta2=config.beta2,
+            beta1=config.beta1,
+        )
+        sweep = run_unified_phase3_sweep(
+            sizes=sizes,
+            seed=seed + 1009 * temperature_index,
+            config=sweep_config,
+            progress_mode=progress_mode,
+        )
+        scan_points.append(summarize_unified_phase3_temperature_scan_point(temperature, sweep))
+    cofreezing_temperature = next((point.temperature for point in scan_points if point.regime == "co-frozen"), None)
+    return UnifiedPhase3TemperatureScanResult(
+        mode="unified-phase3-temperature-scan",
+        graph_prior=config.graph_prior,
+        degree=config.degree,
+        anneal_start_temperature=config.anneal_start_temperature,
+        burn_in_sweeps=config.burn_in_sweeps,
+        measurement_sweeps=config.measurement_sweeps,
+        sample_interval=config.sample_interval,
+        edge_swap_attempts_per_sweep=config.edge_swap_attempts_per_sweep,
+        link_updates_per_sweep=config.link_updates_per_sweep,
+        radius_count=config.radius_count,
+        mass_nodes=config.mass_nodes,
+        mass_degree=config.mass_degree,
+        mass_coupling=config.mass_coupling,
+        beta3=config.beta3,
+        beta2=config.beta2,
+        beta1=config.beta1,
+        temperatures=tuple(float(value) for value in temperatures),
+        cofreezing_temperature=cofreezing_temperature,
+        points=scan_points,
+    )
+
+
 def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
     lines = [
         "Unified Gauge Phase 3 Report",
@@ -848,7 +1047,45 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
     return "\n".join(lines)
 
 
+def render_unified_phase3_temperature_scan_report(result: UnifiedPhase3TemperatureScanResult) -> str:
+    onset_line = (
+        f"co-freezing temperature: {result.cofreezing_temperature:.4f}"
+        if result.cofreezing_temperature is not None
+        else "co-freezing temperature: none found"
+    )
+    lines = [
+        "Unified Gauge Phase 3 Temperature Scan",
+        "=" * 38,
+        f"graph prior: {result.graph_prior}",
+        f"degree: {result.degree}",
+        f"mass nodes: {result.mass_nodes[0]}, {result.mass_nodes[1]}",
+        f"mass degree target: {result.mass_degree}",
+        f"anneal start temperature: {result.anneal_start_temperature:.4f}" if result.anneal_start_temperature is not None else "anneal start temperature: off",
+        f"temperatures: {', '.join(f'{temperature:.4f}' for temperature in result.temperatures)}",
+        f"sweeps: burn-in {result.burn_in_sweeps}, measurement {result.measurement_sweeps}, sample interval {result.sample_interval}",
+        f"betas: SU(3)={result.beta3:.3f}, SU(2)={result.beta2:.3f}, U(1)={result.beta1:.3f}",
+        f"mass coupling lambda: {result.mass_coupling:.3f}",
+        onset_line,
+        "temp | area slope | area R^2 | |corr| mean | d trend | score | regime",
+    ]
+    for scan_point in result.points:
+        lines.append(
+            f"{scan_point.temperature:4.4f} | {scan_point.mean_area_law_slope:10.6f} | {scan_point.mean_area_law_r2:8.3f} | "
+            f"{scan_point.mean_abs_sector_correlation:11.3f} | {scan_point.mean_distance_trend_slope:7.4f} | {scan_point.cofreezing_score:5.3f} | {scan_point.regime}"
+        )
+        for point in scan_point.sweep.points:
+            lines.append(
+                f"      N={point.sites} area_R2={point.area_law.r2:.3f} area_slope={point.area_law.slope:.6f} "
+                f"d_mean={point.mean_distance if point.mean_distance is not None else 'n/a'} corr=({point.su3_su2_correlation:.3f},{point.su3_u1_correlation:.3f},{point.su2_u1_correlation:.3f}) Etot={point.mean_total_energy:.3f}"
+            )
+    return "\n".join(lines)
+
+
 def write_unified_phase3_json(path: Path, result: UnifiedPhase3SweepResult) -> None:
+    path.write_text(result.to_json(), encoding="utf-8")
+
+
+def write_unified_phase3_temperature_scan_json(path: Path, result: UnifiedPhase3TemperatureScanResult) -> None:
     path.write_text(result.to_json(), encoding="utf-8")
 
 
@@ -901,4 +1138,53 @@ def save_unified_phase3_visualizations(
     figure.savefig(distance_path, dpi=180)
     plt.close(figure)
     paths.append(distance_path)
+    return paths
+
+
+def save_unified_phase3_temperature_scan_visualizations(
+    result: UnifiedPhase3TemperatureScanResult,
+    output_dir: Path,
+    prefix: str = "unified_phase3_temperature_scan",
+) -> list[Path]:
+    plt = importlib.import_module("matplotlib.pyplot")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+
+    temperatures = np.asarray([point.temperature for point in result.points], dtype=float)
+
+    figure, axis = plt.subplots(figsize=(7.4, 5.0))
+    area_r2 = np.asarray([point.mean_area_law_r2 for point in result.points], dtype=float)
+    score = np.asarray([point.cofreezing_score for point in result.points], dtype=float)
+    axis.plot(temperatures, area_r2, "o-", color="#0a9396", linewidth=2.0, label="mean area-law R^2")
+    axis.plot(temperatures, score, "s--", color="#bb3e03", linewidth=2.0, label="co-freezing score")
+    if result.cofreezing_temperature is not None:
+        axis.axvline(result.cofreezing_temperature, color="#001219", linestyle=":", linewidth=1.8, label="co-freezing onset")
+    axis.set_xlabel("Temperature")
+    axis.set_ylabel("Order metric")
+    axis.set_title("Phase 3 Temperature Sweep")
+    axis.grid(True, alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    score_path = output_dir / f"{prefix}_score.png"
+    figure.savefig(score_path, dpi=180)
+    plt.close(figure)
+    paths.append(score_path)
+
+    figure, axis = plt.subplots(figsize=(7.4, 5.0))
+    sector_corr = np.asarray([point.mean_abs_sector_correlation for point in result.points], dtype=float)
+    distance_slope = np.asarray([point.mean_distance_trend_slope for point in result.points], dtype=float)
+    axis.plot(temperatures, sector_corr, "o-", color="#005f73", linewidth=2.0, label="mean |sector corr|")
+    axis.plot(temperatures, distance_slope, "d--", color="#ca6702", linewidth=2.0, label="mean d trend slope")
+    if result.cofreezing_temperature is not None:
+        axis.axvline(result.cofreezing_temperature, color="#001219", linestyle=":", linewidth=1.8, label="co-freezing onset")
+    axis.set_xlabel("Temperature")
+    axis.set_ylabel("Correlation / drift")
+    axis.set_title("Phase 3 Sector Locking and Distance Stability")
+    axis.grid(True, alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    corr_path = output_dir / f"{prefix}_correlation.png"
+    figure.savefig(corr_path, dpi=180)
+    plt.close(figure)
+    paths.append(corr_path)
     return paths

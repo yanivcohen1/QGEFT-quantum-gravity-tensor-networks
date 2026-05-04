@@ -49,9 +49,13 @@ from unified_phase3 import (
     UnifiedPhase3Config,
     UnifiedPhase3SweepResult,
     render_unified_phase3_report,
+    render_unified_phase3_temperature_scan_report,
     run_unified_phase3_sweep,
+    run_unified_phase3_temperature_scan,
     save_unified_phase3_visualizations,
+    save_unified_phase3_temperature_scan_visualizations,
     write_unified_phase3_json,
+    write_unified_phase3_temperature_scan_json,
 )
 
 
@@ -439,6 +443,7 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
     sizes = parse_size_scan(args.size_scan)
     target_sizes = sizes if sizes else [args.sites]
     progress_mode = "off" if args.no_progress else args.progress_mode
+    temperature_scan = parse_temperature_scan(args.temperature_scan)
     phase3_temperature = 0.3 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature
     phase3_anneal_start = 0.6 if args.anneal_start_temperature is None else args.anneal_start_temperature
     phase3_edge_relocations = (
@@ -467,6 +472,21 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
         beta2=args.phase3_beta2,
         beta1=args.phase3_beta1,
     )
+    if temperature_scan:
+        scan = run_unified_phase3_temperature_scan(
+            temperatures=temperature_scan,
+            sizes=target_sizes,
+            seed=args.seed,
+            config=config,
+            progress_mode=progress_mode,
+        )
+        print(render_unified_phase3_temperature_scan_report(scan))
+        if args.json_out is not None:
+            write_unified_phase3_temperature_scan_json(args.json_out, scan)
+        if args.plot_dir is not None:
+            prefix = "unified_phase3_temperature_scan" if sizes else f"unified_phase3_temperature_scan_{args.sites}"
+            save_unified_phase3_temperature_scan_visualizations(scan, args.plot_dir, prefix=prefix)
+        return
     sweep = cast(
         UnifiedPhase3SweepResult,
         run_unified_phase3_sweep(
