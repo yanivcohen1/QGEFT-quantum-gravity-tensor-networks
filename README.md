@@ -187,6 +187,38 @@ This writes a JSON summary plus `Mass-Distance Potential` plot. The right interp
 
 ![Mass-Distance Potential Well](plots/gravity_potential_smoke/gravity_potential_smoke_potential_well.png)
 
+There is now also a dedicated `Phase 3` comparison between a simultaneous unified update and a warm-started sequential injection protocol. The scientific question is narrower than a full phase-diagram claim: does dressing an already-formed `SU(3)` backbone with weaker `SU(2)` and `U(1)` sectors reduce cross-sector locking without immediately destroying the area-law signal?
+
+For the matched `N=256`, `T=0.3`, `beta_3 = 1.0`, `beta_2 = 0.4`, `beta_1 = 0.05`, `lambda = 0.05` comparison, the answer is yes in a controlled finite-size sense. The simultaneous run stayed strongly locked, with pair correlations
+
+$$
+(\mathrm{corr}(E_3,E_2),\, \mathrm{corr}(E_3,E_1),\, \mathrm{corr}(E_2,E_1)) \approx (0.994, 0.978, 0.975),
+$$
+
+while the sequential warm-start run dropped to
+
+$$
+(0.540, 0.672, 0.513).
+$$
+
+Equivalently, the mean absolute sector correlation fell from about `0.982` to about `0.575`, a relative reduction of roughly `41.5%`, while the Blind-Observer area-law fit remained nearly unchanged (`R^2 \approx 0.612` versus `0.606`). The narrow claim is therefore not that the sectors fully deconfine, but that a pre-formed `SU(3)` backbone can be dressed in a way that measurably weakens unified locking while preserving the same finite-size entropic branch.
+
+![Phase 3 Simultaneous vs Sequential Decoupling](plots/phase3_correlation_comparison/phase3_N256_simultaneous_vs_sequential_correlation_comparison.png)
+
+The left panel shows the raw pair correlations for the simultaneous and sequential protocols; the right panel shows the induced shift
+
+$$
+\Delta \mathrm{corr} = \mathrm{corr}_{\mathrm{seq}} - \mathrm{corr}_{\mathrm{sim}},
+$$
+
+which is negative in all three channels. This is the clearest current finite-size evidence in the repository for a `decoupling without collapse` scenario: sector locking weakens sharply under sequential injection, yet the area-law quality does not collapse with it.
+
+To regenerate the figure directly from the stored JSON outputs, run
+
+```powershell
+python plot_phase3_correlation_comparison.py phase3_N256_simultaneous_final.json phase3_N256_sequential_final.json --output-dir plots/phase3_correlation_comparison --prefix phase3_N256_simultaneous_vs_sequential
+```
+
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. The current codebase is stronger than the earliest version because it now includes graph-prior comparisons, null-model baselines, alternative distance prescriptions, and topology-only diagnostics. Even so, those additions do not eliminate the basic interpretive risks; they only sharpen where the remaining weak points are. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
 

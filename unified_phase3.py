@@ -101,6 +101,7 @@ class UnifiedPhase3Point:
     distance_u1_correlation: float
     measurements: list[ObserverMeasurement]
     samples: list[UnifiedPhase3Sample]
+    final_state: dict[str, object] | None = None
 
 
 @dataclass
@@ -257,6 +258,73 @@ def safe_correlation(x_values: list[float], y_values: list[float]) -> float:
     return float(np.corrcoef(x_array, y_array)[0, 1])
 
 
+def serialize_edge_states(edge_states: dict[tuple[int, int], GaugeState]) -> list[dict[str, object]]:
+    serialized: list[dict[str, object]] = []
+    for (src, dst), state in sorted(edge_states.items()):
+        serialized.append(
+            {
+                "src": int(src),
+                "dst": int(dst),
+                "su3_angles": [float(np.angle(state.su3[0])), float(np.angle(state.su3[1]))],
+                "su2_angle": float(np.angle(state.su2[0])),
+                "u1_angle": float(np.angle(state.u1)),
+            }
+        )
+    return serialized
+
+
+def deserialize_edge_states(edge_payload: list[dict[str, object]]) -> dict[tuple[int, int], GaugeState]:
+    edge_states: dict[tuple[int, int], GaugeState] = {}
+    for item in edge_payload:
+        src = int(item["src"])
+        dst = int(item["dst"])
+        su3_angles = np.asarray(item["su3_angles"], dtype=float)
+        su2_angle = float(item["su2_angle"])
+        u1_angle = float(item["u1_angle"])
+        edge_states[(src, dst)] = GaugeState(
+            su3=su3_phase_vector(su3_angles),
+            su2=su2_diagonal_vector(su2_angle),
+            u1=complex(np.exp(1.0j * u1_angle)),
+        )
+    return edge_states
+
+
+def copy_edge_states(edge_states: dict[tuple[int, int], GaugeState]) -> dict[tuple[int, int], GaugeState]:
+    return {key: state.copy() for key, state in edge_states.items()}
+
+
+def extract_warm_start_state(path: Path, expected_sites: int) -> tuple[np.ndarray, dict[tuple[int, int], GaugeState]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    candidate_points: list[dict[str, object]] = []
+    if payload.get("mode") == "unified-phase3":
+        candidate_points = [point for point in payload.get("points", []) if isinstance(point, dict)]
+    elif payload.get("mode") == "unified-phase3-temperature-scan":
+        for scan_point in payload.get("points", []):
+            if not isinstance(scan_point, dict):
+                continue
+            sweep = scan_point.get("sweep")
+            if not isinstance(sweep, dict):
+                continue
+            candidate_points.extend(point for point in sweep.get("points", []) if isinstance(point, dict))
+    else:
+        raise ValueError("warm-start expects a unified Phase 3 JSON output")
+    selected = next((point for point in candidate_points if int(point.get("sites", -1)) == expected_sites), None)
+    if selected is None:
+        raise ValueError(f"warm-start file does not contain a Phase 3 point for N={expected_sites}")
+    final_state = selected.get("final_state")
+    if not isinstance(final_state, dict):
+        raise ValueError("warm-start file does not contain serialized final_state; rerun the backbone with the updated code")
+    edge_payload = final_state.get("edges")
+    if not isinstance(edge_payload, list) or not edge_payload:
+        raise ValueError("warm-start final_state is missing serialized edges")
+    edge_states = deserialize_edge_states(edge_payload)
+    adjacency = np.zeros((expected_sites, expected_sites), dtype=bool)
+    for src, dst in edge_states:
+        adjacency[src, dst] = True
+        adjacency[dst, src] = True
+    return adjacency, edge_states
+
+
 def classify_unified_phase3_temperature_regime(
     mean_area_law_r2: float,
     mean_abs_sector_correlation: float,
@@ -326,6 +394,7 @@ class UnifiedGaugePhase3Experiment:
         sites: int,
         seed: int,
         config: UnifiedPhase3Config,
+        warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
         progress_mode: str = "bar",
     ) -> None:
         if sites < 16:
@@ -339,13 +408,19 @@ class UnifiedGaugePhase3Experiment:
         self.config = config
         self.mass_nodes = tuple(int(node) for node in config.mass_nodes)
         self.rng = np.random.default_rng(seed)
+        self.warm_start_state = warm_start_state
         self.progress_reporter = create_progress_reporter(progress_mode, prefix=f"phase3 N={sites}")
 
     def run(self) -> UnifiedPhase3Point:
-        _, adjacency = self._build_bare_graph()
-        self._imprint_static_masses(adjacency)
-        edge_i, edge_j = self._adjacency_to_edges(adjacency)
-        edge_states = self._initialize_edge_states(edge_i, edge_j)
+        if self.warm_start_state is None:
+            _, adjacency = self._build_bare_graph()
+            self._imprint_static_masses(adjacency)
+            edge_i, edge_j = self._adjacency_to_edges(adjacency)
+            edge_states = self._initialize_edge_states(edge_i, edge_j)
+        else:
+            adjacency = self.warm_start_state[0].copy()
+            edge_states = copy_edge_states(self.warm_start_state[1])
+            edge_i, edge_j = self._adjacency_to_edges(adjacency)
         total_sweeps = self.config.burn_in_sweeps + self.config.measurement_sweeps
         sampled_observer_profiles: list[list[ObserverMeasurement]] = []
         samples: list[UnifiedPhase3Sample] = []
@@ -411,6 +486,7 @@ class UnifiedGaugePhase3Experiment:
             distance_u1_correlation=safe_correlation(distance_values, [sample.u1_energy for sample in distance_entries]),
             measurements=averaged_measurements,
             samples=samples,
+            final_state={"edges": serialize_edge_states(edge_states)},
         )
 
     def _build_bare_graph(self) -> tuple[np.ndarray, np.ndarray]:
@@ -891,14 +967,18 @@ def run_unified_phase3_sweep(
     sizes: list[int],
     seed: int,
     config: UnifiedPhase3Config,
+    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
     progress_mode: str = "bar",
 ) -> UnifiedPhase3SweepResult:
     points: list[UnifiedPhase3Point] = []
+    if warm_start_state is not None and len(sizes) != 1:
+        raise ValueError("warm-start currently supports exactly one system size")
     for offset, size in enumerate(sizes):
         experiment = UnifiedGaugePhase3Experiment(
             sites=size,
             seed=seed + 37 * offset,
             config=config,
+            warm_start_state=warm_start_state,
             progress_mode=progress_mode,
         )
         points.append(experiment.run())
@@ -939,6 +1019,7 @@ def run_unified_phase3_temperature_scan(
     sizes: list[int],
     seed: int,
     config: UnifiedPhase3Config,
+    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
     progress_mode: str = "bar",
 ) -> UnifiedPhase3TemperatureScanResult:
     scan_points: list[UnifiedPhase3TemperatureScanPoint] = []
@@ -968,6 +1049,7 @@ def run_unified_phase3_temperature_scan(
             sizes=sizes,
             seed=seed + 1009 * temperature_index,
             config=sweep_config,
+            warm_start_state=warm_start_state,
             progress_mode=progress_mode,
         )
         scan_points.append(summarize_unified_phase3_temperature_scan_point(temperature, sweep))

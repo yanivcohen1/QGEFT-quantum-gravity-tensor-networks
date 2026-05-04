@@ -48,6 +48,7 @@ from vacuum_phase1 import (
 from unified_phase3 import (
     UnifiedPhase3Config,
     UnifiedPhase3SweepResult,
+    extract_warm_start_state,
     render_unified_phase3_report,
     render_unified_phase3_temperature_scan_report,
     run_unified_phase3_sweep,
@@ -133,6 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--phase3-beta3", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_3 for the SU(3) triangle action.")
     parser.add_argument("--phase3-beta2", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_2 for the SU(2) triangle action.")
     parser.add_argument("--phase3-beta1", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_1 for the U(1) triangle action.")
+    parser.add_argument("--warm-start", type=Path, default=None, help="Unified Phase 3 only: resume from a serialized final state saved in a prior unified-phase3 JSON output.")
     parser.add_argument("--phase3-su2-update-step", type=float, default=0.18, help="Unified Phase 3 only: Gaussian step size for diagonal SU(2) proposals.")
     parser.add_argument("--phase3-u1-update-step", type=float, default=0.18, help="Unified Phase 3 only: Gaussian step size for U(1) hypercharge phase proposals.")
     parser.add_argument("--live-plot", action="store_true", help="Open a live tensor-network visualization during Monte Carlo sampling. When --plot-dir is also set, frame snapshots are written there as well.")
@@ -472,12 +474,14 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
         beta2=args.phase3_beta2,
         beta1=args.phase3_beta1,
     )
+    warm_start_state = extract_warm_start_state(args.warm_start, target_sizes[0]) if args.warm_start is not None else None
     if temperature_scan:
         scan = run_unified_phase3_temperature_scan(
             temperatures=temperature_scan,
             sizes=target_sizes,
             seed=args.seed,
             config=config,
+            warm_start_state=warm_start_state,
             progress_mode=progress_mode,
         )
         print(render_unified_phase3_temperature_scan_report(scan))
@@ -493,6 +497,7 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
             sizes=target_sizes,
             seed=args.seed,
             config=config,
+            warm_start_state=warm_start_state,
             progress_mode=progress_mode,
         ),
     )
