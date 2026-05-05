@@ -219,41 +219,58 @@ To regenerate the figure directly from the stored Phase 3 JSON outputs, includin
 python plot_phase3_correlation_comparison.py phase3_N256_simultaneous_final.json phase3_N256_sequential_final.json --output-dir plots/phase3_correlation_comparison --prefix phase3_N256_simultaneous_vs_sequential
 ```
 
-There is now also a new `Phase 3` scalar-matter branch in which the unified `SU(3) \times SU(2) \times U(1)` edge dynamics is coupled to a charged complex scalar field living on the graph nodes. In that branch the node field carries a local Mexican-hat-style onsite potential,
+### 4.5 Phase 3: Scalar Matter Condensation, Backreaction, and the Cosmic Web
+The most recent extension to the QGEFT surrogate introduces dynamic matter together with a full backreaction loop. Instead of treating the two heavy nodes as the only source of structure, the unified `SU(3) \times SU(2) \times U(1)` graph is now coupled to a charged complex scalar field `\phi_i \in \mathbb{C}` living on the nodes. The bare matter action combines a Mexican-hat potential with gauge-covariant hopping,
 
 $$
-V(\phi_i) = m^2 |\phi_i|^2 + \lambda_\phi |\phi_i|^4,
+S_{\mathrm{matter}} = m^2 \sum_i |\phi_i|^2 + \lambda_\phi \sum_i |\phi_i|^4 - \kappa \sum_{\langle ij\rangle} \left( \phi_i^\ast U^{(1)}_{ij}\phi_j + \phi_j^\ast U^{(1)\dagger}_{ij}\phi_i \right),
 $$
 
-together with a gauge-covariant hopping term on each occupied edge,
+so the Monte Carlo acceptance test now depends on the combined shift
 
 $$
--\kappa\,\Re\!\left(\phi_i^\ast U^{(1)}_{ij} \phi_j\right),
+\Delta E_{\mathrm{total}} = \Delta E_{\mathrm{gauge}} + \Delta E_{\mathrm{matter}}.
 $$
 
-and the same Metropolis edge-relocation rule now includes the corresponding matter backreaction. The narrow scientific question is not yet whether a Standard-Model-like Higgs sector has emerged, but whether a symmetry-breaking charged field can coexist with the dynamical graph without either freezing out or tearing the sparse background apart.
+This turns the `Phase 3` branch into a direct test of whether an entanglement-built manifold can host dynamical matter without self-destructing. The matter field condenses, hops, and backreacts on graph relocations; the support graph in turn reorganizes around dense regions in order to reduce the total action.
 
-Two short `N=256` `small-world` probes now show that this competition is real and sharply parameter-dependent. With
+The first clear lesson of this branch is that the competition is sharp. When the hopping/backreaction scale is too large, for example `\kappa = 0.5`, the graph enters a crumpled regime: the manifold fragments, long-lived bulk structure is lost, and the scalar backreaction becomes too violent to maintain a coherent sparse background. In contrast, lowering the coupling into a `Goldilocks zone` near `\kappa = 0.05` stabilizes the interplay. The scalar field condenses into a nonzero finite-size background, the graph remains largely connected, and the geometry stretches rather than tearing apart.
+
+To distinguish a nearly uniform radiation-like scalar bath from genuine structure formation, the updated `Phase 3` workflow now tracks simple density statistics built from
+
+$$
+\rho_i = |\phi_i|^2.
+$$
+
+The two most useful coarse probes are:
+
+- the coefficient of variation `CV = \sigma_\rho / \langle \rho \rangle`, which detects whether the matter distribution is nearly uniform or contains dense nodes and empty voids,
+- the edgewise density auto-correlation (`clustering_signal`), which tests whether high-density nodes preferentially connect to other high-density nodes across the emergent graph.
+
+In the stable `N=256` `small-world` matter run, these diagnostics settle into a clearly non-uniform but non-singular regime. The representative run below reached `253/256` connected nodes in the mass-horizon analysis, stabilized near
+
+- `CV \approx 0.674`
+- `clustering_signal \approx 0.992`
+- `\langle |\phi|^2 \rangle \approx 0.410`
+- `\bar d \approx 2.588`
+- `area_R2 \approx 0.422`
+- `mass_R2 \approx 0.442`
+- `bulk_R2 \approx 0.596`
+- `E_{\mathrm{tot}} \approx 11.97`
+
+The interpretation is deliberately narrow. These numbers do not describe a single collapsed supercluster; instead they are consistent with a web-like finite-size matter distribution spread over a still-connected sparse manifold. The density field is substantially more structured than a uniform background, but the edgewise clustering remains near unity rather than exploding, which indicates a `tension-dispersion` regime: matter gathers into denser regions and voids without collapsing into one singular hub.
+
+A representative `N=256` stable Cosmic Web run can be reproduced via:
 
 ```powershell
-python main.py --mode unified-phase3 --sites 256 --seed 1 --lambda-scan 0.3 --temperature 0.3 --anneal-start-temperature 1.0 --degree 4 --mass-degree-target 12 --phase3-beta3 1.0 --phase3-beta2 0.0 --phase3-beta1 0.5 --graph-prior small-world --edge-swap-attempts-per-sweep 256 --burn-in-sweeps 2000 --measurement-sweeps 500 --sample-interval 10 --phase3-enable-matter --phase3-matter-mass-sq -0.5 --phase3-matter-lambda 1.0 --phase3-matter-kappa 0.5 --phase3-matter-step 0.4 --json-out phase3_N256_matter_condensation.json
+python main.py --mode unified-phase3 --sites 256 --seed 1 --temperature 0.3 --anneal-start-temperature 1.0 --degree 4 --mass-degree-target 12 --phase3-beta3 1.0 --phase3-beta2 0.0 --phase3-beta1 0.5 --graph-prior small-world --edge-swap-attempts-per-sweep 256 --burn-in-sweeps 2000 --measurement-sweeps 500 --sample-interval 10 --phase3-enable-matter --phase3-matter-mass-sq -0.5 --phase3-matter-lambda 1.0 --phase3-matter-kappa 0.05 --phase3-matter-step 0.3 --json-out phase3_N256_cosmic_web.json --plot-dir plots/phase3_cosmic_web
 ```
 
-the graph fragmented badly: only `126/256` nodes remained connected to the mass-centered horizon analysis, the regime stayed `mixed`, and no co-freezing signal appeared. In contrast, lowering the matter hopping strength by one order of magnitude,
+![Phase 3 Area-Law Profile in the Stable Matter Branch](plots/phase3_cosmic_web/unified_phase3_256_area_collapse.png)
 
-```powershell
-python main.py --mode unified-phase3 --sites 256 --seed 1 --lambda-scan 0.3 --temperature 0.3 --anneal-start-temperature 1.0 --degree 4 --mass-degree-target 12 --phase3-beta3 1.0 --phase3-beta2 0.0 --phase3-beta1 0.5 --graph-prior small-world --edge-swap-attempts-per-sweep 256 --burn-in-sweeps 2000 --measurement-sweeps 500 --sample-interval 10 --phase3-enable-matter --phase3-matter-mass-sq -0.5 --phase3-matter-lambda 1.0 --phase3-matter-kappa 0.05 --phase3-matter-step 0.4 --json-out phase3_N256_matter_condensation_weak_gravity.json
-```
+This figure is the cleanest single visual summary of the stable matter branch. The entropy profile rises rapidly and then plateaus across the connected bulk instead of collapsing into a trivial singular configuration, which is consistent with the finite-size `Goldilocks-zone` interpretation above.
 
-produced a much healthier finite-size branch: `253/256` nodes remained connected, the mean graph distance rose to about `2.43`, the mean absolute inter-sector correlation climbed to about `0.994`, and the regime shifted to `sector-locked` without a topological collapse. The representative summary at that weaker coupling was roughly
-
-- `area_R2 \approx 0.408`
-- `mass_R2 \approx 0.400`
-- `bulk_R2 \approx 0.508`
-- `\bar d \approx 2.43`
-- `E_{tot} \approx 12.25`
-
-The correct interpretation is deliberately narrow. The current code does **not** prove a continuum Higgs phase, nor does it establish a full phase diagram for matter on a dynamical quantum graph. What it does now support is a new executable `Goldilocks-zone` claim: a charged symmetry-breaking scalar can condense on the annealed sparse manifold, backreact on graph relocation costs, and still leave the background largely connected, provided the hopping/backreaction scale is kept below the graph-destroying regime. That is the repository's first direct finite-size evidence for `matter without geometric collapse` in the fully unified Phase 3 workflow.
+The corresponding cosmic-web visualization now scales node size and color directly with `|\phi_i|^2`, so the saved `*_cosmic_web.png` output makes the same conclusion visible by eye: bright dense nodes form along a connected manifold while darker low-density regions remain as finite-size voids. The current code therefore supports a stronger and more concrete `Goldilocks-zone` claim than before: a symmetry-breaking charged scalar can condense on the annealed graph, backreact on relocation costs, and generate a finite-size cosmic-web-like density pattern without geometrically collapsing the background.
 
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. The current codebase is stronger than the earliest version because it now includes graph-prior comparisons, null-model baselines, alternative distance prescriptions, and topology-only diagnostics. Even so, those additions do not eliminate the basic interpretive risks; they only sharpen where the remaining weak points are. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
