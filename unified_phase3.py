@@ -72,6 +72,9 @@ class UnifiedPhase3Sample:
     mass_penalty_energy: float
     matter_energy: float
     mean_matter_density: float
+    std_matter_density: float
+    cv_matter_density: float
+    clustering_signal: float
     total_energy: float
 
 
@@ -111,6 +114,8 @@ class UnifiedPhase3Point:
     bare_energy_std: float
     mean_matter_energy: float
     mean_matter_density: float
+    mean_cv_matter_density: float
+    mean_clustering_signal: float
     mean_total_energy: float
     total_energy_std: float
     area_law: LinearLawFit
@@ -409,6 +414,62 @@ def safe_correlation(x_values: list[float], y_values: list[float]) -> float:
     return float(np.corrcoef(x_array, y_array)[0, 1])
 
 
+def compute_matter_density_statistics(
+    adjacency: np.ndarray,
+    matter_phi: np.ndarray | None,
+) -> tuple[float, float, float, float]:
+    if matter_phi is None:
+        return 0.0, 0.0, 0.0, 1.0
+    phi_sq = np.abs(np.asarray(matter_phi, dtype=np.complex128)) ** 2
+    mean_density = float(np.mean(phi_sq))
+    std_density = float(np.std(phi_sq))
+    if mean_density <= 1e-12:
+        return mean_density, std_density, 0.0, 1.0
+    cv_density = float(std_density / mean_density)
+    edge_i, edge_j = np.nonzero(np.triu(adjacency, k=1))
+    if len(edge_i) == 0:
+        return mean_density, std_density, cv_density, 1.0
+    density_corr = float(np.mean(phi_sq[edge_i] * phi_sq[edge_j]))
+    clustering_signal = float(density_corr / (mean_density ** 2))
+    return mean_density, std_density, cv_density, clustering_signal
+
+
+def build_phase3_layout(adjacency: np.ndarray) -> np.ndarray:
+    site_count = adjacency.shape[0]
+    if site_count == 0:
+        return np.zeros((0, 3), dtype=float)
+    if site_count == 1:
+        return np.zeros((1, 3), dtype=float)
+    laplacian = np.diag(np.sum(adjacency, axis=1).astype(float)) - adjacency.astype(float)
+    try:
+        _, eigenvectors = np.linalg.eigh(laplacian)
+    except np.linalg.LinAlgError:
+        angles = np.linspace(0.0, 2.0 * np.pi, num=site_count, endpoint=False)
+        return np.column_stack((np.cos(angles), np.sin(angles), np.zeros(site_count, dtype=float)))
+    usable = eigenvectors[:, 1 : min(4, eigenvectors.shape[1])]
+    if usable.shape[1] < 3:
+        usable = np.pad(usable, ((0, 0), (0, 3 - usable.shape[1])), mode="constant")
+    for axis in range(usable.shape[1]):
+        axis_std = float(np.std(usable[:, axis]))
+        if axis_std > 1e-12:
+            usable[:, axis] = (usable[:, axis] - float(np.mean(usable[:, axis]))) / axis_std
+        else:
+            usable[:, axis] = 0.0
+    return usable[:, :3]
+
+
+def deserialize_final_adjacency(final_state: dict[str, object], expected_sites: int) -> np.ndarray:
+    edge_payload = final_state.get("edges")
+    if not isinstance(edge_payload, list):
+        raise ValueError("final_state is missing serialized edges")
+    edge_states = deserialize_edge_states(edge_payload)
+    adjacency = np.zeros((expected_sites, expected_sites), dtype=bool)
+    for src, dst in edge_states:
+        adjacency[src, dst] = True
+        adjacency[dst, src] = True
+    return adjacency
+
+
 def serialize_edge_states(edge_states: dict[tuple[int, int], GaugeState]) -> list[dict[str, object]]:
     serialized: list[dict[str, object]] = []
     for (src, dst), state in sorted(edge_states.items()):
@@ -524,10 +585,7 @@ def extract_warm_start_state(path: Path, expected_sites: int) -> tuple[np.ndarra
         raise ValueError("warm-start final_state is missing serialized edges")
     edge_states = deserialize_edge_states(edge_payload)
     matter_phi = deserialize_complex_field(final_state.get("matter_phi"), expected_sites)
-    adjacency = np.zeros((expected_sites, expected_sites), dtype=bool)
-    for src, dst in edge_states:
-        adjacency[src, dst] = True
-        adjacency[dst, src] = True
+    adjacency = deserialize_final_adjacency(final_state, expected_sites)
     return adjacency, edge_states, matter_phi
 
 
@@ -712,6 +770,8 @@ class UnifiedGaugePhase3Experiment:
             bare_energy_std=float(np.std([sample.bare_energy for sample in samples])) if samples else 0.0,
             mean_matter_energy=float(np.mean([sample.matter_energy for sample in samples])) if samples else 0.0,
             mean_matter_density=float(np.mean([sample.mean_matter_density for sample in samples])) if samples else 0.0,
+            mean_cv_matter_density=float(np.mean([sample.cv_matter_density for sample in samples])) if samples else 0.0,
+            mean_clustering_signal=float(np.mean([sample.clustering_signal for sample in samples])) if samples else 1.0,
             mean_total_energy=float(np.mean([sample.total_energy for sample in samples])) if samples else 0.0,
             total_energy_std=float(np.std([sample.total_energy for sample in samples])) if samples else 0.0,
             area_law=area_law,
@@ -1356,7 +1416,12 @@ class UnifiedGaugePhase3Experiment:
         )
         mass_penalty = self._mass_penalty_energy(adjacency)
         matter_energy = self._total_matter_energy(edge_states)
-        mean_matter_density = float(np.mean(np.abs(self.matter_phi) ** 2)) if self.matter_phi is not None else 0.0
+        (
+            mean_matter_density,
+            std_matter_density,
+            cv_matter_density,
+            clustering_signal,
+        ) = compute_matter_density_statistics(adjacency, self.matter_phi)
         return UnifiedPhase3Sample(
             sweep=sweep,
             temperature=float(sweep_temperature),
@@ -1372,6 +1437,9 @@ class UnifiedGaugePhase3Experiment:
             mass_penalty_energy=mass_penalty,
             matter_energy=matter_energy,
             mean_matter_density=mean_matter_density,
+            std_matter_density=std_matter_density,
+            cv_matter_density=cv_matter_density,
+            clustering_signal=clustering_signal,
             total_energy=bare_energy + mass_penalty + matter_energy,
         )
 
@@ -1628,7 +1696,7 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
         )
         lines.append(
             f"      plaquettes={point.plaquette_count} samples={point.samples_collected} bare_std={point.bare_energy_std:.4f} total_std={point.total_energy_std:.4f} "
-            f"area_slope={point.area_law.slope:.6f} mass_slope={point.mass_area_law.slope:.6f} bulk_slope={point.bulk_area_law.slope:.6f} volume_R2={point.volume_law.r2:.3f} distance_slope={point.distance_trend.slope:.6f} <|phi|^2>={point.mean_matter_density:.6f}"
+            f"area_slope={point.area_law.slope:.6f} mass_slope={point.mass_area_law.slope:.6f} bulk_slope={point.bulk_area_law.slope:.6f} volume_R2={point.volume_law.r2:.3f} distance_slope={point.distance_trend.slope:.6f} <|phi|^2>={point.mean_matter_density:.6f} CV={point.mean_cv_matter_density:.3f} clustering={point.mean_clustering_signal:.3f}"
         )
         lines.append(
             f"      cross-corr sector: corr(E3,E2)={point.su3_su2_correlation:.3f} corr(E3,E1)={point.su3_u1_correlation:.3f} corr(E2,E1)={point.su2_u1_correlation:.3f}"
@@ -1670,7 +1738,7 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
             lines.append(f"      bulk observer: {bulk_profile}")
         if point.samples:
             tracker = ", ".join(
-                f"s={sample.sweep}: d={sample.graph_distance if sample.graph_distance is not None else 'disc'} E=({sample.su3_energy:.2f},{sample.su2_energy:.2f},{sample.u1_energy:.2f},{sample.matter_energy:.2f}) rho={sample.mean_matter_density:.4f} Etot={sample.total_energy:.2f}"
+                f"s={sample.sweep}: d={sample.graph_distance if sample.graph_distance is not None else 'disc'} E=({sample.su3_energy:.2f},{sample.su2_energy:.2f},{sample.u1_energy:.2f},{sample.matter_energy:.2f}) rho={sample.mean_matter_density:.4f} CV={sample.cv_matter_density:.3f} cluster={sample.clustering_signal:.3f} Etot={sample.total_energy:.2f}"
                 for sample in point.samples
             )
             lines.append(f"      tracker: {tracker}")
@@ -1765,6 +1833,7 @@ def save_unified_phase3_visualizations(
     prefix: str = "unified_phase3",
 ) -> list[Path]:
     plt = importlib.import_module("matplotlib.pyplot")
+    cm = importlib.import_module("matplotlib.cm")
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
 
@@ -1808,6 +1877,80 @@ def save_unified_phase3_visualizations(
     figure.savefig(distance_path, dpi=180)
     plt.close(figure)
     paths.append(distance_path)
+
+    for point in result.points:
+        final_state = point.final_state
+        if not isinstance(final_state, dict):
+            continue
+        matter_phi = deserialize_complex_field(final_state.get("matter_phi"), point.sites)
+        if matter_phi is None:
+            continue
+        adjacency = deserialize_final_adjacency(final_state, point.sites)
+        layout = build_phase3_layout(adjacency)
+        phi_sq = np.abs(matter_phi) ** 2
+        max_density = float(np.max(phi_sq)) if len(phi_sq) else 0.0
+        density_scale = max(max_density, 1e-12)
+        node_sizes = 24.0 + 420.0 * (phi_sq / density_scale)
+
+        figure = plt.figure(figsize=(8.0, 6.4))
+        axis = figure.add_subplot(111, projection="3d")
+        edge_i, edge_j = np.nonzero(np.triu(adjacency, k=1))
+        for src, dst in zip(edge_i.tolist(), edge_j.tolist()):
+            axis.plot(
+                [layout[src, 0], layout[dst, 0]],
+                [layout[src, 1], layout[dst, 1]],
+                [layout[src, 2], layout[dst, 2]],
+                color="#94a3b8",
+                alpha=0.22,
+                linewidth=0.7,
+            )
+        scatter = axis.scatter(
+            layout[:, 0],
+            layout[:, 1],
+            layout[:, 2],
+            s=node_sizes,
+            c=phi_sq,
+            cmap=cm.plasma,
+            alpha=0.92,
+            edgecolors="#0f172a",
+            linewidths=0.25,
+        )
+        mass_a, mass_b = point.mass_nodes
+        axis.scatter(
+            layout[[mass_a, mass_b], 0],
+            layout[[mass_a, mass_b], 1],
+            layout[[mass_a, mass_b], 2],
+            s=node_sizes[[mass_a, mass_b]] + 80.0,
+            facecolors="none",
+            edgecolors="#ef233c",
+            linewidths=1.5,
+        )
+        mean_density, _, cv_density, clustering_signal = compute_matter_density_statistics(adjacency, matter_phi)
+        axis.set_title(
+            f"Phase 3 Cosmic Web N={point.sites} | CV={cv_density:.2f} | cluster={clustering_signal:.2f}",
+            pad=14.0,
+        )
+        axis.set_xlabel("spectral-x")
+        axis.set_ylabel("spectral-y")
+        axis.set_zlabel("spectral-z")
+        axis.grid(False)
+        axis.set_xticks([])
+        axis.set_yticks([])
+        axis.set_zticks([])
+        colorbar = figure.colorbar(scatter, ax=axis, pad=0.08, shrink=0.78)
+        colorbar.set_label(r"$\rho_i = |\phi_i|^2$")
+        figure.text(
+            0.02,
+            0.02,
+            f"<|phi|^2>={mean_density:.5f}   CV={cv_density:.3f}   clustering={clustering_signal:.3f}",
+            fontsize=10,
+        )
+        figure.tight_layout()
+        cosmic_stem = f"{prefix}_cosmic_web" if len(result.points) == 1 else f"{prefix}_{point.sites}_cosmic_web"
+        cosmic_path = output_dir / f"{cosmic_stem}.png"
+        figure.savefig(cosmic_path, dpi=180)
+        plt.close(figure)
+        paths.append(cosmic_path)
     return paths
 
 
