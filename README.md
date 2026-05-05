@@ -219,6 +219,42 @@ To regenerate the figure directly from the stored Phase 3 JSON outputs, includin
 python plot_phase3_correlation_comparison.py phase3_N256_simultaneous_final.json phase3_N256_sequential_final.json --output-dir plots/phase3_correlation_comparison --prefix phase3_N256_simultaneous_vs_sequential
 ```
 
+There is now also a new `Phase 3` scalar-matter branch in which the unified `SU(3) \times SU(2) \times U(1)` edge dynamics is coupled to a charged complex scalar field living on the graph nodes. In that branch the node field carries a local Mexican-hat-style onsite potential,
+
+$$
+V(\phi_i) = m^2 |\phi_i|^2 + \lambda_\phi |\phi_i|^4,
+$$
+
+together with a gauge-covariant hopping term on each occupied edge,
+
+$$
+-\kappa\,\Re\!\left(\phi_i^\ast U^{(1)}_{ij} \phi_j\right),
+$$
+
+and the same Metropolis edge-relocation rule now includes the corresponding matter backreaction. The narrow scientific question is not yet whether a Standard-Model-like Higgs sector has emerged, but whether a symmetry-breaking charged field can coexist with the dynamical graph without either freezing out or tearing the sparse background apart.
+
+Two short `N=256` `small-world` probes now show that this competition is real and sharply parameter-dependent. With
+
+```powershell
+python main.py --mode unified-phase3 --sites 256 --seed 1 --lambda-scan 0.3 --temperature 0.3 --anneal-start-temperature 1.0 --degree 4 --mass-degree-target 12 --phase3-beta3 1.0 --phase3-beta2 0.0 --phase3-beta1 0.5 --graph-prior small-world --edge-swap-attempts-per-sweep 256 --burn-in-sweeps 2000 --measurement-sweeps 500 --sample-interval 10 --phase3-enable-matter --phase3-matter-mass-sq -0.5 --phase3-matter-lambda 1.0 --phase3-matter-kappa 0.5 --phase3-matter-step 0.4 --json-out phase3_N256_matter_condensation.json
+```
+
+the graph fragmented badly: only `126/256` nodes remained connected to the mass-centered horizon analysis, the regime stayed `mixed`, and no co-freezing signal appeared. In contrast, lowering the matter hopping strength by one order of magnitude,
+
+```powershell
+python main.py --mode unified-phase3 --sites 256 --seed 1 --lambda-scan 0.3 --temperature 0.3 --anneal-start-temperature 1.0 --degree 4 --mass-degree-target 12 --phase3-beta3 1.0 --phase3-beta2 0.0 --phase3-beta1 0.5 --graph-prior small-world --edge-swap-attempts-per-sweep 256 --burn-in-sweeps 2000 --measurement-sweeps 500 --sample-interval 10 --phase3-enable-matter --phase3-matter-mass-sq -0.5 --phase3-matter-lambda 1.0 --phase3-matter-kappa 0.05 --phase3-matter-step 0.4 --json-out phase3_N256_matter_condensation_weak_gravity.json
+```
+
+produced a much healthier finite-size branch: `253/256` nodes remained connected, the mean graph distance rose to about `2.43`, the mean absolute inter-sector correlation climbed to about `0.994`, and the regime shifted to `sector-locked` without a topological collapse. The representative summary at that weaker coupling was roughly
+
+- `area_R2 \approx 0.408`
+- `mass_R2 \approx 0.400`
+- `bulk_R2 \approx 0.508`
+- `\bar d \approx 2.43`
+- `E_{tot} \approx 12.25`
+
+The correct interpretation is deliberately narrow. The current code does **not** prove a continuum Higgs phase, nor does it establish a full phase diagram for matter on a dynamical quantum graph. What it does now support is a new executable `Goldilocks-zone` claim: a charged symmetry-breaking scalar can condense on the annealed sparse manifold, backreact on graph relocation costs, and still leave the background largely connected, provided the hopping/backreaction scale is kept below the graph-destroying regime. That is the repository's first direct finite-size evidence for `matter without geometric collapse` in the fully unified Phase 3 workflow.
+
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. The current codebase is stronger than the earliest version because it now includes graph-prior comparisons, null-model baselines, alternative distance prescriptions, and topology-only diagnostics. Even so, those additions do not eliminate the basic interpretive risks; they only sharpen where the remaining weak points are. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
 
