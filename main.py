@@ -134,7 +134,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vacuum-link-update-step", type=float, default=0.18, help="Bare-action Phase 1 only: Gaussian step size for SU(3) diagonal phase proposals.")
     parser.add_argument("--vacuum-radius-count", type=int, default=6, help="Phase 1 / Unified Phase 3: number of blind-observer radii to probe from the graph center.")
     parser.add_argument("--gravity-mass-nodes", type=str, default="0,1", help="Gravity Phase 2 only: comma-separated node ids used as the two static heavy masses.")
-    parser.add_argument("--gravity-mass-degree", type=int, default=24, help="Gravity Phase 2 only: target degree imposed on each static heavy mass.")
+    parser.add_argument(
+        "--gravity-mass-degree",
+        "--mass-degree-target",
+        dest="gravity_mass_degree",
+        type=int,
+        default=24,
+        help="Gravity Phase 2 / Unified Phase 3: target degree imposed on each static heavy mass.",
+    )
     parser.add_argument("--lambda-coupling", type=float, default=0.5, help="Gravity Phase 2 / Unified Phase 3: quadratic mass-term coupling lambda for deviations from the target mass degree.")
     parser.add_argument("--gravity-potential-distances", type=str, default="", help="Gravity Phase 2 only: optional comma-separated fixed graph distances for a Mass-Distance Potential scan, for example 1,2,3,4.")
     parser.add_argument("--phase3-beta3", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_3 for the SU(3) triangle action.")
