@@ -404,6 +404,38 @@ def copy_edge_states(edge_states: dict[tuple[int, int], GaugeState]) -> dict[tup
     return {key: state.copy() for key, state in edge_states.items()}
 
 
+def print_mass_horizon(adjacency: np.ndarray, mass_nodes: list[int] | tuple[int, ...]) -> None:
+    from collections import deque
+
+    distances = np.full(adjacency.shape[0], -1, dtype=np.int32)
+    queue: deque[int] = deque()
+
+    for mass in mass_nodes:
+        node = int(mass)
+        if distances[node] != -1:
+            continue
+        distances[node] = 0
+        queue.append(node)
+
+    shells: dict[int, int] = {}
+    while queue:
+        node = queue.popleft()
+        distance = int(distances[node])
+        shells[distance] = shells.get(distance, 0) + 1
+
+        for neighbor in np.flatnonzero(adjacency[node]).tolist():
+            if distances[neighbor] != -1:
+                continue
+            distances[neighbor] = distance + 1
+            queue.append(int(neighbor))
+
+    print("\n=== Mass Horizon Analysis (Shells) ===")
+    for radius in sorted(shells):
+        print(f"Radius {radius}: {shells[radius]} nodes")
+    print(f"Total nodes reached: {sum(shells.values())}")
+    print("======================================\n")
+
+
 def extract_warm_start_state(path: Path, expected_sites: int) -> tuple[np.ndarray, dict[tuple[int, int], GaugeState]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     candidate_points: list[dict[str, object]] = []
@@ -584,6 +616,7 @@ class UnifiedGaugePhase3Experiment:
         u1_energies = [sample.u1_energy for sample in samples]
         distance_entries = [sample for sample in samples if sample.graph_distance is not None]
         distance_values = [float(sample.graph_distance) for sample in distance_entries]
+        print_mass_horizon(adjacency, self.mass_nodes)
         return UnifiedPhase3Point(
             sites=self.sites,
             seed=self.seed,
