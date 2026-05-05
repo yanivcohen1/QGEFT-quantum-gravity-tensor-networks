@@ -47,14 +47,19 @@ from vacuum_phase1 import (
 )
 from unified_phase3 import (
     UnifiedPhase3Config,
+    UnifiedPhase3CouplingScanResult,
     UnifiedPhase3SweepResult,
     extract_warm_start_state,
+    render_unified_phase3_coupling_scan_report,
     render_unified_phase3_report,
     render_unified_phase3_temperature_scan_report,
+    run_unified_phase3_coupling_scan,
     run_unified_phase3_sweep,
     run_unified_phase3_temperature_scan,
+    save_unified_phase3_coupling_scan_visualizations,
     save_unified_phase3_visualizations,
     save_unified_phase3_temperature_scan_visualizations,
+    write_unified_phase3_coupling_scan_json,
     write_unified_phase3_json,
     write_unified_phase3_temperature_scan_json,
 )
@@ -72,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=7, help="Random seed.")
     parser.add_argument("--temperature", type=float, default=0.35, help="Effective temperature.")
     parser.add_argument("--temperature-scan", type=str, default="", help="Phase 1 / Unified Phase 3: comma-separated temperatures to scan, for example 0.1,0.3,0.5,0.7.")
+    parser.add_argument("--lambda-scan", type=str, default="", help="Unified Phase 3: comma-separated mass-coupling lambda values to scan, for example 0.1,0.3,0.5,0.7.")
     parser.add_argument("--anneal-start-temperature", type=float, default=None, help="Optional high starting temperature for burn-in simulated annealing in Monte Carlo mode.")
     parser.add_argument("--inflation-seed-sites", type=int, default=None, help="Optional synthetic-inflation seed size. When set below the target N, the graph is grown locally from this small seed instead of being initialized at full size.")
     parser.add_argument("--inflation-mode", choices=["legacy", "staged", "boundary-strain"], default="legacy", help="Inflation builder to use when --inflation-seed-sites is enabled. 'staged' grows in bursts with local smoothing between stages; 'boundary-strain' grows a weak outer shell from high-boundary/high-strain nodes, then applies short relaxation and mild Ricci cleanup each stage.")
@@ -172,6 +178,14 @@ def parse_float_list(raw: str, default: tuple[float, ...]) -> tuple[float, ...]:
 
 
 def parse_temperature_scan(raw: str) -> list[float]:
+    return parse_positive_float_scan(raw, label="temperature scan values")
+
+
+def parse_lambda_scan(raw: str) -> list[float]:
+    return parse_positive_float_scan(raw, label="lambda scan values")
+
+
+def parse_positive_float_scan(raw: str, label: str) -> list[float]:
     if not raw.strip():
         return []
     values: list[float] = []
@@ -181,7 +195,7 @@ def parse_temperature_scan(raw: str) -> list[float]:
             continue
         value = float(stripped)
         if value <= 0.0:
-            raise ValueError("temperature scan values must be positive")
+            raise ValueError(f"{label} must be positive")
         if all(abs(existing - value) > 1e-12 for existing in values):
             values.append(value)
     return values
@@ -446,6 +460,9 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
     target_sizes = sizes if sizes else [args.sites]
     progress_mode = "off" if args.no_progress else args.progress_mode
     temperature_scan = parse_temperature_scan(args.temperature_scan)
+    lambda_scan = parse_lambda_scan(args.lambda_scan)
+    if temperature_scan and lambda_scan:
+        raise ValueError("Use either --temperature-scan or --lambda-scan, not both in the same run")
     phase3_temperature = 0.3 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature
     phase3_anneal_start = 0.6 if args.anneal_start_temperature is None else args.anneal_start_temperature
     phase3_edge_relocations = (
@@ -490,6 +507,25 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
         if args.plot_dir is not None:
             prefix = "unified_phase3_temperature_scan" if sizes else f"unified_phase3_temperature_scan_{args.sites}"
             save_unified_phase3_temperature_scan_visualizations(scan, args.plot_dir, prefix=prefix)
+        return
+    if lambda_scan:
+        scan = cast(
+            UnifiedPhase3CouplingScanResult,
+            run_unified_phase3_coupling_scan(
+                couplings=lambda_scan,
+                sizes=target_sizes,
+                seed=args.seed,
+                config=config,
+                warm_start_state=warm_start_state,
+                progress_mode=progress_mode,
+            ),
+        )
+        print(render_unified_phase3_coupling_scan_report(scan))
+        if args.json_out is not None:
+            write_unified_phase3_coupling_scan_json(args.json_out, scan)
+        if args.plot_dir is not None:
+            prefix = "unified_phase3_lambda_scan" if sizes else f"unified_phase3_lambda_scan_{args.sites}"
+            save_unified_phase3_coupling_scan_visualizations(scan, args.plot_dir, prefix=prefix)
         return
     sweep = cast(
         UnifiedPhase3SweepResult,
