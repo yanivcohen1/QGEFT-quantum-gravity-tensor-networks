@@ -39,6 +39,11 @@ class UnifiedPhase3Config:
     beta3: float = 1.0
     beta2: float = 1.0
     beta1: float = 1.0
+    enable_matter: bool = False
+    matter_mass_sq: float = 0.1
+    matter_lambda: float = 1.0
+    matter_kappa: float = 0.1
+    matter_update_step: float = 0.25
 
 
 @dataclass
@@ -143,6 +148,11 @@ class UnifiedPhase3SweepResult:
     beta3: float
     beta2: float
     beta1: float
+    enable_matter: bool
+    matter_mass_sq: float
+    matter_lambda: float
+    matter_kappa: float
+    matter_update_step: float
     points: list[UnifiedPhase3Point]
     collapse_area_law: LinearLawFit
     global_distance_trend: LinearLawFit
@@ -167,6 +177,11 @@ class UnifiedPhase3SweepResult:
                 "beta3": self.beta3,
                 "beta2": self.beta2,
                 "beta1": self.beta1,
+                "enable_matter": self.enable_matter,
+                "matter_mass_sq": self.matter_mass_sq,
+                "matter_lambda": self.matter_lambda,
+                "matter_kappa": self.matter_kappa,
+                "matter_update_step": self.matter_update_step,
                 "collapse_area_law": asdict(self.collapse_area_law),
                 "global_distance_trend": asdict(self.global_distance_trend),
                 "points": [
@@ -221,6 +236,11 @@ class UnifiedPhase3TemperatureScanResult:
     beta3: float
     beta2: float
     beta1: float
+    enable_matter: bool
+    matter_mass_sq: float
+    matter_lambda: float
+    matter_kappa: float
+    matter_update_step: float
     temperatures: tuple[float, ...]
     cofreezing_temperature: float | None
     points: list[UnifiedPhase3TemperatureScanPoint]
@@ -244,6 +264,11 @@ class UnifiedPhase3TemperatureScanResult:
                 "beta3": self.beta3,
                 "beta2": self.beta2,
                 "beta1": self.beta1,
+                "enable_matter": self.enable_matter,
+                "matter_mass_sq": self.matter_mass_sq,
+                "matter_lambda": self.matter_lambda,
+                "matter_kappa": self.matter_kappa,
+                "matter_update_step": self.matter_update_step,
                 "temperatures": list(self.temperatures),
                 "cofreezing_temperature": self.cofreezing_temperature,
                 "points": [
@@ -305,6 +330,11 @@ class UnifiedPhase3CouplingScanResult:
     beta3: float
     beta2: float
     beta1: float
+    enable_matter: bool
+    matter_mass_sq: float
+    matter_lambda: float
+    matter_kappa: float
+    matter_update_step: float
     cofreezing_mass_coupling: float | None
     points: list[UnifiedPhase3CouplingScanPoint]
 
@@ -328,6 +358,11 @@ class UnifiedPhase3CouplingScanResult:
                 "beta3": self.beta3,
                 "beta2": self.beta2,
                 "beta1": self.beta1,
+                "enable_matter": self.enable_matter,
+                "matter_mass_sq": self.matter_mass_sq,
+                "matter_lambda": self.matter_lambda,
+                "matter_kappa": self.matter_kappa,
+                "matter_update_step": self.matter_update_step,
                 "cofreezing_mass_coupling": self.cofreezing_mass_coupling,
                 "points": [
                     {
@@ -789,6 +824,9 @@ class UnifiedGaugePhase3Experiment:
         if key == (int(src), int(dst)):
             return state
         return GaugeState(su3=np.conjugate(state.su3), su2=np.conjugate(state.su2), u1=np.conjugate(state.u1))
+
+    def _get_u1_link_phase(self, src: int, dst: int, edge_states: dict[tuple[int, int], GaugeState]) -> complex:
+        return complex(self._edge_state(src, dst, edge_states).u1)
 
     def _triangle_sector_loops(
         self,
@@ -1253,6 +1291,11 @@ def run_unified_phase3_sweep(
         beta3=config.beta3,
         beta2=config.beta2,
         beta1=config.beta1,
+        enable_matter=config.enable_matter,
+        matter_mass_sq=config.matter_mass_sq,
+        matter_lambda=config.matter_lambda,
+        matter_kappa=config.matter_kappa,
+        matter_update_step=config.matter_update_step,
         points=points,
         collapse_area_law=collapse_area,
         global_distance_trend=global_distance_trend,
@@ -1289,6 +1332,11 @@ def run_unified_phase3_temperature_scan(
             beta3=config.beta3,
             beta2=config.beta2,
             beta1=config.beta1,
+            enable_matter=config.enable_matter,
+            matter_mass_sq=config.matter_mass_sq,
+            matter_lambda=config.matter_lambda,
+            matter_kappa=config.matter_kappa,
+            matter_update_step=config.matter_update_step,
         )
         sweep = run_unified_phase3_sweep(
             sizes=sizes,
@@ -1316,6 +1364,11 @@ def run_unified_phase3_temperature_scan(
         beta3=config.beta3,
         beta2=config.beta2,
         beta1=config.beta1,
+        enable_matter=config.enable_matter,
+        matter_mass_sq=config.matter_mass_sq,
+        matter_lambda=config.matter_lambda,
+        matter_kappa=config.matter_kappa,
+        matter_update_step=config.matter_update_step,
         temperatures=tuple(float(value) for value in temperatures),
         cofreezing_temperature=cofreezing_temperature,
         points=scan_points,
@@ -1352,6 +1405,11 @@ def run_unified_phase3_coupling_scan(
             beta3=config.beta3,
             beta2=config.beta2,
             beta1=config.beta1,
+            enable_matter=config.enable_matter,
+            matter_mass_sq=config.matter_mass_sq,
+            matter_lambda=config.matter_lambda,
+            matter_kappa=config.matter_kappa,
+            matter_update_step=config.matter_update_step,
         )
         sweep = run_unified_phase3_sweep(
             sizes=sizes,
@@ -1397,6 +1455,11 @@ def run_unified_phase3_coupling_scan(
         beta3=config.beta3,
         beta2=config.beta2,
         beta1=config.beta1,
+        enable_matter=config.enable_matter,
+        matter_mass_sq=config.matter_mass_sq,
+        matter_lambda=config.matter_lambda,
+        matter_kappa=config.matter_kappa,
+        matter_update_step=config.matter_update_step,
         cofreezing_mass_coupling=cofreezing_mass_coupling,
         points=scan_points,
     )
