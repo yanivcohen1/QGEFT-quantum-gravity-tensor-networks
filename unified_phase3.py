@@ -69,6 +69,19 @@ class UnifiedPhase3Sample:
 
 
 @dataclass
+class MoveKinetics:
+    attempted: int = 0
+    accepted: int = 0
+    uphill_accepted: int = 0
+
+
+@dataclass
+class UnifiedPhase3Kinetics:
+    graph_moves: MoveKinetics
+    field_moves: MoveKinetics
+
+
+@dataclass
 class UnifiedPhase3Point:
     sites: int
     seed: int
@@ -92,6 +105,10 @@ class UnifiedPhase3Point:
     total_energy_std: float
     area_law: LinearLawFit
     volume_law: LinearLawFit
+    mass_area_law: LinearLawFit
+    mass_volume_law: LinearLawFit
+    bulk_area_law: LinearLawFit
+    bulk_volume_law: LinearLawFit
     distance_trend: LinearLawFit
     su3_su2_correlation: float
     su3_u1_correlation: float
@@ -100,7 +117,10 @@ class UnifiedPhase3Point:
     distance_su2_correlation: float
     distance_u1_correlation: float
     measurements: list[ObserverMeasurement]
+    mass_measurements: list[ObserverMeasurement]
+    bulk_measurements: list[ObserverMeasurement]
     samples: list[UnifiedPhase3Sample]
+    mcmc_kinetics: UnifiedPhase3Kinetics
     final_state: dict[str, object] | None = None
 
 
@@ -171,6 +191,10 @@ class UnifiedPhase3TemperatureScanPoint:
     temperature: float
     mean_area_law_slope: float
     mean_area_law_r2: float
+    mean_mass_area_law_slope: float
+    mean_mass_area_law_r2: float
+    mean_bulk_area_law_slope: float
+    mean_bulk_area_law_r2: float
     mean_mean_distance: float | None
     mean_distance_trend_slope: float
     mean_abs_sector_correlation: float
@@ -227,6 +251,93 @@ class UnifiedPhase3TemperatureScanResult:
                         "temperature": point.temperature,
                         "mean_area_law_slope": point.mean_area_law_slope,
                         "mean_area_law_r2": point.mean_area_law_r2,
+                        "mean_mass_area_law_slope": point.mean_mass_area_law_slope,
+                        "mean_mass_area_law_r2": point.mean_mass_area_law_r2,
+                        "mean_bulk_area_law_slope": point.mean_bulk_area_law_slope,
+                        "mean_bulk_area_law_r2": point.mean_bulk_area_law_r2,
+                        "mean_mean_distance": point.mean_mean_distance,
+                        "mean_distance_trend_slope": point.mean_distance_trend_slope,
+                        "mean_abs_sector_correlation": point.mean_abs_sector_correlation,
+                        "cofreezing_score": point.cofreezing_score,
+                        "regime": point.regime,
+                        "sweep": json.loads(point.sweep.to_json()),
+                    }
+                    for point in self.points
+                ],
+            },
+            indent=2,
+        )
+
+
+@dataclass
+class UnifiedPhase3CouplingScanPoint:
+    mass_coupling: float
+    mean_area_law_slope: float
+    mean_area_law_r2: float
+    mean_mass_area_law_slope: float
+    mean_mass_area_law_r2: float
+    mean_bulk_area_law_slope: float
+    mean_bulk_area_law_r2: float
+    mean_mean_distance: float | None
+    mean_distance_trend_slope: float
+    mean_abs_sector_correlation: float
+    cofreezing_score: float
+    regime: str
+    sweep: UnifiedPhase3SweepResult
+
+
+@dataclass
+class UnifiedPhase3CouplingScanResult:
+    mode: str
+    graph_prior: str
+    degree: int
+    temperature: float
+    anneal_start_temperature: float | None
+    burn_in_sweeps: int
+    measurement_sweeps: int
+    sample_interval: int
+    edge_swap_attempts_per_sweep: int
+    link_updates_per_sweep: int
+    radius_count: int
+    mass_nodes: tuple[int, int]
+    mass_degree: int
+    mass_couplings: tuple[float, ...]
+    beta3: float
+    beta2: float
+    beta1: float
+    cofreezing_mass_coupling: float | None
+    points: list[UnifiedPhase3CouplingScanPoint]
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "mode": self.mode,
+                "graph_prior": self.graph_prior,
+                "degree": self.degree,
+                "temperature": self.temperature,
+                "anneal_start_temperature": self.anneal_start_temperature,
+                "burn_in_sweeps": self.burn_in_sweeps,
+                "measurement_sweeps": self.measurement_sweeps,
+                "sample_interval": self.sample_interval,
+                "edge_swap_attempts_per_sweep": self.edge_swap_attempts_per_sweep,
+                "link_updates_per_sweep": self.link_updates_per_sweep,
+                "radius_count": self.radius_count,
+                "mass_nodes": list(self.mass_nodes),
+                "mass_degree": self.mass_degree,
+                "mass_couplings": list(self.mass_couplings),
+                "beta3": self.beta3,
+                "beta2": self.beta2,
+                "beta1": self.beta1,
+                "cofreezing_mass_coupling": self.cofreezing_mass_coupling,
+                "points": [
+                    {
+                        "mass_coupling": point.mass_coupling,
+                        "mean_area_law_slope": point.mean_area_law_slope,
+                        "mean_area_law_r2": point.mean_area_law_r2,
+                        "mean_mass_area_law_slope": point.mean_mass_area_law_slope,
+                        "mean_mass_area_law_r2": point.mean_mass_area_law_r2,
+                        "mean_bulk_area_law_slope": point.mean_bulk_area_law_slope,
+                        "mean_bulk_area_law_r2": point.mean_bulk_area_law_r2,
                         "mean_mean_distance": point.mean_mean_distance,
                         "mean_distance_trend_slope": point.mean_distance_trend_slope,
                         "mean_abs_sector_correlation": point.mean_abs_sector_correlation,
@@ -293,6 +404,38 @@ def copy_edge_states(edge_states: dict[tuple[int, int], GaugeState]) -> dict[tup
     return {key: state.copy() for key, state in edge_states.items()}
 
 
+def print_mass_horizon(adjacency: np.ndarray, mass_nodes: list[int] | tuple[int, ...]) -> None:
+    from collections import deque
+
+    distances = np.full(adjacency.shape[0], -1, dtype=np.int32)
+    queue: deque[int] = deque()
+
+    for mass in mass_nodes:
+        node = int(mass)
+        if distances[node] != -1:
+            continue
+        distances[node] = 0
+        queue.append(node)
+
+    shells: dict[int, int] = {}
+    while queue:
+        node = queue.popleft()
+        distance = int(distances[node])
+        shells[distance] = shells.get(distance, 0) + 1
+
+        for neighbor in np.flatnonzero(adjacency[node]).tolist():
+            if distances[neighbor] != -1:
+                continue
+            distances[neighbor] = distance + 1
+            queue.append(int(neighbor))
+
+    print("\n=== Mass Horizon Analysis (Shells) ===")
+    for radius in sorted(shells):
+        print(f"Radius {radius}: {shells[radius]} nodes")
+    print(f"Total nodes reached: {sum(shells.values())}")
+    print("======================================\n")
+
+
 def extract_warm_start_state(path: Path, expected_sites: int) -> tuple[np.ndarray, dict[tuple[int, int], GaugeState]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     candidate_points: list[dict[str, object]] = []
@@ -352,6 +495,10 @@ def summarize_unified_phase3_temperature_scan_point(
 ) -> UnifiedPhase3TemperatureScanPoint:
     mean_area_law_slope = float(np.mean([point.area_law.slope for point in sweep.points])) if sweep.points else 0.0
     mean_area_law_r2 = float(np.mean([point.area_law.r2 for point in sweep.points])) if sweep.points else 0.0
+    mean_mass_area_law_slope = float(np.mean([point.mass_area_law.slope for point in sweep.points])) if sweep.points else 0.0
+    mean_mass_area_law_r2 = float(np.mean([point.mass_area_law.r2 for point in sweep.points])) if sweep.points else 0.0
+    mean_bulk_area_law_slope = float(np.mean([point.bulk_area_law.slope for point in sweep.points])) if sweep.points else 0.0
+    mean_bulk_area_law_r2 = float(np.mean([point.bulk_area_law.r2 for point in sweep.points])) if sweep.points else 0.0
     mean_mean_distance = float(np.mean([point.mean_distance for point in sweep.points if point.mean_distance is not None])) if any(point.mean_distance is not None for point in sweep.points) else None
     mean_distance_trend_slope = float(np.mean([point.distance_trend.slope for point in sweep.points])) if sweep.points else 0.0
     mean_abs_sector_correlation = float(
@@ -379,6 +526,10 @@ def summarize_unified_phase3_temperature_scan_point(
         temperature=temperature,
         mean_area_law_slope=mean_area_law_slope,
         mean_area_law_r2=mean_area_law_r2,
+        mean_mass_area_law_slope=mean_mass_area_law_slope,
+        mean_mass_area_law_r2=mean_mass_area_law_r2,
+        mean_bulk_area_law_slope=mean_bulk_area_law_slope,
+        mean_bulk_area_law_r2=mean_bulk_area_law_r2,
         mean_mean_distance=mean_mean_distance,
         mean_distance_trend_slope=mean_distance_trend_slope,
         mean_abs_sector_correlation=mean_abs_sector_correlation,
@@ -410,6 +561,7 @@ class UnifiedGaugePhase3Experiment:
         self.rng = np.random.default_rng(seed)
         self.warm_start_state = warm_start_state
         self.progress_reporter = create_progress_reporter(progress_mode, prefix=f"phase3 N={sites}")
+        self.kinetics = UnifiedPhase3Kinetics(graph_moves=MoveKinetics(), field_moves=MoveKinetics())
 
     def run(self) -> UnifiedPhase3Point:
         if self.warm_start_state is None:
@@ -423,6 +575,8 @@ class UnifiedGaugePhase3Experiment:
             edge_i, edge_j = self._adjacency_to_edges(adjacency)
         total_sweeps = self.config.burn_in_sweeps + self.config.measurement_sweeps
         sampled_observer_profiles: list[list[ObserverMeasurement]] = []
+        sampled_mass_observer_profiles: list[list[ObserverMeasurement]] = []
+        sampled_bulk_observer_profiles: list[list[ObserverMeasurement]] = []
         samples: list[UnifiedPhase3Sample] = []
         initial_temperature = (
             self.config.anneal_start_temperature
@@ -431,6 +585,8 @@ class UnifiedGaugePhase3Experiment:
         )
         samples.append(self._measure_state(adjacency, edge_states, sweep=0, sweep_temperature=initial_temperature))
         sampled_observer_profiles.append(self._measure_observer(adjacency, edge_states))
+        sampled_mass_observer_profiles.extend(self._measure_observers_from_sources(adjacency, edge_states, self.mass_nodes))
+        sampled_bulk_observer_profiles.extend(self._measure_bulk_observers(adjacency, edge_states))
         for sweep in range(total_sweeps):
             sweep_temperature = temperature_for_sweep(
                 sweep=sweep,
@@ -444,16 +600,23 @@ class UnifiedGaugePhase3Experiment:
             if sweep >= self.config.burn_in_sweeps and (sweep - self.config.burn_in_sweeps) % max(self.config.sample_interval, 1) == 0:
                 samples.append(self._measure_state(adjacency, edge_states, sweep=sweep + 1, sweep_temperature=sweep_temperature))
                 sampled_observer_profiles.append(self._measure_observer(adjacency, edge_states))
+                sampled_mass_observer_profiles.extend(self._measure_observers_from_sources(adjacency, edge_states, self.mass_nodes))
+                sampled_bulk_observer_profiles.extend(self._measure_bulk_observers(adjacency, edge_states))
         self.progress_reporter.finish()
 
         averaged_measurements = self._average_measurements(sampled_observer_profiles)
         area_law, volume_law = self._fit_measurement_laws(averaged_measurements)
+        averaged_mass_measurements = self._average_measurements(sampled_mass_observer_profiles)
+        mass_area_law, mass_volume_law = self._fit_measurement_laws(averaged_mass_measurements)
+        averaged_bulk_measurements = self._average_measurements(sampled_bulk_observer_profiles)
+        bulk_area_law, bulk_volume_law = self._fit_measurement_laws(averaged_bulk_measurements)
         distances = [sample.graph_distance for sample in samples if sample.graph_distance is not None]
         su3_energies = [sample.su3_energy for sample in samples]
         su2_energies = [sample.su2_energy for sample in samples]
         u1_energies = [sample.u1_energy for sample in samples]
         distance_entries = [sample for sample in samples if sample.graph_distance is not None]
         distance_values = [float(sample.graph_distance) for sample in distance_entries]
+        print_mass_horizon(adjacency, self.mass_nodes)
         return UnifiedPhase3Point(
             sites=self.sites,
             seed=self.seed,
@@ -477,6 +640,10 @@ class UnifiedGaugePhase3Experiment:
             total_energy_std=float(np.std([sample.total_energy for sample in samples])) if samples else 0.0,
             area_law=area_law,
             volume_law=volume_law,
+            mass_area_law=mass_area_law,
+            mass_volume_law=mass_volume_law,
+            bulk_area_law=bulk_area_law,
+            bulk_volume_law=bulk_volume_law,
             distance_trend=self._fit_distance_trend(samples),
             su3_su2_correlation=safe_correlation(su3_energies, su2_energies),
             su3_u1_correlation=safe_correlation(su3_energies, u1_energies),
@@ -485,7 +652,21 @@ class UnifiedGaugePhase3Experiment:
             distance_su2_correlation=safe_correlation(distance_values, [sample.su2_energy for sample in distance_entries]),
             distance_u1_correlation=safe_correlation(distance_values, [sample.u1_energy for sample in distance_entries]),
             measurements=averaged_measurements,
+            mass_measurements=averaged_mass_measurements,
+            bulk_measurements=averaged_bulk_measurements,
             samples=samples,
+            mcmc_kinetics=UnifiedPhase3Kinetics(
+                graph_moves=MoveKinetics(
+                    attempted=self.kinetics.graph_moves.attempted,
+                    accepted=self.kinetics.graph_moves.accepted,
+                    uphill_accepted=self.kinetics.graph_moves.uphill_accepted,
+                ),
+                field_moves=MoveKinetics(
+                    attempted=self.kinetics.field_moves.attempted,
+                    accepted=self.kinetics.field_moves.accepted,
+                    uphill_accepted=self.kinetics.field_moves.uphill_accepted,
+                ),
+            ),
             final_state={"edges": serialize_edge_states(edge_states)},
         )
 
@@ -591,6 +772,16 @@ class UnifiedGaugePhase3Experiment:
                 u1_angles.tolist(),
             )
         }
+
+    def _random_edge_state(self) -> GaugeState:
+        su3_angles = self.rng.normal(0.0, 0.45, size=2)
+        su2_angle = float(self.rng.normal(0.0, 0.45))
+        u1_angle = float(self.rng.normal(0.0, 0.45))
+        return GaugeState(
+            su3=su3_phase_vector(su3_angles),
+            su2=su2_diagonal_vector(su2_angle),
+            u1=complex(np.exp(1.0j * u1_angle)),
+        )
 
     def _edge_state(self, src: int, dst: int, edge_states: dict[tuple[int, int], GaugeState]) -> GaugeState:
         key = tuple(sorted((int(src), int(dst))))
@@ -701,6 +892,7 @@ class UnifiedGaugePhase3Experiment:
             if not local_triangles:
                 continue
             for sector in ("su3", "su2", "u1"):
+                self.kinetics.field_moves.attempted += 1
                 old_energy = sum(self._triangle_energy(triangle, edge_states) for triangle in local_triangles)
                 previous = edge_states[key].copy()
                 proposal = previous.copy()
@@ -719,6 +911,10 @@ class UnifiedGaugePhase3Experiment:
                 delta_energy = new_energy - old_energy
                 if delta_energy > 0.0 and self.rng.random() >= np.exp(-beta * delta_energy):
                     edge_states[key] = previous
+                else:
+                    self.kinetics.field_moves.accepted += 1
+                    if delta_energy > 0.0:
+                        self.kinetics.field_moves.uphill_accepted += 1
 
     def _run_edge_relocations(
         self,
@@ -745,18 +941,19 @@ class UnifiedGaugePhase3Experiment:
             if proposal is None:
                 continue
             edge_index, old_edge_raw, new_edge_raw = proposal
+            self.kinetics.graph_moves.attempted += 1
             old_edge = tuple(sorted(old_edge_raw))
             new_edge = tuple(sorted(new_edge_raw))
             touched_nodes = {old_edge[0], old_edge[1], new_edge[0], new_edge[1]}
             before_triangles = self._triangles_touching_nodes(adjacency, touched_nodes)
             old_energy = sum(self._triangle_energy(triangle, edge_states) for triangle in before_triangles)
             old_energy += self._mass_penalty_energy(adjacency)
-            carried_state = edge_states.pop(old_edge)
+            previous_state = edge_states.pop(old_edge)
             adjacency[old_edge[0], old_edge[1]] = False
             adjacency[old_edge[1], old_edge[0]] = False
             adjacency[new_edge[0], new_edge[1]] = True
             adjacency[new_edge[1], new_edge[0]] = True
-            edge_states[new_edge] = carried_state
+            edge_states[new_edge] = self._random_edge_state()
             after_triangles = self._triangles_touching_nodes(adjacency, touched_nodes)
             new_energy = sum(self._triangle_energy(triangle, edge_states) for triangle in after_triangles)
             new_energy += self._mass_penalty_energy(adjacency)
@@ -767,8 +964,11 @@ class UnifiedGaugePhase3Experiment:
                 adjacency[new_edge[1], new_edge[0]] = False
                 adjacency[old_edge[0], old_edge[1]] = True
                 adjacency[old_edge[1], old_edge[0]] = True
-                edge_states[old_edge] = carried_state
+                edge_states[old_edge] = previous_state
                 continue
+            self.kinetics.graph_moves.accepted += 1
+            if delta_energy > 0.0:
+                self.kinetics.graph_moves.uphill_accepted += 1
             edge_set.remove(old_edge)
             edge_set.add(new_edge)
             edge_i[edge_index] = np.int32(new_edge[0])
@@ -867,6 +1067,14 @@ class UnifiedGaugePhase3Experiment:
         edge_states: dict[tuple[int, int], GaugeState],
     ) -> list[ObserverMeasurement]:
         center = self._select_center_node(adjacency)
+        return self._measure_observer_from_source(adjacency, edge_states, center)
+
+    def _measure_observer_from_source(
+        self,
+        adjacency: np.ndarray,
+        edge_states: dict[tuple[int, int], GaugeState],
+        center: int,
+    ) -> list[ObserverMeasurement]:
         distances = self._bfs_distances(adjacency, center)
         measurements: list[ObserverMeasurement] = []
         for radius in self._observer_radii(distances):
@@ -882,6 +1090,43 @@ class UnifiedGaugePhase3Experiment:
                 )
             )
         return measurements
+
+    def _measure_observers_from_sources(
+        self,
+        adjacency: np.ndarray,
+        edge_states: dict[tuple[int, int], GaugeState],
+        sources: list[int] | tuple[int, ...],
+    ) -> list[list[ObserverMeasurement]]:
+        return [
+            self._measure_observer_from_source(adjacency, edge_states, int(source))
+            for source in sources
+        ]
+
+    def _select_bulk_observer_nodes(self, adjacency: np.ndarray, sample_size: int = 8) -> list[int]:
+        mass_a, mass_b = self.mass_nodes
+        distances_from_a = self._bfs_distances(adjacency, mass_a)
+        distances_from_b = self._bfs_distances(adjacency, mass_b)
+        candidates: list[tuple[float, float, int]] = []
+        for node in range(self.sites):
+            if node in self.mass_nodes:
+                continue
+            min_distance = min(distances_from_a[node], distances_from_b[node])
+            max_distance = max(distances_from_a[node], distances_from_b[node])
+            if not np.isfinite(min_distance):
+                min_distance = float("inf")
+            if not np.isfinite(max_distance):
+                max_distance = float("inf")
+            candidates.append((float(min_distance), float(max_distance), int(node)))
+        candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        return [node for _, _, node in candidates[: max(0, min(sample_size, len(candidates)))]]
+
+    def _measure_bulk_observers(
+        self,
+        adjacency: np.ndarray,
+        edge_states: dict[tuple[int, int], GaugeState],
+    ) -> list[list[ObserverMeasurement]]:
+        bulk_nodes = self._select_bulk_observer_nodes(adjacency)
+        return self._measure_observers_from_sources(adjacency, edge_states, bulk_nodes)
 
     def _average_measurements(self, sampled: list[list[ObserverMeasurement]]) -> list[ObserverMeasurement]:
         by_radius: dict[int, list[ObserverMeasurement]] = {}
@@ -1077,6 +1322,86 @@ def run_unified_phase3_temperature_scan(
     )
 
 
+def run_unified_phase3_coupling_scan(
+    couplings: list[float],
+    sizes: list[int],
+    seed: int,
+    config: UnifiedPhase3Config,
+    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
+    progress_mode: str = "bar",
+) -> UnifiedPhase3CouplingScanResult:
+    scan_points: list[UnifiedPhase3CouplingScanPoint] = []
+    for coupling_index, mass_coupling in enumerate(couplings):
+        sweep_config = UnifiedPhase3Config(
+            degree=config.degree,
+            graph_prior=config.graph_prior,
+            temperature=config.temperature,
+            anneal_start_temperature=config.anneal_start_temperature,
+            burn_in_sweeps=config.burn_in_sweeps,
+            measurement_sweeps=config.measurement_sweeps,
+            sample_interval=config.sample_interval,
+            edge_swap_attempts_per_sweep=config.edge_swap_attempts_per_sweep,
+            link_updates_per_sweep=config.link_updates_per_sweep,
+            su3_update_step=config.su3_update_step,
+            su2_update_step=config.su2_update_step,
+            u1_update_step=config.u1_update_step,
+            radius_count=config.radius_count,
+            mass_nodes=config.mass_nodes,
+            mass_degree=config.mass_degree,
+            mass_coupling=mass_coupling,
+            beta3=config.beta3,
+            beta2=config.beta2,
+            beta1=config.beta1,
+        )
+        sweep = run_unified_phase3_sweep(
+            sizes=sizes,
+            seed=seed + 1009 * coupling_index,
+            config=sweep_config,
+            warm_start_state=warm_start_state,
+            progress_mode=progress_mode,
+        )
+        summary = summarize_unified_phase3_temperature_scan_point(mass_coupling, sweep)
+        scan_points.append(
+            UnifiedPhase3CouplingScanPoint(
+                mass_coupling=mass_coupling,
+                mean_area_law_slope=summary.mean_area_law_slope,
+                mean_area_law_r2=summary.mean_area_law_r2,
+                mean_mass_area_law_slope=summary.mean_mass_area_law_slope,
+                mean_mass_area_law_r2=summary.mean_mass_area_law_r2,
+                mean_bulk_area_law_slope=summary.mean_bulk_area_law_slope,
+                mean_bulk_area_law_r2=summary.mean_bulk_area_law_r2,
+                mean_mean_distance=summary.mean_mean_distance,
+                mean_distance_trend_slope=summary.mean_distance_trend_slope,
+                mean_abs_sector_correlation=summary.mean_abs_sector_correlation,
+                cofreezing_score=summary.cofreezing_score,
+                regime=summary.regime,
+                sweep=sweep,
+            )
+        )
+    cofreezing_mass_coupling = next((point.mass_coupling for point in scan_points if point.regime == "co-frozen"), None)
+    return UnifiedPhase3CouplingScanResult(
+        mode="unified-phase3-coupling-scan",
+        graph_prior=config.graph_prior,
+        degree=config.degree,
+        temperature=config.temperature,
+        anneal_start_temperature=config.anneal_start_temperature,
+        burn_in_sweeps=config.burn_in_sweeps,
+        measurement_sweeps=config.measurement_sweeps,
+        sample_interval=config.sample_interval,
+        edge_swap_attempts_per_sweep=config.edge_swap_attempts_per_sweep,
+        link_updates_per_sweep=config.link_updates_per_sweep,
+        radius_count=config.radius_count,
+        mass_nodes=config.mass_nodes,
+        mass_degree=config.mass_degree,
+        mass_couplings=tuple(float(value) for value in couplings),
+        beta3=config.beta3,
+        beta2=config.beta2,
+        beta1=config.beta1,
+        cofreezing_mass_coupling=cofreezing_mass_coupling,
+        points=scan_points,
+    )
+
+
 def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
     lines = [
         "Unified Gauge Phase 3 Report",
@@ -1094,7 +1419,7 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
         f"mass coupling lambda: {result.mass_coupling:.3f}",
         f"global collapse fit S(A): slope={result.collapse_area_law.slope:.6f} intercept={result.collapse_area_law.intercept:.6f} R^2={result.collapse_area_law.r2:.5f}",
         f"global distance trend: slope={result.global_distance_trend.slope:.6f} intercept={result.global_distance_trend.intercept:.6f} R^2={result.global_distance_trend.r2:.5f}",
-        "sites | seed | d_init | d_final | d_mean | E3 | E2 | E1 | Etot | S(A) R^2",
+        "sites | seed | d_init | d_final | d_mean | E3 | E2 | E1 | Etot | S(A) R^2 | mass R^2 | bulk R^2",
     ]
     for point in result.points:
         initial_distance = str(point.initial_distance) if point.initial_distance is not None else "disc"
@@ -1102,11 +1427,11 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
         mean_distance = f"{point.mean_distance:.3f}" if point.mean_distance is not None else "n/a"
         lines.append(
             f"{point.sites:5d} | {point.seed:4d} | {initial_distance:6s} | {final_distance:7s} | {mean_distance:6s} | "
-            f"{point.mean_su3_energy:5.2f} | {point.mean_su2_energy:5.2f} | {point.mean_u1_energy:5.2f} | {point.mean_total_energy:6.2f} | {point.area_law.r2:8.3f}"
+            f"{point.mean_su3_energy:5.2f} | {point.mean_su2_energy:5.2f} | {point.mean_u1_energy:5.2f} | {point.mean_total_energy:6.2f} | {point.area_law.r2:8.3f} | {point.mass_area_law.r2:8.3f} | {point.bulk_area_law.r2:8.3f}"
         )
         lines.append(
             f"      plaquettes={point.plaquette_count} samples={point.samples_collected} bare_std={point.bare_energy_std:.4f} total_std={point.total_energy_std:.4f} "
-            f"area_slope={point.area_law.slope:.6f} volume_R2={point.volume_law.r2:.3f} distance_slope={point.distance_trend.slope:.6f}"
+            f"area_slope={point.area_law.slope:.6f} mass_slope={point.mass_area_law.slope:.6f} bulk_slope={point.bulk_area_law.slope:.6f} volume_R2={point.volume_law.r2:.3f} distance_slope={point.distance_trend.slope:.6f}"
         )
         lines.append(
             f"      cross-corr sector: corr(E3,E2)={point.su3_su2_correlation:.3f} corr(E3,E1)={point.su3_u1_correlation:.3f} corr(E2,E1)={point.su2_u1_correlation:.3f}"
@@ -1114,12 +1439,34 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
         lines.append(
             f"      cross-corr distance: corr(d,E3)={point.distance_su3_correlation:.3f} corr(d,E2)={point.distance_su2_correlation:.3f} corr(d,E1)={point.distance_u1_correlation:.3f}"
         )
+        graph_attempted = point.mcmc_kinetics.graph_moves.attempted
+        graph_accepted = point.mcmc_kinetics.graph_moves.accepted
+        field_attempted = point.mcmc_kinetics.field_moves.attempted
+        field_accepted = point.mcmc_kinetics.field_moves.accepted
+        graph_acceptance = graph_accepted / graph_attempted if graph_attempted else 0.0
+        field_acceptance = field_accepted / field_attempted if field_attempted else 0.0
+        lines.append(
+            f"      mcmc kinetics: graph acc={graph_accepted}/{graph_attempted} ({graph_acceptance:.3f}) uphill={point.mcmc_kinetics.graph_moves.uphill_accepted} | "
+            f"field acc={field_accepted}/{field_attempted} ({field_acceptance:.3f}) uphill={point.mcmc_kinetics.field_moves.uphill_accepted}"
+        )
         if point.measurements:
             observer_profile = ", ".join(
                 f"r={entry.radius}: A={entry.area:.1f}, V={entry.volume:.1f}, S={entry.entropy:.4f}"
                 for entry in point.measurements
             )
             lines.append(f"      blind observer: {observer_profile}")
+        if point.mass_measurements:
+            mass_profile = ", ".join(
+                f"r={entry.radius}: A={entry.area:.1f}, V={entry.volume:.1f}, S={entry.entropy:.4f}"
+                for entry in point.mass_measurements
+            )
+            lines.append(f"      mass observer: {mass_profile}")
+        if point.bulk_measurements:
+            bulk_profile = ", ".join(
+                f"r={entry.radius}: A={entry.area:.1f}, V={entry.volume:.1f}, S={entry.entropy:.4f}"
+                for entry in point.bulk_measurements
+            )
+            lines.append(f"      bulk observer: {bulk_profile}")
         if point.samples:
             tracker = ", ".join(
                 f"s={sample.sweep}: d={sample.graph_distance if sample.graph_distance is not None else 'disc'} E=({sample.su3_energy:.2f},{sample.su2_energy:.2f},{sample.u1_energy:.2f}) Etot={sample.total_energy:.2f}"
@@ -1148,16 +1495,52 @@ def render_unified_phase3_temperature_scan_report(result: UnifiedPhase3Temperatu
         f"betas: SU(3)={result.beta3:.3f}, SU(2)={result.beta2:.3f}, U(1)={result.beta1:.3f}",
         f"mass coupling lambda: {result.mass_coupling:.3f}",
         onset_line,
-        "temp | area slope | area R^2 | |corr| mean | d trend | score | regime",
+        "temp | area R^2 | mass R^2 | bulk R^2 | |corr| mean | d trend | score | regime",
     ]
     for scan_point in result.points:
         lines.append(
-            f"{scan_point.temperature:4.4f} | {scan_point.mean_area_law_slope:10.6f} | {scan_point.mean_area_law_r2:8.3f} | "
+            f"{scan_point.temperature:4.4f} | {scan_point.mean_area_law_r2:8.3f} | {scan_point.mean_mass_area_law_r2:8.3f} | {scan_point.mean_bulk_area_law_r2:8.3f} | "
             f"{scan_point.mean_abs_sector_correlation:11.3f} | {scan_point.mean_distance_trend_slope:7.4f} | {scan_point.cofreezing_score:5.3f} | {scan_point.regime}"
         )
         for point in scan_point.sweep.points:
             lines.append(
-                f"      N={point.sites} area_R2={point.area_law.r2:.3f} area_slope={point.area_law.slope:.6f} "
+                f"      N={point.sites} area_R2={point.area_law.r2:.3f} mass_R2={point.mass_area_law.r2:.3f} bulk_R2={point.bulk_area_law.r2:.3f} "
+                f"slopes=({point.area_law.slope:.6f},{point.mass_area_law.slope:.6f},{point.bulk_area_law.slope:.6f}) "
+                f"d_mean={point.mean_distance if point.mean_distance is not None else 'n/a'} corr=({point.su3_su2_correlation:.3f},{point.su3_u1_correlation:.3f},{point.su2_u1_correlation:.3f}) Etot={point.mean_total_energy:.3f}"
+            )
+    return "\n".join(lines)
+
+
+def render_unified_phase3_coupling_scan_report(result: UnifiedPhase3CouplingScanResult) -> str:
+    onset_line = (
+        f"co-freezing lambda: {result.cofreezing_mass_coupling:.4f}"
+        if result.cofreezing_mass_coupling is not None
+        else "co-freezing lambda: none found"
+    )
+    lines = [
+        "Unified Gauge Phase 3 Coupling Scan",
+        "=" * 35,
+        f"graph prior: {result.graph_prior}",
+        f"degree: {result.degree}",
+        f"temperature: {result.temperature:.4f}",
+        f"mass nodes: {result.mass_nodes[0]}, {result.mass_nodes[1]}",
+        f"mass degree target: {result.mass_degree}",
+        f"anneal start temperature: {result.anneal_start_temperature:.4f}" if result.anneal_start_temperature is not None else "anneal start temperature: off",
+        f"mass couplings: {', '.join(f'{mass_coupling:.4f}' for mass_coupling in result.mass_couplings)}",
+        f"sweeps: burn-in {result.burn_in_sweeps}, measurement {result.measurement_sweeps}, sample interval {result.sample_interval}",
+        f"betas: SU(3)={result.beta3:.3f}, SU(2)={result.beta2:.3f}, U(1)={result.beta1:.3f}",
+        onset_line,
+        "lambda | area R^2 | mass R^2 | bulk R^2 | |corr| mean | d trend | score | regime",
+    ]
+    for scan_point in result.points:
+        lines.append(
+            f"{scan_point.mass_coupling:6.4f} | {scan_point.mean_area_law_r2:8.3f} | {scan_point.mean_mass_area_law_r2:8.3f} | {scan_point.mean_bulk_area_law_r2:8.3f} | "
+            f"{scan_point.mean_abs_sector_correlation:11.3f} | {scan_point.mean_distance_trend_slope:7.4f} | {scan_point.cofreezing_score:5.3f} | {scan_point.regime}"
+        )
+        for point in scan_point.sweep.points:
+            lines.append(
+                f"      N={point.sites} area_R2={point.area_law.r2:.3f} mass_R2={point.mass_area_law.r2:.3f} bulk_R2={point.bulk_area_law.r2:.3f} "
+                f"slopes=({point.area_law.slope:.6f},{point.mass_area_law.slope:.6f},{point.bulk_area_law.slope:.6f}) "
                 f"d_mean={point.mean_distance if point.mean_distance is not None else 'n/a'} corr=({point.su3_su2_correlation:.3f},{point.su3_u1_correlation:.3f},{point.su2_u1_correlation:.3f}) Etot={point.mean_total_energy:.3f}"
             )
     return "\n".join(lines)
@@ -1168,6 +1551,10 @@ def write_unified_phase3_json(path: Path, result: UnifiedPhase3SweepResult) -> N
 
 
 def write_unified_phase3_temperature_scan_json(path: Path, result: UnifiedPhase3TemperatureScanResult) -> None:
+    path.write_text(result.to_json(), encoding="utf-8")
+
+
+def write_unified_phase3_coupling_scan_json(path: Path, result: UnifiedPhase3CouplingScanResult) -> None:
     path.write_text(result.to_json(), encoding="utf-8")
 
 
@@ -1262,6 +1649,55 @@ def save_unified_phase3_temperature_scan_visualizations(
     axis.set_xlabel("Temperature")
     axis.set_ylabel("Correlation / drift")
     axis.set_title("Phase 3 Sector Locking and Distance Stability")
+    axis.grid(True, alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    corr_path = output_dir / f"{prefix}_correlation.png"
+    figure.savefig(corr_path, dpi=180)
+    plt.close(figure)
+    paths.append(corr_path)
+    return paths
+
+
+def save_unified_phase3_coupling_scan_visualizations(
+    result: UnifiedPhase3CouplingScanResult,
+    output_dir: Path,
+    prefix: str = "unified_phase3_lambda_scan",
+) -> list[Path]:
+    plt = importlib.import_module("matplotlib.pyplot")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+
+    couplings = np.asarray([point.mass_coupling for point in result.points], dtype=float)
+
+    figure, axis = plt.subplots(figsize=(7.4, 5.0))
+    area_r2 = np.asarray([point.mean_area_law_r2 for point in result.points], dtype=float)
+    score = np.asarray([point.cofreezing_score for point in result.points], dtype=float)
+    axis.plot(couplings, area_r2, "o-", color="#0a9396", linewidth=2.0, label="mean area-law R^2")
+    axis.plot(couplings, score, "s--", color="#bb3e03", linewidth=2.0, label="co-freezing score")
+    if result.cofreezing_mass_coupling is not None:
+        axis.axvline(result.cofreezing_mass_coupling, color="#001219", linestyle=":", linewidth=1.8, label="co-freezing onset")
+    axis.set_xlabel("Mass coupling lambda")
+    axis.set_ylabel("Order metric")
+    axis.set_title("Phase 3 Lambda Sweep")
+    axis.grid(True, alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    score_path = output_dir / f"{prefix}_score.png"
+    figure.savefig(score_path, dpi=180)
+    plt.close(figure)
+    paths.append(score_path)
+
+    figure, axis = plt.subplots(figsize=(7.4, 5.0))
+    sector_corr = np.asarray([point.mean_abs_sector_correlation for point in result.points], dtype=float)
+    distance_slope = np.asarray([point.mean_distance_trend_slope for point in result.points], dtype=float)
+    axis.plot(couplings, sector_corr, "o-", color="#005f73", linewidth=2.0, label="mean |sector corr|")
+    axis.plot(couplings, distance_slope, "d--", color="#ca6702", linewidth=2.0, label="mean d trend slope")
+    if result.cofreezing_mass_coupling is not None:
+        axis.axvline(result.cofreezing_mass_coupling, color="#001219", linestyle=":", linewidth=1.8, label="co-freezing onset")
+    axis.set_xlabel("Mass coupling lambda")
+    axis.set_ylabel("Correlation / drift")
+    axis.set_title("Phase 3 Lambda Locking and Distance Stability")
     axis.grid(True, alpha=0.25)
     axis.legend()
     figure.tight_layout()
