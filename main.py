@@ -134,12 +134,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vacuum-link-update-step", type=float, default=0.18, help="Bare-action Phase 1 only: Gaussian step size for SU(3) diagonal phase proposals.")
     parser.add_argument("--vacuum-radius-count", type=int, default=6, help="Phase 1 / Unified Phase 3: number of blind-observer radii to probe from the graph center.")
     parser.add_argument("--gravity-mass-nodes", type=str, default="0,1", help="Gravity Phase 2 only: comma-separated node ids used as the two static heavy masses.")
-    parser.add_argument("--gravity-mass-degree", type=int, default=24, help="Gravity Phase 2 only: target degree imposed on each static heavy mass.")
+    parser.add_argument(
+        "--gravity-mass-degree",
+        "--mass-degree-target",
+        dest="gravity_mass_degree",
+        type=int,
+        default=24,
+        help="Gravity Phase 2 / Unified Phase 3: target degree imposed on each static heavy mass.",
+    )
     parser.add_argument("--lambda-coupling", type=float, default=0.5, help="Gravity Phase 2 / Unified Phase 3: quadratic mass-term coupling lambda for deviations from the target mass degree.")
     parser.add_argument("--gravity-potential-distances", type=str, default="", help="Gravity Phase 2 only: optional comma-separated fixed graph distances for a Mass-Distance Potential scan, for example 1,2,3,4.")
     parser.add_argument("--phase3-beta3", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_3 for the SU(3) triangle action.")
     parser.add_argument("--phase3-beta2", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_2 for the SU(2) triangle action.")
     parser.add_argument("--phase3-beta1", type=float, default=1.0, help="Unified Phase 3 only: coupling weight beta_1 for the U(1) triangle action.")
+    parser.add_argument("--phase3-enable-matter", action="store_true", help="Unified Phase 3 only: enable a charged scalar matter field living on nodes and coupled to the U(1) links.")
+    parser.add_argument("--phase3-matter-mass-sq", type=float, default=0.1, help="Unified Phase 3 only: bare scalar mass-squared parameter m^2. Negative values are allowed for future symmetry-breaking studies.")
+    parser.add_argument("--phase3-matter-lambda", type=float, default=1.0, help="Unified Phase 3 only: scalar self-coupling lambda_phi. Must be non-negative.")
+    parser.add_argument("--phase3-matter-kappa", type=float, default=0.1, help="Unified Phase 3 only: scalar hopping strength kappa for minimal coupling to the U(1) link field.")
+    parser.add_argument("--phase3-matter-step", type=float, default=0.25, help="Unified Phase 3 only: proposal radius for uniform complex Metropolis updates of the scalar node field.")
     parser.add_argument("--warm-start", type=Path, default=None, help="Unified Phase 3 only: resume from a serialized final state saved in a prior unified Phase 3 JSON output, including a single-temperature scan payload.")
     parser.add_argument("--phase3-su2-update-step", type=float, default=0.18, help="Unified Phase 3 only: Gaussian step size for diagonal SU(2) proposals.")
     parser.add_argument("--phase3-u1-update-step", type=float, default=0.18, help="Unified Phase 3 only: Gaussian step size for U(1) hypercharge phase proposals.")
@@ -463,6 +475,12 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
     lambda_scan = parse_lambda_scan(args.lambda_scan)
     if temperature_scan and lambda_scan:
         raise ValueError("Use either --temperature-scan or --lambda-scan, not both in the same run")
+    if args.phase3_matter_lambda < 0.0:
+        raise ValueError("--phase3-matter-lambda must be non-negative")
+    if args.phase3_matter_kappa < 0.0:
+        raise ValueError("--phase3-matter-kappa must be non-negative")
+    if args.phase3_matter_step <= 0.0:
+        raise ValueError("--phase3-matter-step must be positive")
     phase3_temperature = 0.3 if isclose(args.temperature, 0.35, rel_tol=0.0, abs_tol=1e-12) else args.temperature
     phase3_anneal_start = 0.6 if args.anneal_start_temperature is None else args.anneal_start_temperature
     phase3_edge_relocations = (
@@ -490,6 +508,11 @@ def run_unified_phase3_mode(args: argparse.Namespace) -> None:
         beta3=args.phase3_beta3,
         beta2=args.phase3_beta2,
         beta1=args.phase3_beta1,
+        enable_matter=args.phase3_enable_matter,
+        matter_mass_sq=args.phase3_matter_mass_sq,
+        matter_lambda=args.phase3_matter_lambda,
+        matter_kappa=args.phase3_matter_kappa,
+        matter_update_step=args.phase3_matter_step,
     )
     warm_start_state = extract_warm_start_state(args.warm_start, target_sizes[0]) if args.warm_start is not None else None
     if temperature_scan:

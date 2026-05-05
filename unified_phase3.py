@@ -39,6 +39,11 @@ class UnifiedPhase3Config:
     beta3: float = 1.0
     beta2: float = 1.0
     beta1: float = 1.0
+    enable_matter: bool = False
+    matter_mass_sq: float = 0.1
+    matter_lambda: float = 1.0
+    matter_kappa: float = 0.1
+    matter_update_step: float = 0.25
 
 
 @dataclass
@@ -65,6 +70,8 @@ class UnifiedPhase3Sample:
     u1_energy: float
     bare_energy: float
     mass_penalty_energy: float
+    matter_energy: float
+    mean_matter_density: float
     total_energy: float
 
 
@@ -79,6 +86,7 @@ class MoveKinetics:
 class UnifiedPhase3Kinetics:
     graph_moves: MoveKinetics
     field_moves: MoveKinetics
+    matter_moves: MoveKinetics
 
 
 @dataclass
@@ -101,6 +109,8 @@ class UnifiedPhase3Point:
     mean_u1_energy: float
     mean_bare_energy: float
     bare_energy_std: float
+    mean_matter_energy: float
+    mean_matter_density: float
     mean_total_energy: float
     total_energy_std: float
     area_law: LinearLawFit
@@ -143,6 +153,11 @@ class UnifiedPhase3SweepResult:
     beta3: float
     beta2: float
     beta1: float
+    enable_matter: bool
+    matter_mass_sq: float
+    matter_lambda: float
+    matter_kappa: float
+    matter_update_step: float
     points: list[UnifiedPhase3Point]
     collapse_area_law: LinearLawFit
     global_distance_trend: LinearLawFit
@@ -167,6 +182,11 @@ class UnifiedPhase3SweepResult:
                 "beta3": self.beta3,
                 "beta2": self.beta2,
                 "beta1": self.beta1,
+                "enable_matter": self.enable_matter,
+                "matter_mass_sq": self.matter_mass_sq,
+                "matter_lambda": self.matter_lambda,
+                "matter_kappa": self.matter_kappa,
+                "matter_update_step": self.matter_update_step,
                 "collapse_area_law": asdict(self.collapse_area_law),
                 "global_distance_trend": asdict(self.global_distance_trend),
                 "points": [
@@ -221,6 +241,11 @@ class UnifiedPhase3TemperatureScanResult:
     beta3: float
     beta2: float
     beta1: float
+    enable_matter: bool
+    matter_mass_sq: float
+    matter_lambda: float
+    matter_kappa: float
+    matter_update_step: float
     temperatures: tuple[float, ...]
     cofreezing_temperature: float | None
     points: list[UnifiedPhase3TemperatureScanPoint]
@@ -244,6 +269,11 @@ class UnifiedPhase3TemperatureScanResult:
                 "beta3": self.beta3,
                 "beta2": self.beta2,
                 "beta1": self.beta1,
+                "enable_matter": self.enable_matter,
+                "matter_mass_sq": self.matter_mass_sq,
+                "matter_lambda": self.matter_lambda,
+                "matter_kappa": self.matter_kappa,
+                "matter_update_step": self.matter_update_step,
                 "temperatures": list(self.temperatures),
                 "cofreezing_temperature": self.cofreezing_temperature,
                 "points": [
@@ -305,6 +335,11 @@ class UnifiedPhase3CouplingScanResult:
     beta3: float
     beta2: float
     beta1: float
+    enable_matter: bool
+    matter_mass_sq: float
+    matter_lambda: float
+    matter_kappa: float
+    matter_update_step: float
     cofreezing_mass_coupling: float | None
     points: list[UnifiedPhase3CouplingScanPoint]
 
@@ -328,6 +363,11 @@ class UnifiedPhase3CouplingScanResult:
                 "beta3": self.beta3,
                 "beta2": self.beta2,
                 "beta1": self.beta1,
+                "enable_matter": self.enable_matter,
+                "matter_mass_sq": self.matter_mass_sq,
+                "matter_lambda": self.matter_lambda,
+                "matter_kappa": self.matter_kappa,
+                "matter_update_step": self.matter_update_step,
                 "cofreezing_mass_coupling": self.cofreezing_mass_coupling,
                 "points": [
                     {
@@ -404,6 +444,28 @@ def copy_edge_states(edge_states: dict[tuple[int, int], GaugeState]) -> dict[tup
     return {key: state.copy() for key, state in edge_states.items()}
 
 
+def serialize_complex_field(values: np.ndarray | None) -> list[list[float]] | None:
+    if values is None:
+        return None
+    array = np.asarray(values, dtype=np.complex128)
+    return [[float(np.real(value)), float(np.imag(value))] for value in array.tolist()]
+
+
+def deserialize_complex_field(payload: object, expected_sites: int) -> np.ndarray | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, list):
+        raise ValueError("serialized matter field must be a list of [real, imag] pairs")
+    values = np.zeros(expected_sites, dtype=np.complex128)
+    if len(payload) != expected_sites:
+        raise ValueError(f"serialized matter field length {len(payload)} does not match N={expected_sites}")
+    for index, item in enumerate(payload):
+        if not isinstance(item, list) or len(item) != 2:
+            raise ValueError("serialized matter field entries must be [real, imag] pairs")
+        values[index] = complex(float(item[0]), float(item[1]))
+    return values
+
+
 def print_mass_horizon(adjacency: np.ndarray, mass_nodes: list[int] | tuple[int, ...]) -> None:
     from collections import deque
 
@@ -436,7 +498,7 @@ def print_mass_horizon(adjacency: np.ndarray, mass_nodes: list[int] | tuple[int,
     print("======================================\n")
 
 
-def extract_warm_start_state(path: Path, expected_sites: int) -> tuple[np.ndarray, dict[tuple[int, int], GaugeState]]:
+def extract_warm_start_state(path: Path, expected_sites: int) -> tuple[np.ndarray, dict[tuple[int, int], GaugeState], np.ndarray | None]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     candidate_points: list[dict[str, object]] = []
     if payload.get("mode") == "unified-phase3":
@@ -461,11 +523,12 @@ def extract_warm_start_state(path: Path, expected_sites: int) -> tuple[np.ndarra
     if not isinstance(edge_payload, list) or not edge_payload:
         raise ValueError("warm-start final_state is missing serialized edges")
     edge_states = deserialize_edge_states(edge_payload)
+    matter_phi = deserialize_complex_field(final_state.get("matter_phi"), expected_sites)
     adjacency = np.zeros((expected_sites, expected_sites), dtype=bool)
     for src, dst in edge_states:
         adjacency[src, dst] = True
         adjacency[dst, src] = True
-    return adjacency, edge_states
+    return adjacency, edge_states, matter_phi
 
 
 def classify_unified_phase3_temperature_regime(
@@ -545,7 +608,7 @@ class UnifiedGaugePhase3Experiment:
         sites: int,
         seed: int,
         config: UnifiedPhase3Config,
-        warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
+        warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState], np.ndarray | None] | None = None,
         progress_mode: str = "bar",
     ) -> None:
         if sites < 16:
@@ -561,7 +624,17 @@ class UnifiedGaugePhase3Experiment:
         self.rng = np.random.default_rng(seed)
         self.warm_start_state = warm_start_state
         self.progress_reporter = create_progress_reporter(progress_mode, prefix=f"phase3 N={sites}")
-        self.kinetics = UnifiedPhase3Kinetics(graph_moves=MoveKinetics(), field_moves=MoveKinetics())
+        self.kinetics = UnifiedPhase3Kinetics(graph_moves=MoveKinetics(), field_moves=MoveKinetics(), matter_moves=MoveKinetics())
+        warm_start_matter = None if warm_start_state is None else warm_start_state[2]
+        if self.config.enable_matter:
+            if warm_start_matter is not None:
+                self.matter_phi = np.asarray(warm_start_matter, dtype=np.complex128).copy()
+            else:
+                real_noise = self.rng.normal(0.0, 0.1, self.sites)
+                imag_noise = self.rng.normal(0.0, 0.1, self.sites)
+                self.matter_phi = (real_noise + 1.0j * imag_noise).astype(np.complex128)
+        else:
+            self.matter_phi = None
 
     def run(self) -> UnifiedPhase3Point:
         if self.warm_start_state is None:
@@ -595,6 +668,7 @@ class UnifiedGaugePhase3Experiment:
                 anneal_start_temperature=self.config.anneal_start_temperature,
             )
             self._run_link_updates(adjacency, edge_states, sweep_temperature)
+            self._run_matter_sweeps(adjacency, edge_states, sweep_temperature)
             edge_i, edge_j = self._run_edge_relocations(adjacency, edge_i, edge_j, edge_states, sweep_temperature)
             self.progress_reporter.update(sweep + 1, total_sweeps, "unified gauge anneal")
             if sweep >= self.config.burn_in_sweeps and (sweep - self.config.burn_in_sweeps) % max(self.config.sample_interval, 1) == 0:
@@ -636,6 +710,8 @@ class UnifiedGaugePhase3Experiment:
             mean_u1_energy=float(np.mean(u1_energies)) if u1_energies else 0.0,
             mean_bare_energy=float(np.mean([sample.bare_energy for sample in samples])) if samples else 0.0,
             bare_energy_std=float(np.std([sample.bare_energy for sample in samples])) if samples else 0.0,
+            mean_matter_energy=float(np.mean([sample.matter_energy for sample in samples])) if samples else 0.0,
+            mean_matter_density=float(np.mean([sample.mean_matter_density for sample in samples])) if samples else 0.0,
             mean_total_energy=float(np.mean([sample.total_energy for sample in samples])) if samples else 0.0,
             total_energy_std=float(np.std([sample.total_energy for sample in samples])) if samples else 0.0,
             area_law=area_law,
@@ -666,8 +742,13 @@ class UnifiedGaugePhase3Experiment:
                     accepted=self.kinetics.field_moves.accepted,
                     uphill_accepted=self.kinetics.field_moves.uphill_accepted,
                 ),
+                matter_moves=MoveKinetics(
+                    attempted=self.kinetics.matter_moves.attempted,
+                    accepted=self.kinetics.matter_moves.accepted,
+                    uphill_accepted=self.kinetics.matter_moves.uphill_accepted,
+                ),
             ),
-            final_state={"edges": serialize_edge_states(edge_states)},
+            final_state={"edges": serialize_edge_states(edge_states), "matter_phi": serialize_complex_field(self.matter_phi)},
         )
 
     def _build_bare_graph(self) -> tuple[np.ndarray, np.ndarray]:
@@ -789,6 +870,85 @@ class UnifiedGaugePhase3Experiment:
         if key == (int(src), int(dst)):
             return state
         return GaugeState(su3=np.conjugate(state.su3), su2=np.conjugate(state.su2), u1=np.conjugate(state.u1))
+
+    def _get_u1_link_phase(self, src: int, dst: int, edge_states: dict[tuple[int, int], GaugeState]) -> complex:
+        return complex(self._edge_state(src, dst, edge_states).u1)
+
+    def _matter_edge_pair_energy(
+        self,
+        edge: tuple[int, int],
+        state: GaugeState,
+        matter_phi: np.ndarray | None = None,
+    ) -> float:
+        if not self.config.enable_matter or matter_phi is None:
+            return 0.0
+        src, dst = edge
+        return float(
+            -2.0
+            * self.config.matter_kappa
+            * np.real(np.conjugate(matter_phi[src]) * state.u1 * matter_phi[dst])
+        )
+
+    def _total_matter_energy(self, edge_states: dict[tuple[int, int], GaugeState]) -> float:
+        if not self.config.enable_matter or self.matter_phi is None:
+            return 0.0
+        onsite_density = np.abs(self.matter_phi) ** 2
+        onsite_energy = np.sum(
+            self.config.matter_mass_sq * onsite_density
+            + self.config.matter_lambda * (onsite_density ** 2)
+        )
+        hopping_energy = sum(
+            self._matter_edge_pair_energy(edge, state, self.matter_phi)
+            for edge, state in edge_states.items()
+        )
+        return float(onsite_energy + hopping_energy)
+
+    def _calc_local_matter_energy(
+        self,
+        adjacency: np.ndarray,
+        node_i: int,
+        phi_val: complex,
+        edge_states: dict[tuple[int, int], GaugeState],
+    ) -> float:
+        if not self.config.enable_matter or self.matter_phi is None:
+            return 0.0
+        mag_sq = float(np.abs(phi_val) ** 2)
+        local_energy = self.config.matter_mass_sq * mag_sq + self.config.matter_lambda * (mag_sq ** 2)
+        hopping_energy = 0.0
+        for neighbor in np.flatnonzero(adjacency[node_i]).tolist():
+            u_link = self._get_u1_link_phase(node_i, int(neighbor), edge_states)
+            hopping_energy -= 2.0 * self.config.matter_kappa * float(
+                np.real(np.conjugate(phi_val) * u_link * self.matter_phi[int(neighbor)])
+            )
+        return float(local_energy + hopping_energy)
+
+    def _run_matter_sweeps(
+        self,
+        adjacency: np.ndarray,
+        edge_states: dict[tuple[int, int], GaugeState],
+        sweep_temperature: float,
+    ) -> None:
+        if not self.config.enable_matter or self.matter_phi is None:
+            return
+        beta = 1.0 / max(sweep_temperature, 1e-9)
+        for _ in range(self.sites):
+            node_i = int(self.rng.integers(self.sites))
+            old_phi = complex(self.matter_phi[node_i])
+            delta = (
+                float(self.rng.uniform(-1.0, 1.0))
+                + 1.0j * float(self.rng.uniform(-1.0, 1.0))
+            ) * self.config.matter_update_step
+            new_phi = old_phi + delta
+            self.kinetics.matter_moves.attempted += 1
+            old_energy = self._calc_local_matter_energy(adjacency, node_i, old_phi, edge_states)
+            new_energy = self._calc_local_matter_energy(adjacency, node_i, new_phi, edge_states)
+            delta_energy = new_energy - old_energy
+            if delta_energy > 0.0 and self.rng.random() >= np.exp(-beta * delta_energy):
+                continue
+            self.matter_phi[node_i] = new_phi
+            self.kinetics.matter_moves.accepted += 1
+            if delta_energy > 0.0:
+                self.kinetics.matter_moves.uphill_accepted += 1
 
     def _triangle_sector_loops(
         self,
@@ -953,10 +1113,14 @@ class UnifiedGaugePhase3Experiment:
             adjacency[old_edge[1], old_edge[0]] = False
             adjacency[new_edge[0], new_edge[1]] = True
             adjacency[new_edge[1], new_edge[0]] = True
-            edge_states[new_edge] = self._random_edge_state()
+            proposed_state = self._random_edge_state()
+            edge_states[new_edge] = proposed_state
             after_triangles = self._triangles_touching_nodes(adjacency, touched_nodes)
             new_energy = sum(self._triangle_energy(triangle, edge_states) for triangle in after_triangles)
             new_energy += self._mass_penalty_energy(adjacency)
+            if self.config.enable_matter and self.matter_phi is not None:
+                old_energy += self._matter_edge_pair_energy(old_edge, previous_state, self.matter_phi)
+                new_energy += self._matter_edge_pair_energy(new_edge, proposed_state, self.matter_phi)
             delta_energy = new_energy - old_energy
             if delta_energy > 0.0 and self.rng.random() >= np.exp(-beta * delta_energy):
                 edge_states.pop(new_edge)
@@ -1191,6 +1355,8 @@ class UnifiedGaugePhase3Experiment:
             + self.config.beta1 * u1_energy
         )
         mass_penalty = self._mass_penalty_energy(adjacency)
+        matter_energy = self._total_matter_energy(edge_states)
+        mean_matter_density = float(np.mean(np.abs(self.matter_phi) ** 2)) if self.matter_phi is not None else 0.0
         return UnifiedPhase3Sample(
             sweep=sweep,
             temperature=float(sweep_temperature),
@@ -1204,7 +1370,9 @@ class UnifiedGaugePhase3Experiment:
             u1_energy=u1_energy,
             bare_energy=bare_energy,
             mass_penalty_energy=mass_penalty,
-            total_energy=bare_energy + mass_penalty,
+            matter_energy=matter_energy,
+            mean_matter_density=mean_matter_density,
+            total_energy=bare_energy + mass_penalty + matter_energy,
         )
 
 
@@ -1212,7 +1380,7 @@ def run_unified_phase3_sweep(
     sizes: list[int],
     seed: int,
     config: UnifiedPhase3Config,
-    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
+    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState], np.ndarray | None] | None = None,
     progress_mode: str = "bar",
 ) -> UnifiedPhase3SweepResult:
     points: list[UnifiedPhase3Point] = []
@@ -1253,6 +1421,11 @@ def run_unified_phase3_sweep(
         beta3=config.beta3,
         beta2=config.beta2,
         beta1=config.beta1,
+        enable_matter=config.enable_matter,
+        matter_mass_sq=config.matter_mass_sq,
+        matter_lambda=config.matter_lambda,
+        matter_kappa=config.matter_kappa,
+        matter_update_step=config.matter_update_step,
         points=points,
         collapse_area_law=collapse_area,
         global_distance_trend=global_distance_trend,
@@ -1264,7 +1437,7 @@ def run_unified_phase3_temperature_scan(
     sizes: list[int],
     seed: int,
     config: UnifiedPhase3Config,
-    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
+    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState], np.ndarray | None] | None = None,
     progress_mode: str = "bar",
 ) -> UnifiedPhase3TemperatureScanResult:
     scan_points: list[UnifiedPhase3TemperatureScanPoint] = []
@@ -1289,6 +1462,11 @@ def run_unified_phase3_temperature_scan(
             beta3=config.beta3,
             beta2=config.beta2,
             beta1=config.beta1,
+            enable_matter=config.enable_matter,
+            matter_mass_sq=config.matter_mass_sq,
+            matter_lambda=config.matter_lambda,
+            matter_kappa=config.matter_kappa,
+            matter_update_step=config.matter_update_step,
         )
         sweep = run_unified_phase3_sweep(
             sizes=sizes,
@@ -1316,6 +1494,11 @@ def run_unified_phase3_temperature_scan(
         beta3=config.beta3,
         beta2=config.beta2,
         beta1=config.beta1,
+        enable_matter=config.enable_matter,
+        matter_mass_sq=config.matter_mass_sq,
+        matter_lambda=config.matter_lambda,
+        matter_kappa=config.matter_kappa,
+        matter_update_step=config.matter_update_step,
         temperatures=tuple(float(value) for value in temperatures),
         cofreezing_temperature=cofreezing_temperature,
         points=scan_points,
@@ -1327,7 +1510,7 @@ def run_unified_phase3_coupling_scan(
     sizes: list[int],
     seed: int,
     config: UnifiedPhase3Config,
-    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState]] | None = None,
+    warm_start_state: tuple[np.ndarray, dict[tuple[int, int], GaugeState], np.ndarray | None] | None = None,
     progress_mode: str = "bar",
 ) -> UnifiedPhase3CouplingScanResult:
     scan_points: list[UnifiedPhase3CouplingScanPoint] = []
@@ -1352,6 +1535,11 @@ def run_unified_phase3_coupling_scan(
             beta3=config.beta3,
             beta2=config.beta2,
             beta1=config.beta1,
+            enable_matter=config.enable_matter,
+            matter_mass_sq=config.matter_mass_sq,
+            matter_lambda=config.matter_lambda,
+            matter_kappa=config.matter_kappa,
+            matter_update_step=config.matter_update_step,
         )
         sweep = run_unified_phase3_sweep(
             sizes=sizes,
@@ -1397,6 +1585,11 @@ def run_unified_phase3_coupling_scan(
         beta3=config.beta3,
         beta2=config.beta2,
         beta1=config.beta1,
+        enable_matter=config.enable_matter,
+        matter_mass_sq=config.matter_mass_sq,
+        matter_lambda=config.matter_lambda,
+        matter_kappa=config.matter_kappa,
+        matter_update_step=config.matter_update_step,
         cofreezing_mass_coupling=cofreezing_mass_coupling,
         points=scan_points,
     )
@@ -1417,9 +1610,13 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
         f"edge relocations/sweep: {result.edge_swap_attempts_per_sweep}",
         f"betas: SU(3)={result.beta3:.3f}, SU(2)={result.beta2:.3f}, U(1)={result.beta1:.3f}",
         f"mass coupling lambda: {result.mass_coupling:.3f}",
+        (
+            f"scalar matter: on (m^2={result.matter_mass_sq:.3f}, lambda_phi={result.matter_lambda:.3f}, "
+            f"kappa={result.matter_kappa:.3f}, step={result.matter_update_step:.3f})"
+        ) if result.enable_matter else "scalar matter: off",
         f"global collapse fit S(A): slope={result.collapse_area_law.slope:.6f} intercept={result.collapse_area_law.intercept:.6f} R^2={result.collapse_area_law.r2:.5f}",
         f"global distance trend: slope={result.global_distance_trend.slope:.6f} intercept={result.global_distance_trend.intercept:.6f} R^2={result.global_distance_trend.r2:.5f}",
-        "sites | seed | d_init | d_final | d_mean | E3 | E2 | E1 | Etot | S(A) R^2 | mass R^2 | bulk R^2",
+        "sites | seed | d_init | d_final | d_mean | E3 | E2 | E1 | Em | Etot | S(A) R^2 | mass R^2 | bulk R^2",
     ]
     for point in result.points:
         initial_distance = str(point.initial_distance) if point.initial_distance is not None else "disc"
@@ -1427,11 +1624,11 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
         mean_distance = f"{point.mean_distance:.3f}" if point.mean_distance is not None else "n/a"
         lines.append(
             f"{point.sites:5d} | {point.seed:4d} | {initial_distance:6s} | {final_distance:7s} | {mean_distance:6s} | "
-            f"{point.mean_su3_energy:5.2f} | {point.mean_su2_energy:5.2f} | {point.mean_u1_energy:5.2f} | {point.mean_total_energy:6.2f} | {point.area_law.r2:8.3f} | {point.mass_area_law.r2:8.3f} | {point.bulk_area_law.r2:8.3f}"
+            f"{point.mean_su3_energy:5.2f} | {point.mean_su2_energy:5.2f} | {point.mean_u1_energy:5.2f} | {point.mean_matter_energy:5.2f} | {point.mean_total_energy:6.2f} | {point.area_law.r2:8.3f} | {point.mass_area_law.r2:8.3f} | {point.bulk_area_law.r2:8.3f}"
         )
         lines.append(
             f"      plaquettes={point.plaquette_count} samples={point.samples_collected} bare_std={point.bare_energy_std:.4f} total_std={point.total_energy_std:.4f} "
-            f"area_slope={point.area_law.slope:.6f} mass_slope={point.mass_area_law.slope:.6f} bulk_slope={point.bulk_area_law.slope:.6f} volume_R2={point.volume_law.r2:.3f} distance_slope={point.distance_trend.slope:.6f}"
+            f"area_slope={point.area_law.slope:.6f} mass_slope={point.mass_area_law.slope:.6f} bulk_slope={point.bulk_area_law.slope:.6f} volume_R2={point.volume_law.r2:.3f} distance_slope={point.distance_trend.slope:.6f} <|phi|^2>={point.mean_matter_density:.6f}"
         )
         lines.append(
             f"      cross-corr sector: corr(E3,E2)={point.su3_su2_correlation:.3f} corr(E3,E1)={point.su3_u1_correlation:.3f} corr(E2,E1)={point.su2_u1_correlation:.3f}"
@@ -1445,9 +1642,13 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
         field_accepted = point.mcmc_kinetics.field_moves.accepted
         graph_acceptance = graph_accepted / graph_attempted if graph_attempted else 0.0
         field_acceptance = field_accepted / field_attempted if field_attempted else 0.0
+        matter_attempted = point.mcmc_kinetics.matter_moves.attempted
+        matter_accepted = point.mcmc_kinetics.matter_moves.accepted
+        matter_acceptance = matter_accepted / matter_attempted if matter_attempted else 0.0
         lines.append(
             f"      mcmc kinetics: graph acc={graph_accepted}/{graph_attempted} ({graph_acceptance:.3f}) uphill={point.mcmc_kinetics.graph_moves.uphill_accepted} | "
-            f"field acc={field_accepted}/{field_attempted} ({field_acceptance:.3f}) uphill={point.mcmc_kinetics.field_moves.uphill_accepted}"
+            f"field acc={field_accepted}/{field_attempted} ({field_acceptance:.3f}) uphill={point.mcmc_kinetics.field_moves.uphill_accepted} | "
+            f"matter acc={matter_accepted}/{matter_attempted} ({matter_acceptance:.3f}) uphill={point.mcmc_kinetics.matter_moves.uphill_accepted}"
         )
         if point.measurements:
             observer_profile = ", ".join(
@@ -1469,7 +1670,7 @@ def render_unified_phase3_report(result: UnifiedPhase3SweepResult) -> str:
             lines.append(f"      bulk observer: {bulk_profile}")
         if point.samples:
             tracker = ", ".join(
-                f"s={sample.sweep}: d={sample.graph_distance if sample.graph_distance is not None else 'disc'} E=({sample.su3_energy:.2f},{sample.su2_energy:.2f},{sample.u1_energy:.2f}) Etot={sample.total_energy:.2f}"
+                f"s={sample.sweep}: d={sample.graph_distance if sample.graph_distance is not None else 'disc'} E=({sample.su3_energy:.2f},{sample.su2_energy:.2f},{sample.u1_energy:.2f},{sample.matter_energy:.2f}) rho={sample.mean_matter_density:.4f} Etot={sample.total_energy:.2f}"
                 for sample in point.samples
             )
             lines.append(f"      tracker: {tracker}")
