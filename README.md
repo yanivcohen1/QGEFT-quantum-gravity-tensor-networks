@@ -271,6 +271,41 @@ This figure is the cleanest single visual summary of the stable matter branch. T
 
 The corresponding cosmic-web visualization now scales node size and color directly with `|\phi_i|^2`, so the saved `*_cosmic_web.png` output makes the same conclusion visible by eye: bright dense nodes form along a connected manifold while darker low-density regions remain as finite-size voids. The current code therefore supports a stronger and more concrete `Goldilocks-zone` claim than before: a symmetry-breaking charged scalar can condense on the annealed graph, backreact on relocation costs, and generate a finite-size structured matter pattern without geometrically collapsing the background. What it does not yet support is the stronger statement that the condensate has already been shown to generate a physical mass spectrum or a continuum gravitational field.
 
+### 4.6 Topological Stress and Gravitational-Wave Proxy
+There is now also a dedicated `topological-gw` branch implemented in [topological_gw.py](topological_gw.py). This mode studies a simpler symmetry-breaking problem than the unified matter runs: a complex scalar order parameter lives on the nodes of an annealed sparse graph, the quadratic term changes sign as the temperature cools through a user-specified critical scale `T_c`, and graph triangles are used to count phase windings that act as topological defect proxies. The code records three directly measured internal observables:
+
+- an inverse-sweep peak frequency `f_peak^sim` extracted from the FFT of the stress history,
+- an integrated stress-power proxy `\Pi_sim`,
+- the time history of defect density, coherence, and mean amplitude during cooling.
+
+The narrow claim is deliberately limited. These are simulation-side diagnostics of defect-driven graph stress during annealing. They are not yet physical predictions for a stochastic gravitational-wave background in absolute units. In particular, `f_peak^sim` is measured in `1 / sweep`, not in source-frame seconds, and `\Pi_sim` is not yet a calibrated radiation energy fraction.
+
+To make that boundary explicit, the topological-GW CLI now supports an optional calibration layer. When `--topo-enable-calibration` is **not** used, the output remains purely internal. When it **is** used, the code evaluates a transparent post-processing map
+
+$$
+f_0 = \mathcal{C}_f\, f_{\mathrm{peak}}^{\mathrm{sim}}, \qquad
+\Omega_{\mathrm{GW}} h^2 = \mathcal{C}_{\Omega}\, \Pi_{\mathrm{sim}},
+$$
+
+where the coefficients are not hidden in the code: they are fully specified by CLI flags such as `--topo-transition-temperature-gev`, `--topo-beta-over-hstar`, `--topo-sim-to-source-frequency`, and `--topo-stress-to-energy-fraction`. This does **not** mean the calibrated values are unique predictions of the QGEFT surrogate. It means the repository can now generate phenomenological estimates under a clearly declared assumption set, suitable for appendices or sensitivity studies.
+
+For example, an explicit calibrated run now looks like
+
+```powershell
+python main.py --mode topological-gw --sites 1024 --seed 7 --temperature 0.12 --anneal-start-temperature 0.9 --topo-critical-temperature 0.55 --burn-in-sweeps 100 --measurement-sweeps 20 --sample-interval 2 --topo-field-updates-per-sweep 1024 --edge-swap-attempts-per-sweep 256 --topo-enable-calibration --topo-transition-temperature-gev 100 --topo-beta-over-hstar 100 --topo-sim-to-source-frequency 1.0 --topo-stress-to-energy-fraction 1.0 --json-out topo_1024_t03_calibrated.json
+```
+
+For that `N = 1024` reference run, the repository now records
+
+- $f_{\mathrm{peak}}^{\mathrm{sim}} \approx 8.20 \times 10^{-3}\,{\rm sweep}^{-1}$
+- $\Pi_{\mathrm{sim}} \approx 1.138377 \times 10^{-7}$
+- calibrated $f_0 \approx 1.352459 \times 10^{-5}\,{\rm Hz}$
+- calibrated $\Omega_{\mathrm{GW}} h^2 \approx 4.553507 \times 10^{-12}$
+
+under the explicit assumption set `T_* = 100 GeV`, `beta/H_* = 100`, `sim->source frequency = 1`, and `stress transfer = 1`. The same run still reports `transition temperature = none`, so these values should be cited as calibrated phenomenological proxies rather than as a parameter-free cosmological prediction.
+
+The correct interpretation is again narrow: calibrated outputs from this mode should be read as scenario-dependent phenomenology, not as parameter-free predictions. In manuscript form, the safest summary is: while the topological-GW branch of QGEFT produces a measurable stress spectrum during symmetry-breaking anneals, its current outputs should still be read as simulation-side proxies rather than as parameter-free cosmological predictions. In the largest calibrated run currently available (`N = 1024`, `T = 0.12`, `T_c = 0.55`), the surrogate yields a simulation-side peak frequency $f_{\mathrm{peak}}^{\mathrm{sim}} \approx 8.20 \times 10^{-3}\,{\rm sweep}^{-1}$ together with an integrated stress proxy $\Pi_{\mathrm{sim}} \approx 1.138377 \times 10^{-7}$. Under the explicit assumption set $T_* = 100\,{\rm GeV}$, $\beta/H_* = 100$, unit simulation-to-source frequency transfer, and unit stress-to-energy transfer, these map to $f_0 \approx 1.352459 \times 10^{-5}\,{\rm Hz}$ and $\Omega_{\mathrm{GW}} h^2 \approx 4.553507 \times 10^{-12}$. The same run still reports `transition temperature = none`, so these values should be cited as transparent, scenario-dependent translations of a defect-driven internal stress signal rather than as unique predictions of the microscopic model. A fuller paper-ready narrative for this branch is collected in [TOPOLOGICAL_GW_REPORT.md](TOPOLOGICAL_GW_REPORT.md).
+
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. The current codebase is stronger than the earliest version because it now includes graph-prior comparisons, null-model baselines, alternative distance prescriptions, and topology-only diagnostics. Even so, those additions do not eliminate the basic interpretive risks; they only sharpen where the remaining weak points are. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
 

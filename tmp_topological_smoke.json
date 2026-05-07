@@ -1,0 +1,187 @@
+{
+  "mode": "topological-gw",
+  "graph_prior": "3d-local",
+  "degree": 4,
+  "temperature": 0.35,
+  "anneal_start_temperature": 1.1,
+  "critical_temperature": 0.6,
+  "burn_in_sweeps": 4,
+  "measurement_sweeps": 4,
+  "sample_interval": 1,
+  "edge_swap_attempts_per_sweep": 128,
+  "field_updates_per_sweep": 256,
+  "amplitude_step": 0.18,
+  "phase_step": 0.35,
+  "gradient_coupling": 1.0,
+  "symmetry_scale": 1.0,
+  "self_coupling": 1.0,
+  "defect_amplitude_floor": 0.15,
+  "calibration": null,
+  "points": [
+    {
+      "sites": 32,
+      "seed": 7,
+      "graph_prior": "3d-local",
+      "degree": 4,
+      "edge_count": 72,
+      "plaquette_count": 16,
+      "samples_collected": 9,
+      "transition_sweep": null,
+      "transition_temperature": null,
+      "final_mean_amplitude": 0.1806657391558914,
+      "final_coherence": 0.19200296290610613,
+      "final_defect_density": 0.0,
+      "peak_defect_density": 0.25,
+      "integrated_stress_power": 6.730495862311418e-07,
+      "peak_frequency": 0.2222222222222222,
+      "peak_spectral_power": 2.0191487708578178e-06,
+      "calibrated_prediction": null,
+      "samples": [
+        {
+          "sweep": 0,
+          "temperature": 1.1,
+          "mean_amplitude": 0.05872908168674763,
+          "coherence": 0.2859876514228992,
+          "order_parameter_abs": 0.016795792141816555,
+          "order_parameter_phase": -2.6779550447792824,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 0.7014913301259063,
+          "potential_energy": 0.07260047591883989,
+          "total_energy": 0.7740918060447461,
+          "stress_power": 8.088003302430658e-14
+        },
+        {
+          "sweep": 1,
+          "temperature": 0.9125000000000001,
+          "mean_amplitude": 0.18098073449030633,
+          "coherence": 0.3067021775044565,
+          "order_parameter_abs": 0.05550718535453284,
+          "order_parameter_phase": -1.9202504690523956,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 6.454870157157889,
+          "potential_energy": 0.8926326139168181,
+          "total_energy": 7.347502771074707,
+          "stress_power": 1.3934934990708359e-11
+        },
+        {
+          "sweep": 2,
+          "temperature": 0.7250000000000001,
+          "mean_amplitude": 0.1571606999207517,
+          "coherence": 0.3400191327523769,
+          "order_parameter_abs": 0.053437644889810544,
+          "order_parameter_phase": -2.4703388275328577,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 6.371606163850421,
+          "potential_energy": 0.3070813787891861,
+          "total_energy": 6.678687542639607,
+          "stress_power": 1.9498734233242515e-11
+        },
+        {
+          "sweep": 3,
+          "temperature": 0.5375,
+          "mean_amplitude": 0.18219439261890502,
+          "coherence": 0.05994224464372293,
+          "order_parameter_abs": 0.010921140855076911,
+          "order_parameter_phase": -2.4697813015080436,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 6.059340540354524,
+          "potential_energy": -0.016047710565635018,
+          "total_energy": 6.043292829788889,
+          "stress_power": 6.363968826540015e-12
+        },
+        {
+          "sweep": 4,
+          "temperature": 0.35,
+          "mean_amplitude": 0.17852906083824885,
+          "coherence": 0.14364521657373647,
+          "order_parameter_abs": 0.02564484560881603,
+          "order_parameter_phase": -2.2361925704300796,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 5.683957924718939,
+          "potential_energy": -0.30679756804804886,
+          "total_energy": 5.37716035667089,
+          "stress_power": 8.875255206943251e-12
+        },
+        {
+          "sweep": 5,
+          "temperature": 0.35,
+          "mean_amplitude": 0.19708665753367666,
+          "coherence": 0.4321533151210298,
+          "order_parameter_abs": 0.08517165241930144,
+          "order_parameter_phase": 1.9965719882621813,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 5.060770197131498,
+          "potential_energy": -0.336800370333633,
+          "total_energy": 4.723969826797864,
+          "stress_power": 3.2496947080438782e-12
+        },
+        {
+          "sweep": 6,
+          "temperature": 0.35,
+          "mean_amplitude": 0.16152101412013511,
+          "coherence": 0.1700292304480826,
+          "order_parameter_abs": 0.027463293732040456,
+          "order_parameter_phase": 1.499482163433072,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 4.414835738106547,
+          "potential_energy": -0.2467593697106436,
+          "total_energy": 4.168076368395903,
+          "stress_power": 5.063096281959361e-12
+        },
+        {
+          "sweep": 7,
+          "temperature": 0.35,
+          "mean_amplitude": 0.17492962254150232,
+          "coherence": 0.19418676239319135,
+          "order_parameter_abs": 0.03396901704799736,
+          "order_parameter_phase": 2.6039763662294266,
+          "defect_density": 0.25,
+          "mean_winding_abs": 0.25,
+          "gradient_energy": 7.34657336065973,
+          "potential_energy": -0.28794996362659764,
+          "total_energy": 7.0586233970331325,
+          "stress_power": 0.0042629026339665544
+        },
+        {
+          "sweep": 8,
+          "temperature": 0.35,
+          "mean_amplitude": 0.1806657391558914,
+          "coherence": 0.19200296290610613,
+          "order_parameter_abs": 0.034688357213552866,
+          "order_parameter_phase": -3.0586719456705502,
+          "defect_density": 0.0,
+          "mean_winding_abs": 0.0,
+          "gradient_energy": 5.694220081472901,
+          "potential_energy": -0.26791775908849524,
+          "total_energy": 5.426302322384406,
+          "stress_power": 1.253192522741503e-11
+        }
+      ],
+      "spectrum": [
+        {
+          "frequency": 0.1111111111111111,
+          "power": 2.0191487424539265e-06
+        },
+        {
+          "frequency": 0.2222222222222222,
+          "power": 2.0191487708578178e-06
+        },
+        {
+          "frequency": 0.3333333333333333,
+          "power": 2.0191487624111396e-06
+        },
+        {
+          "frequency": 0.4444444444444444,
+          "power": 2.019148743168712e-06
+        }
+      ]
+    }
+  ]
+}
