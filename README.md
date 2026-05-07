@@ -167,6 +167,145 @@ This is an encouraging sign that the topology-only volume-growth observable beco
 
 From a practical computing perspective, these `SU(3)` tests show that `N=2048` is reachable in the current deep-surrogate workflow, but only at substantial wall-clock cost when one simultaneously pushes coordination number, burn-in length, measurement depth, diffusion horizon, and late Ricci smoothing. Simpler scalar runs can reach larger `N` more easily, but for the heavier `SU(3)` parameter searches the remaining discrepancy still looks structural rather than merely statistical. Further smoothing of the residual "holes in the sponge" will likely require either substantially more compute or a different growth architecture rather than another small parameter retuning.
 
+There is now also a dedicated `gravity-test` branch that addresses a narrower and more dynamical question than the volumetric `SU(3)` runs: whether two explicit high-degree mass nodes embedded in an annealed sparse background show reproducible entropic attraction under local graph updates. A representative `Phase 2` run,
+
+```powershell
+python main.py --mode gravity-test --sites 256 --degree 16 --burn-in-sweeps 10000 --temperature 0.2 --gravity-mass-degree 48 --lambda-coupling 0.05 --graph-prior erdos-renyi --progress-mode log
+```
+
+completed in about `2554 s` and produced a stable mean separation near `1.853`, a final separation `d = 2`, a minimum observed separation `d_{min} = 1`, and an essentially flat global trend (`slope \approx 10^{-6}`, `R^2 \approx 1.4 \times 10^{-4}`). The key feature is not a monotonic final-state collapse but the repeated tunneling of the mass pair into direct contact (`d = 1`) during several extended windows of the anneal, together with shared-neighbor counts that reach the mid-teens. The careful interpretation is that this branch now shows a reproducible finite-size attraction mechanism: the entanglement-weighted geometry repeatedly finds low-action states in which the two masses either touch directly or are separated by only one shell of highly shared support. That is stronger than a purely kinematic curvature signal, but still narrower than a derivation of a continuum gravitational force law.
+
+The final low-temperature return to `d = 2` is scientifically useful rather than disappointing. In the present discrete surrogate it suggests a competition between attractive clustering and a short-distance exclusion or packing effect of the surrounding graph, so the low-action state need not be a permanently collapsed dimer. The safest claim is therefore: `Phase 2` now supports an annealed entropic-gravity picture in which matter nodes actively explore and repeatedly occupy near-contact states, while the surrounding graph reorganizes through shared neighbors instead of collapsing into an uncontrolled hub singularity.
+
+The same `gravity-test` path now also supports a fixed-distance potential scan. In that mode the code prepares four short runs with the mass pair constrained to chosen graph separations and plots the mean bare vacuum energy against the imposed distance:
+
+```powershell
+python main.py --mode gravity-test --sites 256 --degree 16 --burn-in-sweeps 400 --measurement-sweeps 80 --sample-interval 20 --temperature 0.2 --gravity-mass-degree 48 --lambda-coupling 0.05 --graph-prior erdos-renyi --gravity-potential-distances 1,2,3,4 --plot-dir plots/gravity_potential --progress-mode log
+```
+
+This writes a JSON summary plus `Mass-Distance Potential` plot. The right interpretation is again narrow: if the mean bare energy rises with the imposed graph distance, then within this discrete surrogate the vacuum energetics favor shorter mass separation. That is evidence for an attractive effective potential in the model, not by itself a proof of continuum Newtonian or Einstein gravity.
+
+![Mass-Distance Potential Well](plots/gravity_potential_smoke/gravity_potential_smoke_potential_well.png)
+
+There is now also a dedicated `Phase 3` comparison between a simultaneous unified update and a warm-started sequential injection protocol. The scientific question is narrower than a full phase-diagram claim: does dressing an already-formed `SU(3)` backbone with weaker `SU(2)` and `U(1)` sectors reduce cross-sector locking without immediately destroying the area-law signal?
+
+For the matched `N=256`, `T=0.3`, `beta_3 = 1.0`, `beta_2 = 0.4`, `beta_1 = 0.05`, `lambda = 0.05` comparison, the answer is yes in a controlled finite-size sense. The simultaneous run stayed strongly locked, with pair correlations
+
+$$
+(\mathrm{corr}(E_3,E_2),\, \mathrm{corr}(E_3,E_1),\, \mathrm{corr}(E_2,E_1)) \approx (0.994, 0.978, 0.975),
+$$
+
+while the sequential warm-start run dropped to
+
+$$
+(0.540, 0.672, 0.513).
+$$
+
+Equivalently, the mean absolute sector correlation fell from about `0.982` to about `0.575`, a relative reduction of roughly `41.5%`, while the Blind-Observer area-law fit remained nearly unchanged (`R^2 \approx 0.612` versus `0.606`). The narrow claim is therefore not that the sectors fully deconfine, but that a pre-formed `SU(3)` backbone can be dressed in a way that measurably weakens unified locking while preserving the same finite-size entropic branch.
+
+![Phase 3 Simultaneous vs Sequential Decoupling](plots/phase3_correlation_comparison/phase3_N256_simultaneous_vs_sequential_correlation_comparison.png)
+
+The left panel shows the raw pair correlations for the simultaneous and sequential protocols; the right panel shows the induced shift
+
+$$
+\Delta \mathrm{corr} = \mathrm{corr}_{\mathrm{seq}} - \mathrm{corr}_{\mathrm{sim}},
+$$
+
+which is negative in all three channels. This is the clearest current finite-size evidence in the repository for a `decoupling without collapse` scenario: sector locking weakens sharply under sequential injection, yet the area-law quality does not collapse with it.
+
+To regenerate the figure directly from the stored Phase 3 JSON outputs, including the single-temperature scan files committed here, run
+
+```powershell
+python plot_phase3_correlation_comparison.py phase3_N256_simultaneous_final.json phase3_N256_sequential_final.json --output-dir plots/phase3_correlation_comparison --prefix phase3_N256_simultaneous_vs_sequential
+```
+
+### 4.5 Phase 3: Scalar Matter Condensation, Backreaction, and the Cosmic Web
+The most recent extension to the QGEFT surrogate introduces dynamic matter together with a full backreaction loop. Instead of treating the two heavy nodes as the only source of structure, the unified `SU(3) \times SU(2) \times U(1)` graph is now coupled to a charged complex scalar field `\phi_i \in \mathbb{C}` living on the nodes. The bare matter action combines a Mexican-hat potential with gauge-covariant hopping,
+
+$$
+S_{\mathrm{matter}} = m^2 \sum_i |\phi_i|^2 + \lambda_\phi \sum_i |\phi_i|^4 - \kappa \sum_{\langle ij\rangle} \left( \phi_i^\ast U^{(1)}_{ij}\phi_j + \phi_j^\ast U^{(1)\dagger}_{ij}\phi_i \right),
+$$
+
+so the Monte Carlo acceptance test now depends on the combined shift
+
+$$
+\Delta E_{\mathrm{total}} = \Delta E_{\mathrm{gauge}} + \Delta E_{\mathrm{matter}}.
+$$
+
+This turns the `Phase 3` branch into a direct test of whether an entanglement-built manifold can host dynamical matter without self-destructing. The matter field can condense, hop, and backreact on graph relocations; the support graph in turn reorganizes around dense regions in order to reduce the total action. The narrow claim supported by the current finite-size data is spontaneous-symmetry-breaking-like condensation together with topological backreaction, not a direct extraction of a physical mass spectrum or a derivation of continuum gravity.
+
+The first clear lesson of this branch is that the competition is sharp. When the hopping/backreaction scale is too large, for example `\kappa = 0.5`, the graph enters a crumpled regime: the manifold fragments, long-lived bulk structure is lost, the mass horizon reaches only `126/256` nodes, and the scalar backreaction becomes too violent to maintain a coherent sparse background. In contrast, lowering the coupling into a `Goldilocks zone` near `\kappa = 0.05` stabilizes the interplay. The scalar field settles into a nonzero finite-size background, the graph remains largely connected, and the geometry stretches rather than tearing apart.
+
+To distinguish a nearly uniform radiation-like scalar bath from genuine structure formation, the updated `Phase 3` workflow now tracks simple density statistics built from
+
+$$
+\rho_i = |\phi_i|^2.
+$$
+
+The most useful coarse probes are:
+
+- the coefficient of variation `CV = \sigma_\rho / \langle \rho \rangle`, which detects whether the matter distribution is nearly uniform or contains dense nodes and empty voids,
+- the edgewise density auto-correlation (`clustering_signal`), which tests whether high-density nodes preferentially connect to other high-density nodes across the emergent graph.
+
+The updated weak-gravity benchmark at `N=256` and `\kappa = 0.05` sits in a stable but still finite-size regime. The representative run below reached `253/256` connected nodes in the mass-horizon analysis and stabilized near
+
+- `\langle |\phi|^2 \rangle \approx 0.413`
+- `\bar d \approx 2.43`
+- `area_R2 \approx 0.408`
+- `mass_R2 \approx 0.400`
+- `bulk_R2 \approx 0.508`
+- `|\mathrm{corr}|_{\mathrm{sector}} \approx 0.994`
+- `E_{\mathrm{tot}} \approx 12.25`
+
+The interpretation is deliberately narrow. These numbers are consistent with a finite-size condensed matter branch on a still-connected sparse manifold, together with strong locking between the gauge sectors and a mild geometric response of the graph. They do not yet establish spectral mass generation, a continuum curvature law, or a clean Einstein-like regime. In particular, the entropy fits remain moderate rather than decisive, and the global mass-distance drift is weak (`R^2 \approx 0.012`), so the correct statement is backreaction and restructuring of the graph, not a full derivation of gravity.
+
+A representative `N=256` weak-gravity condensation run can be reproduced via:
+
+```powershell
+python main.py --mode unified-phase3 --sites 256 --seed 1 --lambda-scan "0.3" --temperature 0.3 --anneal-start-temperature 1.0 --degree 4 --mass-degree-target 12 --phase3-beta3 1.0 --phase3-beta2 0.0 --phase3-beta1 0.5 --graph-prior small-world --edge-swap-attempts-per-sweep 256 --burn-in-sweeps 2000 --measurement-sweeps 500 --sample-interval 10 --phase3-enable-matter --phase3-matter-mass-sq -0.5 --phase3-matter-lambda 1.0 --phase3-matter-kappa 0.05 --phase3-matter-step 0.4 --json-out phase3_N256_matter_condensation_weak_gravity.json --plot-dir plots/phase3_cosmic_web
+```
+
+![Phase 3 Area-Law Profile in the Stable Matter Branch](plots/phase3_cosmic_web/unified_phase3_256_area_collapse.png)
+
+This figure is the cleanest single visual summary of the stable matter branch. The entropy profile remains nontrivial across the connected bulk instead of collapsing into a trivial singular configuration, which is consistent with the finite-size `Goldilocks-zone` interpretation above, but the current fit quality is only moderate. It should therefore be read as evidence for a structured condensed phase, not as a standalone proof of emergent continuum geometry.
+
+The corresponding cosmic-web visualization now scales node size and color directly with `|\phi_i|^2`, so the saved `*_cosmic_web.png` output makes the same conclusion visible by eye: bright dense nodes form along a connected manifold while darker low-density regions remain as finite-size voids. The current code therefore supports a stronger and more concrete `Goldilocks-zone` claim than before: a symmetry-breaking charged scalar can condense on the annealed graph, backreact on relocation costs, and generate a finite-size structured matter pattern without geometrically collapsing the background. What it does not yet support is the stronger statement that the condensate has already been shown to generate a physical mass spectrum or a continuum gravitational field.
+
+### 4.6 Topological Stress and Gravitational-Wave Proxy
+There is now also a dedicated `topological-gw` branch implemented in [topological_gw.py](topological_gw.py). This mode studies a simpler symmetry-breaking problem than the unified matter runs: a complex scalar order parameter lives on the nodes of an annealed sparse graph, the quadratic term changes sign as the temperature cools through a user-specified critical scale `T_c`, and graph triangles are used to count phase windings that act as topological defect proxies. The code records three directly measured internal observables:
+
+- an inverse-sweep peak frequency `f_peak^sim` extracted from the FFT of the stress history,
+- an integrated stress-power proxy `\Pi_sim`,
+- the time history of defect density, coherence, and mean amplitude during cooling.
+
+The narrow claim is deliberately limited. These are simulation-side diagnostics of defect-driven graph stress during annealing. They are not yet physical predictions for a stochastic gravitational-wave background in absolute units. In particular, `f_peak^sim` is measured in `1 / sweep`, not in source-frame seconds, and `\Pi_sim` is not yet a calibrated radiation energy fraction.
+
+To make that boundary explicit, the topological-GW CLI now supports an optional calibration layer. When `--topo-enable-calibration` is **not** used, the output remains purely internal. When it **is** used, the code evaluates a transparent post-processing map
+
+$$
+f_0 = \mathcal{C}_f\, f_{\mathrm{peak}}^{\mathrm{sim}}, \qquad
+\Omega_{\mathrm{GW}} h^2 = \mathcal{C}_{\Omega}\, \Pi_{\mathrm{sim}},
+$$
+
+where the coefficients are not hidden in the code: they are fully specified by CLI flags such as `--topo-transition-temperature-gev`, `--topo-beta-over-hstar`, `--topo-sim-to-source-frequency`, and `--topo-stress-to-energy-fraction`. This does **not** mean the calibrated values are unique predictions of the QGEFT surrogate. It means the repository can now generate phenomenological estimates under a clearly declared assumption set, suitable for appendices or sensitivity studies.
+
+For example, an explicit calibrated run now looks like
+
+```powershell
+python main.py --mode topological-gw --sites 1024 --seed 7 --temperature 0.12 --anneal-start-temperature 0.9 --topo-critical-temperature 0.55 --burn-in-sweeps 100 --measurement-sweeps 20 --sample-interval 2 --topo-field-updates-per-sweep 1024 --edge-swap-attempts-per-sweep 256 --topo-enable-calibration --topo-transition-temperature-gev 100 --topo-beta-over-hstar 100 --topo-sim-to-source-frequency 1.0 --topo-stress-to-energy-fraction 1.0 --json-out topo_1024_t03_calibrated.json
+```
+
+For that `N = 1024` reference run, the repository now records
+
+- $f_{\mathrm{peak}}^{\mathrm{sim}} \approx 8.20 \times 10^{-3}\,{\rm sweep}^{-1}$
+- $\Pi_{\mathrm{sim}} \approx 1.138377 \times 10^{-7}$
+- calibrated $f_0 \approx 1.352459 \times 10^{-5}\,{\rm Hz}$
+- calibrated $\Omega_{\mathrm{GW}} h^2 \approx 4.553507 \times 10^{-12}$
+
+under the explicit assumption set `T_* = 100 GeV`, `beta/H_* = 100`, `sim->source frequency = 1`, and `stress transfer = 1`. The same run still reports `transition temperature = none`, so these values should be cited as calibrated phenomenological proxies rather than as a parameter-free cosmological prediction.
+
+The correct interpretation is again narrow: calibrated outputs from this mode should be read as scenario-dependent phenomenology, not as parameter-free predictions. In manuscript form, the safest summary is: while the topological-GW branch of QGEFT produces a measurable stress spectrum during symmetry-breaking anneals, its current outputs should still be read as simulation-side proxies rather than as parameter-free cosmological predictions. In the largest calibrated run currently available (`N = 1024`, `T = 0.12`, `T_c = 0.55`), the surrogate yields a simulation-side peak frequency $f_{\mathrm{peak}}^{\mathrm{sim}} \approx 8.20 \times 10^{-3}\,{\rm sweep}^{-1}$ together with an integrated stress proxy $\Pi_{\mathrm{sim}} \approx 1.138377 \times 10^{-7}$. Under the explicit assumption set $T_* = 100\,{\rm GeV}$, $\beta/H_* = 100$, unit simulation-to-source frequency transfer, and unit stress-to-energy transfer, these map to $f_0 \approx 1.352459 \times 10^{-5}\,{\rm Hz}$ and $\Omega_{\mathrm{GW}} h^2 \approx 4.553507 \times 10^{-12}$. The same run still reports `transition temperature = none`, so these values should be cited as transparent, scenario-dependent translations of a defect-driven internal stress signal rather than as unique predictions of the microscopic model. A fuller paper-ready narrative for this branch is collected in [TOPOLOGICAL_GW_REPORT.md](TOPOLOGICAL_GW_REPORT.md).
+
 ## 6. Methodological Vulnerabilities and Future Directions
 While the emergence of $D_s \approx 3$ and Euclidean-like topologies is compelling, we explicitly acknowledge the risk of numerical and algorithmic artifacts. The current codebase is stronger than the earliest version because it now includes graph-prior comparisons, null-model baselines, alternative distance prescriptions, and topology-only diagnostics. Even so, those additions do not eliminate the basic interpretive risks; they only sharpen where the remaining weak points are. To definitively bridge the gap between a topological correlation graph and physical spacetime, future work must subject this framework to the following critical stress tests:
 
