@@ -24,14 +24,6 @@ from scalable_simulation import (
     save_scaling_visualizations,
     write_scaling_json,
 )
-from gravity_phase2 import (
-    GravityPhase2Config,
-    GravityPhase2SweepResult,
-    render_gravity_phase2_report,
-    run_gravity_phase2_sweep,
-    save_gravity_phase2_visualizations,
-    write_gravity_phase2_json,
-)
 from vacuum_phase1 import (
     VacuumPhase1Config,
     VacuumPhase1SweepResult,
@@ -206,14 +198,6 @@ def parse_lambda_scan(raw: str) -> list[float]:
 
 
 def parse_positive_float_scan(raw: str, label: str) -> list[float]:
-    return parse_positive_float_scan(raw, label="temperature scan values")
-
-
-def parse_lambda_scan(raw: str) -> list[float]:
-    return parse_positive_float_scan(raw, label="lambda scan values")
-
-
-def parse_positive_float_scan(raw: str, label: str) -> list[float]:
     if not raw.strip():
         return []
     values: list[float] = []
@@ -224,26 +208,9 @@ def parse_positive_float_scan(raw: str, label: str) -> list[float]:
         value = float(stripped)
         if value <= 0.0:
             raise ValueError(f"{label} must be positive")
-            raise ValueError(f"{label} must be positive")
         if all(abs(existing - value) > 1e-12 for existing in values):
             values.append(value)
     return values
-
-
-def parse_positive_int_list(raw: str) -> tuple[int, ...]:
-    if not raw.strip():
-        return ()
-    values: list[int] = []
-    for token in raw.split(","):
-        stripped = token.strip()
-        if not stripped:
-            continue
-        value = int(stripped)
-        if value < 1:
-            raise ValueError("distance values must be positive integers")
-        if value not in values:
-            values.append(value)
-    return tuple(values)
 
 
 def parse_positive_int_list(raw: str) -> tuple[int, ...]:
