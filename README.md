@@ -114,6 +114,19 @@ produced
 
 This is one of the strongest signs of geometric convergence in the repository: the volume-growth sector becomes fairly insensitive to the prior and settles near a common value. But it is not a full 3D success, because the diffusion sector does not track that convergence. The model therefore appears to generate a solid, background-robust correlation manifold in the Hausdorff sense while still failing the stronger requirement of simultaneous three-dimensionality in both $d_H$ and $d_s$.
 
+### 4.4a Scale Invariance under Graph Renormalization Group (RG) Flow
+To verify that the emergent dimensional signature is a genuine macroscopic property rather than a microscopic (UV) artifact of the local connections, the simulation now implements a topological coarse-graining procedure. At each RG step, strongly entangled node pairs are merged, effectively tracing out the short-distance degrees of freedom. In a representative $SU(3)$ run at $N=1024$, the spectral dimension exhibited substantial stability across multiple RG scales: $D_s \approx 2.00$ at $N=1024$, $2.07$ at $N=533$, $2.10$ at $N=284$, and $1.93$ at $N=154$. The geometry only collapses ($D_s \approx 1.33$) when the graph is coarse-grained down to $N=87$, where finite-size boundaries dominate the random-walk diffusion. The narrow interpretation is that this branch displays a nontrivial intermediate RG plateau: the correlation manifold remains approximately diffusion-stable across several coarse-graining steps before an eventual deep-IR finite-size collapse.
+
+The RG-flow figure can be regenerated directly from the stored Monte Carlo JSON output via
+
+```powershell
+python plot_rg_flow_report.py rg_1024_su3.json --output-dir plots/rg_flow --prefix rg_1024_su3
+```
+
+![RG Flow of Spectral Dimension](plots/rg_flow/rg_1024_su3_ds_vs_rg_step.png)
+
+A visually important feature of this plot is that the early and intermediate RG steps lie close to a shallow trend line, while the last coarse-graining step drops sharply. In the current interpretation, that is exactly what one expects from a finite-size crossover: the interior diffusion sector remains stable while enough support graph remains, and only the final few-block graph is dominated by boundary effects.
+
 A newer inflationary branch improves on that static picture. In the `3d-local` prior with `boundary-strain` growth, probabilistic bulk roots, softened `SU(3)` triad ramping, and a single late measurement-phase Ricci pulse,
 
 ```powershell

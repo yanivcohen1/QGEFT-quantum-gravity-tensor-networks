@@ -457,6 +457,7 @@ def run_monte_carlo_mode(args: argparse.Namespace) -> None:
         cosmological_constant=args.cosmological_constant,
         walker_count=args.walker_count,
         max_walk_steps=args.max_walk_steps,
+        rg_steps=args.rg_steps,
         backend=args.backend,
         distance_powers=distance_powers,
         null_model_types=null_models,

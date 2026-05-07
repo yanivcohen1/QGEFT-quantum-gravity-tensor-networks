@@ -369,6 +369,30 @@ class TopologyGraphizationDiagnostics:
 
 
 @dataclass
+class RGFlowStepDiagnostics:
+    step: int
+    sites: int
+    edges: int
+    matched_pairs: int
+    carried_sites: int
+    spectral_dimension: float
+    spectral_dimension_std: float
+    hausdorff_dimension: float
+    total_edge_weight: float
+
+
+@dataclass
+class RGFlowSummary:
+    graph_label: str
+    requested_steps: int
+    realized_steps: int
+    spectral_dimension_span: float
+    spectral_dimension_std_over_flow: float
+    hausdorff_dimension_span: float
+    steps: list[RGFlowStepDiagnostics]
+
+
+@dataclass
 class TopologyConsensusSummary:
     spectral_dimension_median: float
     spectral_dimension_std: float
@@ -376,6 +400,7 @@ class TopologyConsensusSummary:
     hausdorff_dimension_std: float
     three_dimensionality_score: float
     graphizations: list[TopologyGraphizationDiagnostics]
+    rg_flow: RGFlowSummary | None
 
 
 @dataclass(frozen=True)
@@ -545,6 +570,7 @@ class MonteCarloConfig:
     cosmological_constant: float = 0.0
     walker_count: int = 512
     max_walk_steps: int = 24
+    rg_steps: int = 5
     backend: str = "auto"
     distance_powers: tuple[float, ...] = (1.0,)
     null_model_types: tuple[str, ...] = ()
@@ -662,6 +688,7 @@ class ScalingSweepResult:
     edge_swap_attempts_per_sweep: int
     edge_swap_entanglement_bias: float
     cosmological_constant: float
+    rg_steps: int
     distance_powers: tuple[float, ...]
     null_model_types: tuple[str, ...]
     null_model_samples: int
@@ -691,6 +718,7 @@ class ScalingSweepResult:
                 "edge_swap_attempts_per_sweep": self.edge_swap_attempts_per_sweep,
                 "edge_swap_entanglement_bias": self.edge_swap_entanglement_bias,
                 "cosmological_constant": self.cosmological_constant,
+                "rg_steps": self.rg_steps,
                 "distance_powers": list(self.distance_powers),
                 "null_model_types": list(self.null_model_types),
                 "null_model_samples": self.null_model_samples,
@@ -756,6 +784,10 @@ class GraphPriorComparisonResult:
     degree: int
     triad_burn_in_scale: float
     triad_ramp_fraction: float
+    edge_swap_attempts_per_sweep: int
+    edge_swap_entanglement_bias: float
+    cosmological_constant: float
+    rg_steps: int
     distance_powers: tuple[float, ...]
     null_model_types: tuple[str, ...]
     null_model_samples: int
@@ -780,6 +812,10 @@ class GraphPriorComparisonResult:
                 "degree": self.degree,
                 "triad_burn_in_scale": self.triad_burn_in_scale,
                 "triad_ramp_fraction": self.triad_ramp_fraction,
+                "edge_swap_attempts_per_sweep": self.edge_swap_attempts_per_sweep,
+                "edge_swap_entanglement_bias": self.edge_swap_entanglement_bias,
+                "cosmological_constant": self.cosmological_constant,
+                "rg_steps": self.rg_steps,
                 "distance_powers": list(self.distance_powers),
                 "null_model_types": list(self.null_model_types),
                 "null_model_samples": self.null_model_samples,
@@ -2407,6 +2443,200 @@ def estimate_graph_spectral_dimension(
     return spectral_dimension, spectral_std
 
 
+def estimate_weighted_graph_spectral_dimension(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+    max_walk_steps: int,
+    source_count: int,
+) -> tuple[float, float]:
+    if sites < 2:
+        return 0.0, 0.0
+    transition = np.zeros((sites, sites), dtype=np.float64)
+    weights = np.clip(np.asarray(edge_weights, dtype=np.float64), 0.0, None)
+    transition[edge_i, edge_j] = weights
+    transition[edge_j, edge_i] = weights
+    row_sum = np.sum(transition, axis=1, keepdims=True)
+    isolated = row_sum[:, 0] <= 1e-12
+    transition = np.divide(transition, np.maximum(row_sum, 1e-12), out=transition)
+    transition[isolated, isolated] = 1.0
+    times = np.arange(2, max_walk_steps + 1, 2, dtype=int)
+    if len(times) == 0:
+        return 0.0, 0.0
+    start_count = min(max(1, source_count), sites)
+    starts = np.linspace(0, sites - 1, num=start_count, dtype=np.int32)
+    distributions = np.zeros((start_count, sites), dtype=np.float64)
+    distributions[np.arange(start_count), starts] = 1.0
+    returns: list[float] = []
+    sampled_steps = set(times.tolist())
+    for step in range(1, max_walk_steps + 1):
+        distributions = distributions @ transition
+        if step in sampled_steps:
+            returns.append(float(np.mean(distributions[np.arange(start_count), starts])))
+    return_probabilities = np.clip(np.asarray(returns, dtype=float), 1e-12, None)
+    log_times = np.log(times.astype(float))
+    log_returns = np.log(return_probabilities)
+    fit_slice = slice(1, len(log_times) - 1 if len(log_times) > 3 else len(log_times))
+    slope, _ = np.polyfit(log_times[fit_slice], log_returns[fit_slice], deg=1)
+    spectral_dimension = float(np.clip(-2.0 * slope, 0.0, 6.0))
+    local_slopes = -2.0 * np.gradient(log_returns, log_times)
+    spectral_std = float(np.std(local_slopes[1:-1])) if len(local_slopes) > 2 else 0.0
+    return spectral_dimension, spectral_std
+
+
+def _canonicalize_weighted_edges(
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    merged: dict[tuple[int, int], float] = {}
+    for src, dst, weight in zip(edge_i.tolist(), edge_j.tolist(), edge_weights.tolist()):
+        if src == dst:
+            continue
+        key = (src, dst) if src < dst else (dst, src)
+        merged[key] = merged.get(key, 0.0) + float(weight)
+    if not merged:
+        return (
+            np.zeros(0, dtype=np.int32),
+            np.zeros(0, dtype=np.int32),
+            np.zeros(0, dtype=np.float32),
+        )
+    items = sorted(merged.items())
+    edge_i_out = np.asarray([key[0] for key, _ in items], dtype=np.int32)
+    edge_j_out = np.asarray([key[1] for key, _ in items], dtype=np.int32)
+    edge_w_out = np.asarray([weight for _, weight in items], dtype=np.float32)
+    return edge_i_out, edge_j_out, edge_w_out
+
+
+def coarse_grain_weighted_graph(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+) -> tuple[int, np.ndarray, np.ndarray, np.ndarray, int, int]:
+    if sites < 2 or len(edge_i) == 0:
+        return sites, edge_i.astype(np.int32), edge_j.astype(np.int32), edge_weights.astype(np.float32), 0, sites
+    order = np.argsort(-np.asarray(edge_weights, dtype=np.float64), kind="stable")
+    matched = np.zeros(sites, dtype=bool)
+    coarse_index = np.full(sites, -1, dtype=np.int32)
+    coarse_sites = 0
+    matched_pairs = 0
+    for edge_index in order.tolist():
+        src = int(edge_i[edge_index])
+        dst = int(edge_j[edge_index])
+        if matched[src] or matched[dst]:
+            continue
+        matched[src] = True
+        matched[dst] = True
+        coarse_index[src] = coarse_sites
+        coarse_index[dst] = coarse_sites
+        coarse_sites += 1
+        matched_pairs += 1
+    carried_sites = 0
+    for site in range(sites):
+        if coarse_index[site] >= 0:
+            continue
+        coarse_index[site] = coarse_sites
+        coarse_sites += 1
+        carried_sites += 1
+    coarse_edge_i: list[int] = []
+    coarse_edge_j: list[int] = []
+    coarse_edge_w: list[float] = []
+    aggregated: dict[tuple[int, int], float] = {}
+    for src, dst, weight in zip(edge_i.tolist(), edge_j.tolist(), edge_weights.tolist()):
+        coarse_src = int(coarse_index[src])
+        coarse_dst = int(coarse_index[dst])
+        if coarse_src == coarse_dst:
+            continue
+        key = (coarse_src, coarse_dst) if coarse_src < coarse_dst else (coarse_dst, coarse_src)
+        aggregated[key] = aggregated.get(key, 0.0) + float(weight)
+    for (src, dst), weight in sorted(aggregated.items()):
+        coarse_edge_i.append(src)
+        coarse_edge_j.append(dst)
+        coarse_edge_w.append(weight)
+    return (
+        coarse_sites,
+        np.asarray(coarse_edge_i, dtype=np.int32),
+        np.asarray(coarse_edge_j, dtype=np.int32),
+        np.asarray(coarse_edge_w, dtype=np.float32),
+        matched_pairs,
+        carried_sites,
+    )
+
+
+def run_weighted_rg_flow(
+    sites: int,
+    edge_i: np.ndarray,
+    edge_j: np.ndarray,
+    edge_weights: np.ndarray,
+    rg_steps: int,
+    max_walk_steps: int,
+    source_count: int,
+    graph_label: str = "support",
+) -> RGFlowSummary | None:
+    normalized_rg_steps = max(0, int(rg_steps))
+    if normalized_rg_steps <= 0 or sites < 2:
+        return None
+    current_sites = int(sites)
+    current_i, current_j, current_w = _canonicalize_weighted_edges(edge_i, edge_j, edge_weights)
+    if current_sites < 2:
+        return None
+    steps: list[RGFlowStepDiagnostics] = []
+    for step in range(normalized_rg_steps + 1):
+        spectral_dimension, spectral_std = estimate_weighted_graph_spectral_dimension(
+            sites=current_sites,
+            edge_i=current_i,
+            edge_j=current_j,
+            edge_weights=current_w,
+            max_walk_steps=max_walk_steps,
+            source_count=source_count,
+        )
+        hausdorff_dimension = estimate_unweighted_volume_scaling(
+            sites=current_sites,
+            edge_i=current_i,
+            edge_j=current_j,
+        )
+        steps.append(
+            RGFlowStepDiagnostics(
+                step=step,
+                sites=current_sites,
+                edges=int(len(current_i)),
+                matched_pairs=0,
+                carried_sites=0,
+                spectral_dimension=float(spectral_dimension),
+                spectral_dimension_std=float(spectral_std),
+                hausdorff_dimension=float(hausdorff_dimension),
+                total_edge_weight=float(np.sum(current_w, dtype=np.float64)),
+            )
+        )
+        if step == normalized_rg_steps or current_sites < 2 or len(current_i) == 0:
+            break
+        next_sites, next_i, next_j, next_w, matched_pairs, carried_sites = coarse_grain_weighted_graph(
+            current_sites,
+            current_i,
+            current_j,
+            current_w,
+        )
+        if next_sites >= current_sites:
+            break
+        steps[-1].matched_pairs = int(matched_pairs)
+        steps[-1].carried_sites = int(carried_sites)
+        current_sites = next_sites
+        current_i, current_j, current_w = _canonicalize_weighted_edges(next_i, next_j, next_w)
+    spectral_values = np.asarray([entry.spectral_dimension for entry in steps], dtype=float)
+    hausdorff_values = np.asarray([entry.hausdorff_dimension for entry in steps], dtype=float)
+    return RGFlowSummary(
+        graph_label=graph_label,
+        requested_steps=normalized_rg_steps,
+        realized_steps=max(0, len(steps) - 1),
+        spectral_dimension_span=float(np.max(spectral_values) - np.min(spectral_values)) if len(spectral_values) > 0 else 0.0,
+        spectral_dimension_std_over_flow=float(np.std(spectral_values)) if len(spectral_values) > 0 else 0.0,
+        hausdorff_dimension_span=float(np.max(hausdorff_values) - np.min(hausdorff_values)) if len(hausdorff_values) > 0 else 0.0,
+        steps=steps,
+    )
+
+
 def estimate_unweighted_volume_scaling(
     sites: int,
     edge_i: np.ndarray,
@@ -2475,6 +2705,7 @@ def assess_topological_three_dimensionality(
     edge_weights: np.ndarray,
     max_walk_steps: int,
     source_count: int,
+    rg_steps: int,
 ) -> TopologyConsensusSummary:
     graph_specs = (
         ("support", 1.0),
@@ -2514,6 +2745,16 @@ def assess_topological_three_dimensionality(
     three_dimensionality_score = float(
         1.0 / (1.0 + abs(spectral_median - 3.0) + abs(hausdorff_median - 3.0) + spectral_std + hausdorff_std)
     )
+    rg_flow = run_weighted_rg_flow(
+        sites=sites,
+        edge_i=edge_i,
+        edge_j=edge_j,
+        edge_weights=edge_weights,
+        rg_steps=rg_steps,
+        max_walk_steps=max_walk_steps,
+        source_count=source_count,
+        graph_label="weighted-support",
+    )
     return TopologyConsensusSummary(
         spectral_dimension_median=spectral_median,
         spectral_dimension_std=spectral_std,
@@ -2521,6 +2762,7 @@ def assess_topological_three_dimensionality(
         hausdorff_dimension_std=hausdorff_std,
         three_dimensionality_score=three_dimensionality_score,
         graphizations=graphizations,
+        rg_flow=rg_flow,
     )
 
 
@@ -3075,6 +3317,7 @@ class MonteCarloOperatorNetwork:
         self.cosmological_constant = max(0.0, float(config.cosmological_constant))
         self.walker_count = config.walker_count
         self.max_walk_steps = config.max_walk_steps
+        self.rg_steps: int = max(0, int(config.rg_steps))
         self.distance_powers = normalize_distance_powers(config.distance_powers)
         self.null_model_types = normalize_null_model_types(config.null_model_types)
         self.null_model_samples = max(0, int(config.null_model_samples))
@@ -3120,6 +3363,7 @@ class MonteCarloOperatorNetwork:
             edge_weights=raw_edge_weights,
             max_walk_steps=self.max_walk_steps,
             source_count=self.walker_count,
+            rg_steps=self.rg_steps,
         )
         self._progress(3, 4, "distance tests")
         evaluation_context = DistanceEvaluationContext(
@@ -3765,6 +4009,7 @@ class SU3TensorNetworkMonteCarlo:
         self.cosmological_constant = max(0.0, float(config.cosmological_constant))
         self.walker_count = config.walker_count
         self.max_walk_steps = config.max_walk_steps
+        self.rg_steps = max(0, int(config.rg_steps))
         self.color_count = 3
         self.tensor_bond_dim = int(np.clip(config.tensor_bond_dim, 1, self.color_count))
         self.distance_powers = normalize_distance_powers(config.distance_powers)
@@ -3827,6 +4072,7 @@ class SU3TensorNetworkMonteCarlo:
             edge_weights=raw_edge_weights,
             max_walk_steps=self.max_walk_steps,
             source_count=self.walker_count,
+            rg_steps=self.rg_steps,
         )
         evaluation_context = DistanceEvaluationContext(
             positions,
@@ -4873,6 +5119,7 @@ def run_scaling_sweep(
         edge_swap_attempts_per_sweep=max(0, int(config.edge_swap_attempts_per_sweep)),
         edge_swap_entanglement_bias=max(0.0, float(config.edge_swap_entanglement_bias)),
         cosmological_constant=max(0.0, float(config.cosmological_constant)),
+        rg_steps=max(0, int(config.rg_steps)),
         distance_powers=config.distance_powers,
         null_model_types=config.null_model_types,
         null_model_samples=config.null_model_samples,
@@ -4925,6 +5172,7 @@ def run_graph_prior_comparison(
             cosmological_constant=config.cosmological_constant,
             walker_count=config.walker_count,
             max_walk_steps=config.max_walk_steps,
+            rg_steps=config.rg_steps,
             backend=config.backend,
             distance_powers=config.distance_powers,
             null_model_types=config.null_model_types,
@@ -4988,6 +5236,10 @@ def run_graph_prior_comparison(
         degree=config.degree,
         triad_burn_in_scale=float(np.clip(config.triad_burn_in_scale, 0.0, 1.0)),
         triad_ramp_fraction=float(np.clip(config.triad_ramp_fraction, 0.0, 1.0)),
+        edge_swap_attempts_per_sweep=max(0, int(config.edge_swap_attempts_per_sweep)),
+        edge_swap_entanglement_bias=max(0.0, float(config.edge_swap_entanglement_bias)),
+        cosmological_constant=max(0.0, float(config.cosmological_constant)),
+        rg_steps=max(0, int(config.rg_steps)),
         distance_powers=config.distance_powers,
         null_model_types=config.null_model_types,
         null_model_samples=config.null_model_samples,
@@ -5013,6 +5265,7 @@ def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> 
         f"edge relocations/sweep: {result.edge_swap_attempts_per_sweep}",
         f"swap entanglement bias: {result.edge_swap_entanglement_bias:.2f}",
         f"cosmological constant: {result.cosmological_constant:.4f}",
+        f"RG coarse-graining steps: {result.rg_steps}",
         holographic_line,
         f"ricci flow: {result.ricci_flow_steps} steps" if result.ricci_flow_steps > 0 else "ricci flow: off",
         f"measurement ricci: {result.measurement_ricci_flow_steps} steps" if result.measurement_ricci_flow_steps > 0 else "measurement ricci: off",
@@ -5024,6 +5277,71 @@ def render_graph_prior_comparison_report(result: GraphPriorComparisonResult) -> 
     for point in result.points:
         lines.extend(render_graph_prior_point(point))
     return "\n".join(lines)
+
+
+def render_scaling_point(point: ScalingPoint) -> list[str]:
+    lines = [
+        (
+            f"{point.sites:5d} | {point.spectral_dimension:18.3f} | {point.spectral_dimension_std:3.3f} | "
+            f"{point.mean_return_error:16.5f} | {point.mean_magnetization:3.3f} | {point.samples_collected:7d} | "
+            f"{point.edge_swap_accepted:4d}/{point.edge_swap_attempts:<4d} | {point.seed}"
+        ),
+        (
+            f"      gauge={point.gauge_group} prior={point.graph_prior} theta={point.theta_order:.5f} asym={point.matter_antimatter_asymmetry:.5f} "
+            f"holo_sup={point.holographic_mean_suppression:.3f} "
+            f"ricci_mean={point.ricci_mean_curvature:.4f} ricci_neg={point.ricci_negative_edge_fraction:.3f} "
+            f"entropy={point.color_entropy:.5f} tn_res={point.tensor_residual:.5f} "
+            f"alpha_eff={point.fine_structure_proxy:.8f} m_e={point.electron_gap:.6f} m_p={point.proton_gap:.6f} m_p/m_e={point.proton_electron_mass_ratio_proxy:.6f} "
+            f"c_eff={point.effective_light_cone_speed:.6f} cone_R2={point.light_cone_fit_r2:.5f} cone_leak={point.light_cone_leakage:.5f} "
+            f"gravity p={point.gravity_power_exponent:.3f} R^2={point.gravity_inverse_square_r2:.5f} "
+            f"mae={point.gravity_inverse_square_mae:.5f}"
+        ),
+        (
+            f"      EH fit nodes={point.eh_node_count} slope={point.eh_proportionality_slope:.5f} intercept={point.eh_intercept:.5f} "
+            f"corr={point.eh_pearson_correlation:.5f} p={point.eh_pearson_p_value:.3e} R^2={point.eh_fit_r2:.5f} nMAE={point.eh_normalized_mae:.5f} "
+            f"rho={point.eh_action_density_mean:.5f}±{point.eh_action_density_std:.5f} "
+            f"R={point.eh_ricci_scalar_mean:.5f}±{point.eh_ricci_scalar_std:.5f}"
+        ),
+        (
+            f"      triangle-Ricci corr={point.triangle_ricci_pearson_correlation:.5f} p={point.triangle_ricci_pearson_p_value:.3e} "
+            f"R^2={point.triangle_ricci_fit_r2:.5f} R_tri={point.triangle_ricci_mean:.5f}±{point.triangle_ricci_std:.5f}"
+        ),
+        (
+            f"      topo d_s~{point.topological_consensus.spectral_dimension_median:.3f}±{point.topological_consensus.spectral_dimension_std:.3f} "
+            f"d_H~{point.topological_consensus.hausdorff_dimension_median:.3f}±{point.topological_consensus.hausdorff_dimension_std:.3f} "
+            f"3d_score={point.topological_consensus.three_dimensionality_score:.3f}"
+        ),
+    ]
+    if point.topological_consensus.rg_flow is not None:
+        rg_flow = point.topological_consensus.rg_flow
+        step_summary = ", ".join(
+            f"{entry.step}:{entry.sites}->{entry.spectral_dimension:.2f}"
+            for entry in rg_flow.steps
+        )
+        lines.append(
+            f"      RG[{rg_flow.graph_label}] realized={rg_flow.realized_steps}/{rg_flow.requested_steps} "
+            f"span_d_s={rg_flow.spectral_dimension_span:.3f} std_d_s={rg_flow.spectral_dimension_std_over_flow:.3f} "
+            f"span_d_H={rg_flow.hausdorff_dimension_span:.3f}"
+        )
+        lines.append(f"      RG flow steps {step_summary}")
+    if point.alternative_distance_models:
+        alt_spectral = [model.spectral_dimension for model in point.alternative_distance_models]
+        alt_gravity = [model.gravity_inverse_square_r2 for model in point.alternative_distance_models]
+        alt_hausdorff = [model.hausdorff_dimension for model in point.alternative_distance_models]
+        lines.append(
+            f"      distance={point.distance_model} alpha={point.distance_alpha:.2f} "
+            f"alt_d_s=[{min(alt_spectral):.3f},{max(alt_spectral):.3f}] "
+            f"alt_gravity_R2=[{min(alt_gravity):.3f},{max(alt_gravity):.3f}] "
+            f"alt_d_H=[{min(alt_hausdorff):.3f},{max(alt_hausdorff):.3f}]"
+        )
+    for null_model in point.null_model_summaries:
+        lines.append(
+            f"      null[{null_model.model}] d_s={null_model.spectral_dimension_mean:.3f}±{null_model.spectral_dimension_std:.3f} "
+            f"gravity_R2={null_model.gravity_inverse_square_r2_mean:.3f}±{null_model.gravity_inverse_square_r2_std:.3f} "
+            f"d_H={null_model.hausdorff_dimension_mean:.3f}±{null_model.hausdorff_dimension_std:.3f} "
+            f"c_eff={null_model.effective_light_cone_speed_mean:.3f}±{null_model.effective_light_cone_speed_std:.3f}"
+        )
+    return lines
 
 
 def render_scaling_report(result: ScalingSweepResult) -> str:
@@ -5052,52 +5370,7 @@ def render_scaling_report(result: ScalingSweepResult) -> str:
         "sites | spectral dimension | std | return fit error | |m| | samples | swaps(acc/att) | seed",
     ]
     for point in result.points:
-        lines.append(
-            f"{point.sites:5d} | {point.spectral_dimension:18.3f} | {point.spectral_dimension_std:3.3f} | "
-            f"{point.mean_return_error:16.5f} | {point.mean_magnetization:3.3f} | {point.samples_collected:7d} | {point.edge_swap_accepted:4d}/{point.edge_swap_attempts:<4d} | {point.seed}"
-        )
-        lines.append(
-            f"      gauge={point.gauge_group} prior={point.graph_prior} theta={point.theta_order:.5f} asym={point.matter_antimatter_asymmetry:.5f} "
-            f"holo_sup={point.holographic_mean_suppression:.3f} "
-            f"ricci_mean={point.ricci_mean_curvature:.4f} ricci_neg={point.ricci_negative_edge_fraction:.3f} "
-            f"entropy={point.color_entropy:.5f} tn_res={point.tensor_residual:.5f} "
-            f"alpha_eff={point.fine_structure_proxy:.8f} m_e={point.electron_gap:.6f} m_p={point.proton_gap:.6f} m_p/m_e={point.proton_electron_mass_ratio_proxy:.6f} "
-            f"c_eff={point.effective_light_cone_speed:.6f} cone_R2={point.light_cone_fit_r2:.5f} cone_leak={point.light_cone_leakage:.5f} "
-            f"gravity p={point.gravity_power_exponent:.3f} R^2={point.gravity_inverse_square_r2:.5f} "
-            f"mae={point.gravity_inverse_square_mae:.5f}"
-        )
-        lines.append(
-            f"      EH fit nodes={point.eh_node_count} slope={point.eh_proportionality_slope:.5f} intercept={point.eh_intercept:.5f} "
-            f"corr={point.eh_pearson_correlation:.5f} p={point.eh_pearson_p_value:.3e} R^2={point.eh_fit_r2:.5f} nMAE={point.eh_normalized_mae:.5f} "
-            f"rho={point.eh_action_density_mean:.5f}±{point.eh_action_density_std:.5f} "
-            f"R={point.eh_ricci_scalar_mean:.5f}±{point.eh_ricci_scalar_std:.5f}"
-        )
-        lines.append(
-            f"      triangle-Ricci corr={point.triangle_ricci_pearson_correlation:.5f} p={point.triangle_ricci_pearson_p_value:.3e} "
-            f"R^2={point.triangle_ricci_fit_r2:.5f} R_tri={point.triangle_ricci_mean:.5f}±{point.triangle_ricci_std:.5f}"
-        )
-        lines.append(
-            f"      topo d_s~{point.topological_consensus.spectral_dimension_median:.3f}±{point.topological_consensus.spectral_dimension_std:.3f} "
-            f"d_H~{point.topological_consensus.hausdorff_dimension_median:.3f}±{point.topological_consensus.hausdorff_dimension_std:.3f} "
-            f"3d_score={point.topological_consensus.three_dimensionality_score:.3f}"
-        )
-        if point.alternative_distance_models:
-            alt_spectral = [model.spectral_dimension for model in point.alternative_distance_models]
-            alt_gravity = [model.gravity_inverse_square_r2 for model in point.alternative_distance_models]
-            alt_hausdorff = [model.hausdorff_dimension for model in point.alternative_distance_models]
-            lines.append(
-                f"      distance={point.distance_model} alpha={point.distance_alpha:.2f} "
-                f"alt_d_s=[{min(alt_spectral):.3f},{max(alt_spectral):.3f}] "
-                f"alt_gravity_R2=[{min(alt_gravity):.3f},{max(alt_gravity):.3f}] "
-                f"alt_d_H=[{min(alt_hausdorff):.3f},{max(alt_hausdorff):.3f}]"
-            )
-        for null_model in point.null_model_summaries:
-            lines.append(
-                f"      null[{null_model.model}] d_s={null_model.spectral_dimension_mean:.3f}±{null_model.spectral_dimension_std:.3f} "
-                f"gravity_R2={null_model.gravity_inverse_square_r2_mean:.3f}±{null_model.gravity_inverse_square_r2_std:.3f} "
-                f"d_H={null_model.hausdorff_dimension_mean:.3f}±{null_model.hausdorff_dimension_std:.3f} "
-                f"c_eff={null_model.effective_light_cone_speed_mean:.3f}±{null_model.effective_light_cone_speed_std:.3f}"
-            )
+        lines.extend(render_scaling_point(point))
     return "\n".join(lines)
 
 
