@@ -24,6 +24,14 @@ from scalable_simulation import (
     save_scaling_visualizations,
     write_scaling_json,
 )
+from gravity_phase2 import (
+    GravityPhase2Config,
+    GravityPhase2SweepResult,
+    render_gravity_phase2_report,
+    run_gravity_phase2_sweep,
+    save_gravity_phase2_visualizations,
+    write_gravity_phase2_json,
+)
 from vacuum_phase1 import (
     VacuumPhase1Config,
     VacuumPhase1SweepResult,
@@ -103,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--burn-in-sweeps", type=int, default=180, help="Burn-in sweeps for Monte Carlo mode.")
     parser.add_argument("--measurement-sweeps", type=int, default=420, help="Measurement sweeps for Monte Carlo mode.")
     parser.add_argument("--sample-interval", type=int, default=6, help="Sampling interval in sweeps for Monte Carlo mode.")
-    parser.add_argument("--edge-swap-attempts-per-sweep", type=int, default=None, help="How many edge-relocation proposals to attempt after each sweep. In monte-carlo mode the default is 0; in vacuum-phase1 the default comes from that mode's own configuration.")
+    parser.add_argument("--edge-swap-attempts-per-sweep", type=int, default=None, help="How many edge-relocation proposals to attempt after each sweep. In monte-carlo mode the default is 0; in vacuum-phase1 and unified-phase3 the default comes from each mode's own configuration.")
     parser.add_argument("--edge-swap-entanglement-bias", type=float, default=0.75, help="How strongly edge swaps prefer to assign stronger links to high-entanglement nodes and reject rewires into cold regions.")
     parser.add_argument("--cosmological-constant", type=float, default=0.0, help="Strength of the harmonic volume regularizer Lambda that penalizes node degrees moving away from the target background degree.")
     parser.add_argument("--walker-count", type=int, default=512, help="Number of random walkers for spectral-dimension estimation.")
@@ -111,10 +119,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--size-scan", type=str, default="", help="Comma-separated system sizes for a Monte Carlo scaling sweep, for example 64,128,256,512.")
     parser.add_argument("--distance-powers", type=str, default="1.0", help="Comma-separated exponents for alternative distance prescriptions based on E_ij^alpha, for example 0.5,1.0,2.0.")
     parser.add_argument("--graph-prior-scan", type=str, default="", help="Optional comma-separated graph priors to compare in one run, for example 3d-local,small-world,random-regular.")
-    parser.add_argument("--null-models", type=str, default="", help="Optional comma-separated null models to compare against: shuffle, rewired.")
+    parser.add_argument("--null-models", type=str, default="", help="Optional comma-separated null models. Monte Carlo mode accepts shuffle, rewired; vacuum-phase1 accepts shuffle, erdos-renyi.")
     parser.add_argument("--null-model-samples", type=int, default=0, help="Number of randomized realizations per null model in Monte Carlo mode.")
     parser.add_argument("--null-rewire-swaps", type=int, default=4, help="Approximate number of degree-preserving swap attempts per edge for the rewired null model.")
-    parser.add_argument("--vacuum-link-updates-per-sweep", type=int, default=128, help="Bare-action Phase 1 only: how many local SU(3) link updates to propose per sweep.")
+    parser.add_argument("--vacuum-link-updates-per-sweep", type=int, default=128, help="Phase 1 / Unified Phase 3: how many local SU(3) link updates to propose per sweep.")
     parser.add_argument("--vacuum-link-update-step", type=float, default=0.18, help="Bare-action Phase 1 only: Gaussian step size for SU(3) diagonal phase proposals.")
     parser.add_argument("--vacuum-radius-count", type=int, default=6, help="Phase 1 / Unified Phase 3: number of blind-observer radii to probe from the graph center.")
     parser.add_argument("--gravity-mass-nodes", type=str, default="0,1", help="Gravity Phase 2 only: comma-separated node ids used as the two static heavy masses.")
@@ -198,6 +206,14 @@ def parse_lambda_scan(raw: str) -> list[float]:
 
 
 def parse_positive_float_scan(raw: str, label: str) -> list[float]:
+    return parse_positive_float_scan(raw, label="temperature scan values")
+
+
+def parse_lambda_scan(raw: str) -> list[float]:
+    return parse_positive_float_scan(raw, label="lambda scan values")
+
+
+def parse_positive_float_scan(raw: str, label: str) -> list[float]:
     if not raw.strip():
         return []
     values: list[float] = []
@@ -208,9 +224,26 @@ def parse_positive_float_scan(raw: str, label: str) -> list[float]:
         value = float(stripped)
         if value <= 0.0:
             raise ValueError(f"{label} must be positive")
+            raise ValueError(f"{label} must be positive")
         if all(abs(existing - value) > 1e-12 for existing in values):
             values.append(value)
     return values
+
+
+def parse_positive_int_list(raw: str) -> tuple[int, ...]:
+    if not raw.strip():
+        return ()
+    values: list[int] = []
+    for token in raw.split(","):
+        stripped = token.strip()
+        if not stripped:
+            continue
+        value = int(stripped)
+        if value < 1:
+            raise ValueError("distance values must be positive integers")
+        if value not in values:
+            values.append(value)
+    return tuple(values)
 
 
 def parse_positive_int_list(raw: str) -> tuple[int, ...]:

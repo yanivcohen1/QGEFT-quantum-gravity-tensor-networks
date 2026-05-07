@@ -1,0 +1,3160 @@
+{
+  "mode": "gravity-test",
+  "graph_prior": "erdos-renyi",
+  "degree": 8,
+  "temperature": 0.3,
+  "anneal_start_temperature": 0.6,
+  "burn_in_sweeps": 3000,
+  "measurement_sweeps": 100,
+  "sample_interval": 10,
+  "edge_swap_attempts_per_sweep": 256,
+  "link_updates_per_sweep": 128,
+  "mass_nodes": [
+    0,
+    1
+  ],
+  "mass_degree": 24,
+  "global_distance_trend": {
+    "slope": 7.346482050093407e-19,
+    "intercept": 2.9999999999999973,
+    "r2": 1.0
+  },
+  "points": [
+    {
+      "sites": 256,
+      "seed": 7,
+      "graph_prior": "erdos-renyi",
+      "degree": 8,
+      "mass_nodes": [
+        0,
+        1
+      ],
+      "mass_degree": 24,
+      "edge_count": 1059,
+      "samples_collected": 311,
+      "initial_distance": 3,
+      "final_distance": 3,
+      "min_distance": 3,
+      "mean_distance": 3.0,
+      "mean_bare_energy": 11.127591530445178,
+      "bare_energy_std": 4.560295685901178,
+      "distance_trend": {
+        "slope": 7.346482050093407e-19,
+        "intercept": 2.9999999999999973,
+        "r2": 1.0
+      },
+      "measurements": [
+        {
+          "sweep": 0,
+          "temperature": 0.6,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 40.55515863528446
+        },
+        {
+          "sweep": 10,
+          "temperature": 0.599,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 9.550141081225586
+        },
+        {
+          "sweep": 20,
+          "temperature": 0.598,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 13,
+          "bare_energy": 16.850528666868506
+        },
+        {
+          "sweep": 30,
+          "temperature": 0.597,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 10,
+          "bare_energy": 17.255967124528137
+        },
+        {
+          "sweep": 40,
+          "temperature": 0.596,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 16.333948528342468
+        },
+        {
+          "sweep": 50,
+          "temperature": 0.595,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 12.672362199436952
+        },
+        {
+          "sweep": 60,
+          "temperature": 0.594,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 10,
+          "bare_energy": 14.296036832899933
+        },
+        {
+          "sweep": 70,
+          "temperature": 0.593,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 18.297731297001235
+        },
+        {
+          "sweep": 80,
+          "temperature": 0.592,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 18.511684823450775
+        },
+        {
+          "sweep": 90,
+          "temperature": 0.591,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 18.585268774699163
+        },
+        {
+          "sweep": 100,
+          "temperature": 0.59,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 15.404037712621104
+        },
+        {
+          "sweep": 110,
+          "temperature": 0.589,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 14,
+          "bare_energy": 18.121644050603102
+        },
+        {
+          "sweep": 120,
+          "temperature": 0.588,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 13,
+          "bare_energy": 16.164739985929884
+        },
+        {
+          "sweep": 130,
+          "temperature": 0.587,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 16.090336357133822
+        },
+        {
+          "sweep": 140,
+          "temperature": 0.586,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 14.349850405620742
+        },
+        {
+          "sweep": 150,
+          "temperature": 0.585,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 15.803033156994196
+        },
+        {
+          "sweep": 160,
+          "temperature": 0.584,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 10,
+          "bare_energy": 18.10744792390518
+        },
+        {
+          "sweep": 170,
+          "temperature": 0.583,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 16.78667236729317
+        },
+        {
+          "sweep": 180,
+          "temperature": 0.582,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 18.113490457262234
+        },
+        {
+          "sweep": 190,
+          "temperature": 0.581,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 15.417904414598976
+        },
+        {
+          "sweep": 200,
+          "temperature": 0.58,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 14.208162732517065
+        },
+        {
+          "sweep": 210,
+          "temperature": 0.579,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 15.600637439238866
+        },
+        {
+          "sweep": 220,
+          "temperature": 0.578,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 18.49852838592702
+        },
+        {
+          "sweep": 230,
+          "temperature": 0.577,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 11.51428393253888
+        },
+        {
+          "sweep": 240,
+          "temperature": 0.576,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 14.55591265147704
+        },
+        {
+          "sweep": 250,
+          "temperature": 0.575,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 10.813894744681672
+        },
+        {
+          "sweep": 260,
+          "temperature": 0.574,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 15.736702837034471
+        },
+        {
+          "sweep": 270,
+          "temperature": 0.573,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 11,
+          "bare_energy": 19.95953097191325
+        },
+        {
+          "sweep": 280,
+          "temperature": 0.572,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 16.92855359677166
+        },
+        {
+          "sweep": 290,
+          "temperature": 0.571,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 18.606404641662166
+        },
+        {
+          "sweep": 300,
+          "temperature": 0.57,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 13.815278337393512
+        },
+        {
+          "sweep": 310,
+          "temperature": 0.569,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 13.462173545018413
+        },
+        {
+          "sweep": 320,
+          "temperature": 0.568,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 17.57801957031521
+        },
+        {
+          "sweep": 330,
+          "temperature": 0.567,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 12.447458231959665
+        },
+        {
+          "sweep": 340,
+          "temperature": 0.566,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 12.669651928426507
+        },
+        {
+          "sweep": 350,
+          "temperature": 0.565,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 11.570161007836107
+        },
+        {
+          "sweep": 360,
+          "temperature": 0.564,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 13,
+          "bare_energy": 15.168437198661469
+        },
+        {
+          "sweep": 370,
+          "temperature": 0.563,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 12.806118548683633
+        },
+        {
+          "sweep": 380,
+          "temperature": 0.5619999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 11,
+          "bare_energy": 15.930537692814081
+        },
+        {
+          "sweep": 390,
+          "temperature": 0.5609999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 13.805163211157533
+        },
+        {
+          "sweep": 400,
+          "temperature": 0.5599999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 14.893981578488994
+        },
+        {
+          "sweep": 410,
+          "temperature": 0.5589999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 19.5489247058537
+        },
+        {
+          "sweep": 420,
+          "temperature": 0.5579999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 20.043878029927836
+        },
+        {
+          "sweep": 430,
+          "temperature": 0.5569999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 17.121819985242468
+        },
+        {
+          "sweep": 440,
+          "temperature": 0.5559999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 11.457914684472186
+        },
+        {
+          "sweep": 450,
+          "temperature": 0.5549999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 13.232238167694035
+        },
+        {
+          "sweep": 460,
+          "temperature": 0.5539999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 16.40878856975641
+        },
+        {
+          "sweep": 470,
+          "temperature": 0.5529999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 11,
+          "bare_energy": 17.18237936356766
+        },
+        {
+          "sweep": 480,
+          "temperature": 0.5519999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 14,
+          "bare_energy": 20.178884958599657
+        },
+        {
+          "sweep": 490,
+          "temperature": 0.5509999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 15.46329886346022
+        },
+        {
+          "sweep": 500,
+          "temperature": 0.5499999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 14.864385327173984
+        },
+        {
+          "sweep": 510,
+          "temperature": 0.5489999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 19.595577323752757
+        },
+        {
+          "sweep": 520,
+          "temperature": 0.5479999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 20.89711584058553
+        },
+        {
+          "sweep": 530,
+          "temperature": 0.5469999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 12.807547072695368
+        },
+        {
+          "sweep": 540,
+          "temperature": 0.5459999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 11.68220857723385
+        },
+        {
+          "sweep": 550,
+          "temperature": 0.5449999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 11.760748056886106
+        },
+        {
+          "sweep": 560,
+          "temperature": 0.5439999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 11.077016046749419
+        },
+        {
+          "sweep": 570,
+          "temperature": 0.5429999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 13.460663787461947
+        },
+        {
+          "sweep": 580,
+          "temperature": 0.542,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 16.397231733964666
+        },
+        {
+          "sweep": 590,
+          "temperature": 0.5409999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 14.763796284143107
+        },
+        {
+          "sweep": 600,
+          "temperature": 0.54,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 15.40861075980052
+        },
+        {
+          "sweep": 610,
+          "temperature": 0.5389999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 11.362596041305215
+        },
+        {
+          "sweep": 620,
+          "temperature": 0.538,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 14.82765984733515
+        },
+        {
+          "sweep": 630,
+          "temperature": 0.5369999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 15.06802714166928
+        },
+        {
+          "sweep": 640,
+          "temperature": 0.536,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 16.78607839142547
+        },
+        {
+          "sweep": 650,
+          "temperature": 0.5349999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 18.11966546306789
+        },
+        {
+          "sweep": 660,
+          "temperature": 0.534,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.091336090820818
+        },
+        {
+          "sweep": 670,
+          "temperature": 0.533,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 14.7077393667472
+        },
+        {
+          "sweep": 680,
+          "temperature": 0.532,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 14.381162869013547
+        },
+        {
+          "sweep": 690,
+          "temperature": 0.5309999999999999,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 13.76049395499041
+        },
+        {
+          "sweep": 700,
+          "temperature": 0.53,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 19.187925270027353
+        },
+        {
+          "sweep": 710,
+          "temperature": 0.529,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 14.939647956660028
+        },
+        {
+          "sweep": 720,
+          "temperature": 0.528,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 12.353242736182402
+        },
+        {
+          "sweep": 730,
+          "temperature": 0.527,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 17.940482032832033
+        },
+        {
+          "sweep": 740,
+          "temperature": 0.526,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 12.716406778956383
+        },
+        {
+          "sweep": 750,
+          "temperature": 0.525,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 10.278926647581146
+        },
+        {
+          "sweep": 760,
+          "temperature": 0.524,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 13.106551879919461
+        },
+        {
+          "sweep": 770,
+          "temperature": 0.523,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 11.608604593602388
+        },
+        {
+          "sweep": 780,
+          "temperature": 0.522,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 11.918244909872639
+        },
+        {
+          "sweep": 790,
+          "temperature": 0.521,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 10,
+          "bare_energy": 14.285971489535886
+        },
+        {
+          "sweep": 800,
+          "temperature": 0.52,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 14.268560718513914
+        },
+        {
+          "sweep": 810,
+          "temperature": 0.519,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 10,
+          "bare_energy": 18.09249853366742
+        },
+        {
+          "sweep": 820,
+          "temperature": 0.518,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 17.321193309150456
+        },
+        {
+          "sweep": 830,
+          "temperature": 0.517,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 17.27542198292479
+        },
+        {
+          "sweep": 840,
+          "temperature": 0.516,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 8.927193155274864
+        },
+        {
+          "sweep": 850,
+          "temperature": 0.515,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 10,
+          "bare_energy": 12.468559141196177
+        },
+        {
+          "sweep": 860,
+          "temperature": 0.514,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 12.74651945890929
+        },
+        {
+          "sweep": 870,
+          "temperature": 0.513,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 14.839197816762455
+        },
+        {
+          "sweep": 880,
+          "temperature": 0.512,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 7.639818475082911
+        },
+        {
+          "sweep": 890,
+          "temperature": 0.511,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 11.656331355146465
+        },
+        {
+          "sweep": 900,
+          "temperature": 0.51,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 14.493903640306458
+        },
+        {
+          "sweep": 910,
+          "temperature": 0.509,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 12.576139093068182
+        },
+        {
+          "sweep": 920,
+          "temperature": 0.508,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 10.727586514327054
+        },
+        {
+          "sweep": 930,
+          "temperature": 0.507,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 12.606553004885452
+        },
+        {
+          "sweep": 940,
+          "temperature": 0.506,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.385880139970018
+        },
+        {
+          "sweep": 950,
+          "temperature": 0.505,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 16.598583049188413
+        },
+        {
+          "sweep": 960,
+          "temperature": 0.504,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 11.829386660989204
+        },
+        {
+          "sweep": 970,
+          "temperature": 0.503,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 14.962382889941079
+        },
+        {
+          "sweep": 980,
+          "temperature": 0.502,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 17.489564451277857
+        },
+        {
+          "sweep": 990,
+          "temperature": 0.501,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 17.935116405566557
+        },
+        {
+          "sweep": 1000,
+          "temperature": 0.5,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 12.280206963803293
+        },
+        {
+          "sweep": 1010,
+          "temperature": 0.499,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 15.251334822431232
+        },
+        {
+          "sweep": 1020,
+          "temperature": 0.498,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 9.444945675868118
+        },
+        {
+          "sweep": 1030,
+          "temperature": 0.497,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 13.571378607584704
+        },
+        {
+          "sweep": 1040,
+          "temperature": 0.496,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.46668495602389
+        },
+        {
+          "sweep": 1050,
+          "temperature": 0.495,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 9.835137319458935
+        },
+        {
+          "sweep": 1060,
+          "temperature": 0.494,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 18.646803859701908
+        },
+        {
+          "sweep": 1070,
+          "temperature": 0.493,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 10,
+          "bare_energy": 18.128613313427913
+        },
+        {
+          "sweep": 1080,
+          "temperature": 0.492,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 9.379643544065665
+        },
+        {
+          "sweep": 1090,
+          "temperature": 0.491,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 10.006229427247279
+        },
+        {
+          "sweep": 1100,
+          "temperature": 0.49,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 8.696803326771837
+        },
+        {
+          "sweep": 1110,
+          "temperature": 0.489,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 11.111132120075505
+        },
+        {
+          "sweep": 1120,
+          "temperature": 0.488,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 10.979160433165779
+        },
+        {
+          "sweep": 1130,
+          "temperature": 0.487,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 14.570596137739026
+        },
+        {
+          "sweep": 1140,
+          "temperature": 0.486,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 12.272071026997747
+        },
+        {
+          "sweep": 1150,
+          "temperature": 0.485,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 10.874753734254636
+        },
+        {
+          "sweep": 1160,
+          "temperature": 0.484,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 15.886243339089951
+        },
+        {
+          "sweep": 1170,
+          "temperature": 0.483,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 12.411218213753548
+        },
+        {
+          "sweep": 1180,
+          "temperature": 0.482,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 16.039430963987144
+        },
+        {
+          "sweep": 1190,
+          "temperature": 0.481,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 16.167653172959312
+        },
+        {
+          "sweep": 1200,
+          "temperature": 0.48,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 20.574673039295853
+        },
+        {
+          "sweep": 1210,
+          "temperature": 0.479,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 13.563814843381769
+        },
+        {
+          "sweep": 1220,
+          "temperature": 0.478,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 11.48731302181317
+        },
+        {
+          "sweep": 1230,
+          "temperature": 0.477,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 11.849591608627707
+        },
+        {
+          "sweep": 1240,
+          "temperature": 0.476,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 14.592584999866748
+        },
+        {
+          "sweep": 1250,
+          "temperature": 0.475,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 7.546681666806618
+        },
+        {
+          "sweep": 1260,
+          "temperature": 0.474,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 12.193430549800812
+        },
+        {
+          "sweep": 1270,
+          "temperature": 0.473,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 14.20983827256963
+        },
+        {
+          "sweep": 1280,
+          "temperature": 0.472,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 13.963502355135411
+        },
+        {
+          "sweep": 1290,
+          "temperature": 0.471,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 11,
+          "bare_energy": 16.296111687701885
+        },
+        {
+          "sweep": 1300,
+          "temperature": 0.47,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 11.042528115850388
+        },
+        {
+          "sweep": 1310,
+          "temperature": 0.469,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 12.262873473046142
+        },
+        {
+          "sweep": 1320,
+          "temperature": 0.46799999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 14.485699736215025
+        },
+        {
+          "sweep": 1330,
+          "temperature": 0.46699999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 16.47905236320737
+        },
+        {
+          "sweep": 1340,
+          "temperature": 0.46599999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 9.908021824741478
+        },
+        {
+          "sweep": 1350,
+          "temperature": 0.46499999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 11.134839753272713
+        },
+        {
+          "sweep": 1360,
+          "temperature": 0.46399999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 11.486089296409153
+        },
+        {
+          "sweep": 1370,
+          "temperature": 0.46299999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 9.352530794851514
+        },
+        {
+          "sweep": 1380,
+          "temperature": 0.46199999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 9.463907370469137
+        },
+        {
+          "sweep": 1390,
+          "temperature": 0.46099999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 17.497836157785724
+        },
+        {
+          "sweep": 1400,
+          "temperature": 0.45999999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 9.226720775586248
+        },
+        {
+          "sweep": 1410,
+          "temperature": 0.45899999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 12,
+          "bare_energy": 13.616125508126867
+        },
+        {
+          "sweep": 1420,
+          "temperature": 0.45799999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 17.218449101071233
+        },
+        {
+          "sweep": 1430,
+          "temperature": 0.45699999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 18.900127772860348
+        },
+        {
+          "sweep": 1440,
+          "temperature": 0.45599999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.247534898697397
+        },
+        {
+          "sweep": 1450,
+          "temperature": 0.45499999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 13.93530360195768
+        },
+        {
+          "sweep": 1460,
+          "temperature": 0.45399999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.9640441449173895
+        },
+        {
+          "sweep": 1470,
+          "temperature": 0.45299999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 13.874938121665188
+        },
+        {
+          "sweep": 1480,
+          "temperature": 0.45199999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 10.52387376398752
+        },
+        {
+          "sweep": 1490,
+          "temperature": 0.45099999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 15.500935374379157
+        },
+        {
+          "sweep": 1500,
+          "temperature": 0.44999999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 11.374072365420137
+        },
+        {
+          "sweep": 1510,
+          "temperature": 0.44899999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 14.581312528697003
+        },
+        {
+          "sweep": 1520,
+          "temperature": 0.44799999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 11.655472970227118
+        },
+        {
+          "sweep": 1530,
+          "temperature": 0.44699999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 12.893420900378976
+        },
+        {
+          "sweep": 1540,
+          "temperature": 0.44599999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 13.061064537450626
+        },
+        {
+          "sweep": 1550,
+          "temperature": 0.44499999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.626296145063509
+        },
+        {
+          "sweep": 1560,
+          "temperature": 0.44399999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 13.143046155992877
+        },
+        {
+          "sweep": 1570,
+          "temperature": 0.44299999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 12.834430069232269
+        },
+        {
+          "sweep": 1580,
+          "temperature": 0.442,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 7.596982999223793
+        },
+        {
+          "sweep": 1590,
+          "temperature": 0.44099999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 6.7582351724253495
+        },
+        {
+          "sweep": 1600,
+          "temperature": 0.43999999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 11.034676435056538
+        },
+        {
+          "sweep": 1610,
+          "temperature": 0.439,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 14.65391437221539
+        },
+        {
+          "sweep": 1620,
+          "temperature": 0.43799999999999994,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 12.885033742148039
+        },
+        {
+          "sweep": 1630,
+          "temperature": 0.43699999999999994,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 9.491554235475494
+        },
+        {
+          "sweep": 1640,
+          "temperature": 0.436,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.506764728034096
+        },
+        {
+          "sweep": 1650,
+          "temperature": 0.43499999999999994,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.250138340446235
+        },
+        {
+          "sweep": 1660,
+          "temperature": 0.43399999999999994,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 9.53350781934673
+        },
+        {
+          "sweep": 1670,
+          "temperature": 0.433,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.818153784053548
+        },
+        {
+          "sweep": 1680,
+          "temperature": 0.43199999999999994,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 9.6707913120344
+        },
+        {
+          "sweep": 1690,
+          "temperature": 0.43099999999999994,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 6.6058917039250815
+        },
+        {
+          "sweep": 1700,
+          "temperature": 0.43,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 9.635645163522184
+        },
+        {
+          "sweep": 1710,
+          "temperature": 0.429,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 9.022286189117855
+        },
+        {
+          "sweep": 1720,
+          "temperature": 0.42799999999999994,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 15.839465442944787
+        },
+        {
+          "sweep": 1730,
+          "temperature": 0.427,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 11.068182881100432
+        },
+        {
+          "sweep": 1740,
+          "temperature": 0.426,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 8.785660830365181
+        },
+        {
+          "sweep": 1750,
+          "temperature": 0.42499999999999993,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 14.492896430035055
+        },
+        {
+          "sweep": 1760,
+          "temperature": 0.424,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 12.365856134965608
+        },
+        {
+          "sweep": 1770,
+          "temperature": 0.423,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 5.5333832003947485
+        },
+        {
+          "sweep": 1780,
+          "temperature": 0.42199999999999993,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 10.883999927531413
+        },
+        {
+          "sweep": 1790,
+          "temperature": 0.421,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 10.665597180935123
+        },
+        {
+          "sweep": 1800,
+          "temperature": 0.42,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 7.440556861942269
+        },
+        {
+          "sweep": 1810,
+          "temperature": 0.41899999999999993,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.064920949116289
+        },
+        {
+          "sweep": 1820,
+          "temperature": 0.418,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 9.310342527491612
+        },
+        {
+          "sweep": 1830,
+          "temperature": 0.417,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 9.787421027584868
+        },
+        {
+          "sweep": 1840,
+          "temperature": 0.41600000000000004,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 8.104254681679413
+        },
+        {
+          "sweep": 1850,
+          "temperature": 0.415,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 12.845788457215193
+        },
+        {
+          "sweep": 1860,
+          "temperature": 0.414,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 11.117871657781764
+        },
+        {
+          "sweep": 1870,
+          "temperature": 0.41300000000000003,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 13.416970457841868
+        },
+        {
+          "sweep": 1880,
+          "temperature": 0.412,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 0,
+          "bare_energy": 9.251293974639761
+        },
+        {
+          "sweep": 1890,
+          "temperature": 0.411,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 12.142647219493435
+        },
+        {
+          "sweep": 1900,
+          "temperature": 0.41000000000000003,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 11.819164636162949
+        },
+        {
+          "sweep": 1910,
+          "temperature": 0.409,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.417723589000426
+        },
+        {
+          "sweep": 1920,
+          "temperature": 0.408,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.622701040538374
+        },
+        {
+          "sweep": 1930,
+          "temperature": 0.40700000000000003,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 9,
+          "bare_energy": 12.872133822285539
+        },
+        {
+          "sweep": 1940,
+          "temperature": 0.406,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 7.467663781086367
+        },
+        {
+          "sweep": 1950,
+          "temperature": 0.40499999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 15.280084718059603
+        },
+        {
+          "sweep": 1960,
+          "temperature": 0.404,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.768668288106225
+        },
+        {
+          "sweep": 1970,
+          "temperature": 0.403,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 10.604580745569832
+        },
+        {
+          "sweep": 1980,
+          "temperature": 0.40199999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 8.875077514151238
+        },
+        {
+          "sweep": 1990,
+          "temperature": 0.401,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 7.196163885523696
+        },
+        {
+          "sweep": 2000,
+          "temperature": 0.4,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 15.067393966471084
+        },
+        {
+          "sweep": 2010,
+          "temperature": 0.39899999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 9.48347379944094
+        },
+        {
+          "sweep": 2020,
+          "temperature": 0.398,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 6.488898025372982
+        },
+        {
+          "sweep": 2030,
+          "temperature": 0.397,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 9.71303138253417
+        },
+        {
+          "sweep": 2040,
+          "temperature": 0.39599999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 6.186532361159527
+        },
+        {
+          "sweep": 2050,
+          "temperature": 0.395,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 9.802107456211825
+        },
+        {
+          "sweep": 2060,
+          "temperature": 0.394,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 9.256111586512958
+        },
+        {
+          "sweep": 2070,
+          "temperature": 0.393,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 8.215525157367985
+        },
+        {
+          "sweep": 2080,
+          "temperature": 0.392,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.629918503110153
+        },
+        {
+          "sweep": 2090,
+          "temperature": 0.391,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 8.043718424109363
+        },
+        {
+          "sweep": 2100,
+          "temperature": 0.39,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 7.972838043062229
+        },
+        {
+          "sweep": 2110,
+          "temperature": 0.389,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.087104614392777
+        },
+        {
+          "sweep": 2120,
+          "temperature": 0.388,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.916860525295314
+        },
+        {
+          "sweep": 2130,
+          "temperature": 0.387,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 7.878693029681639
+        },
+        {
+          "sweep": 2140,
+          "temperature": 0.386,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 9.128590215438136
+        },
+        {
+          "sweep": 2150,
+          "temperature": 0.385,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 10.4833169881565
+        },
+        {
+          "sweep": 2160,
+          "temperature": 0.384,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 7.9102720808994995
+        },
+        {
+          "sweep": 2170,
+          "temperature": 0.383,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 7.927251771957519
+        },
+        {
+          "sweep": 2180,
+          "temperature": 0.382,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 9.451264820348333
+        },
+        {
+          "sweep": 2190,
+          "temperature": 0.381,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 12.384977307075882
+        },
+        {
+          "sweep": 2200,
+          "temperature": 0.38,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 6.632678368525651
+        },
+        {
+          "sweep": 2210,
+          "temperature": 0.379,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 5.867034656234713
+        },
+        {
+          "sweep": 2220,
+          "temperature": 0.378,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 10.046182291668028
+        },
+        {
+          "sweep": 2230,
+          "temperature": 0.377,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 12.336165660650723
+        },
+        {
+          "sweep": 2240,
+          "temperature": 0.376,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.960234880312039
+        },
+        {
+          "sweep": 2250,
+          "temperature": 0.375,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.79783016761753
+        },
+        {
+          "sweep": 2260,
+          "temperature": 0.374,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.47177451720745
+        },
+        {
+          "sweep": 2270,
+          "temperature": 0.373,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.783751824349588
+        },
+        {
+          "sweep": 2280,
+          "temperature": 0.372,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 0,
+          "bare_energy": 5.369082686114319
+        },
+        {
+          "sweep": 2290,
+          "temperature": 0.371,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.950479283007526
+        },
+        {
+          "sweep": 2300,
+          "temperature": 0.37,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.516048258802536
+        },
+        {
+          "sweep": 2310,
+          "temperature": 0.369,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.16650209702298
+        },
+        {
+          "sweep": 2320,
+          "temperature": 0.368,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 7.483036844467348
+        },
+        {
+          "sweep": 2330,
+          "temperature": 0.367,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 11.161614252545025
+        },
+        {
+          "sweep": 2340,
+          "temperature": 0.366,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 8.936768335110047
+        },
+        {
+          "sweep": 2350,
+          "temperature": 0.365,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 3.928501522348166
+        },
+        {
+          "sweep": 2360,
+          "temperature": 0.364,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 8.253647760782256
+        },
+        {
+          "sweep": 2370,
+          "temperature": 0.363,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 9.116616000851318
+        },
+        {
+          "sweep": 2380,
+          "temperature": 0.362,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 7.6060939047736875
+        },
+        {
+          "sweep": 2390,
+          "temperature": 0.361,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 4.864495303662437
+        },
+        {
+          "sweep": 2400,
+          "temperature": 0.36,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 7,
+          "bare_energy": 8.126404042697704
+        },
+        {
+          "sweep": 2410,
+          "temperature": 0.359,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 0,
+          "bare_energy": 6.780972443599187
+        },
+        {
+          "sweep": 2420,
+          "temperature": 0.358,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 6.96507135116955
+        },
+        {
+          "sweep": 2430,
+          "temperature": 0.357,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 8.283070017023466
+        },
+        {
+          "sweep": 2440,
+          "temperature": 0.356,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.800480478878615
+        },
+        {
+          "sweep": 2450,
+          "temperature": 0.355,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 0,
+          "bare_energy": 2.9270168245835384
+        },
+        {
+          "sweep": 2460,
+          "temperature": 0.354,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 10.216291603666644
+        },
+        {
+          "sweep": 2470,
+          "temperature": 0.353,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 4.66370710499153
+        },
+        {
+          "sweep": 2480,
+          "temperature": 0.352,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 10.702704447995206
+        },
+        {
+          "sweep": 2490,
+          "temperature": 0.351,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 4.658875870199195
+        },
+        {
+          "sweep": 2500,
+          "temperature": 0.35,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 6.122505612382965
+        },
+        {
+          "sweep": 2510,
+          "temperature": 0.349,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 4.9707077682685705
+        },
+        {
+          "sweep": 2520,
+          "temperature": 0.348,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 6.192356946289609
+        },
+        {
+          "sweep": 2530,
+          "temperature": 0.347,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 3.305587211558522
+        },
+        {
+          "sweep": 2540,
+          "temperature": 0.346,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 3.644443147583498
+        },
+        {
+          "sweep": 2550,
+          "temperature": 0.345,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 8.037283602591346
+        },
+        {
+          "sweep": 2560,
+          "temperature": 0.344,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.977744405714325
+        },
+        {
+          "sweep": 2570,
+          "temperature": 0.34299999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 6.178444451208954
+        },
+        {
+          "sweep": 2580,
+          "temperature": 0.34199999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 7.437271479621185
+        },
+        {
+          "sweep": 2590,
+          "temperature": 0.341,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.502779643042105
+        },
+        {
+          "sweep": 2600,
+          "temperature": 0.33999999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 6,
+          "bare_energy": 7.93210203442749
+        },
+        {
+          "sweep": 2610,
+          "temperature": 0.33899999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 6.301437537586875
+        },
+        {
+          "sweep": 2620,
+          "temperature": 0.338,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 9.727030988410233
+        },
+        {
+          "sweep": 2630,
+          "temperature": 0.33699999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 7.360073532515353
+        },
+        {
+          "sweep": 2640,
+          "temperature": 0.33599999999999997,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 6.977786646299104
+        },
+        {
+          "sweep": 2650,
+          "temperature": 0.335,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 6.392543869767607
+        },
+        {
+          "sweep": 2660,
+          "temperature": 0.33399999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 5.57175138957549
+        },
+        {
+          "sweep": 2670,
+          "temperature": 0.33299999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 5.182711581714983
+        },
+        {
+          "sweep": 2680,
+          "temperature": 0.332,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 4.807688838750788
+        },
+        {
+          "sweep": 2690,
+          "temperature": 0.331,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 5.10256289882598
+        },
+        {
+          "sweep": 2700,
+          "temperature": 0.32999999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 4.439509170480381
+        },
+        {
+          "sweep": 2710,
+          "temperature": 0.329,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 4.364984041119597
+        },
+        {
+          "sweep": 2720,
+          "temperature": 0.328,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 5.332805949924103
+        },
+        {
+          "sweep": 2730,
+          "temperature": 0.32699999999999996,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 9.864806375459032
+        },
+        {
+          "sweep": 2740,
+          "temperature": 0.326,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 7.785037847224513
+        },
+        {
+          "sweep": 2750,
+          "temperature": 0.325,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 3.9235779383843763
+        },
+        {
+          "sweep": 2760,
+          "temperature": 0.32399999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 4.669593621127684
+        },
+        {
+          "sweep": 2770,
+          "temperature": 0.323,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 4.144199097660218
+        },
+        {
+          "sweep": 2780,
+          "temperature": 0.322,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 2.011487270541331
+        },
+        {
+          "sweep": 2790,
+          "temperature": 0.32099999999999995,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 5.28297312312313
+        },
+        {
+          "sweep": 2800,
+          "temperature": 0.32,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.142945663180702
+        },
+        {
+          "sweep": 2810,
+          "temperature": 0.319,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 7.0774622032640915
+        },
+        {
+          "sweep": 2820,
+          "temperature": 0.318,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 3.5098939877329887
+        },
+        {
+          "sweep": 2830,
+          "temperature": 0.317,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 6.084879011639542
+        },
+        {
+          "sweep": 2840,
+          "temperature": 0.316,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 8.435668007480935
+        },
+        {
+          "sweep": 2850,
+          "temperature": 0.315,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 8,
+          "bare_energy": 7.8992552474266695
+        },
+        {
+          "sweep": 2860,
+          "temperature": 0.314,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 4.202759519347003
+        },
+        {
+          "sweep": 2870,
+          "temperature": 0.313,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 5.477456969576476
+        },
+        {
+          "sweep": 2880,
+          "temperature": 0.312,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 3.934237423307164
+        },
+        {
+          "sweep": 2890,
+          "temperature": 0.311,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 3.84395998667994
+        },
+        {
+          "sweep": 2900,
+          "temperature": 0.31,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 5.2324728274482535
+        },
+        {
+          "sweep": 2910,
+          "temperature": 0.309,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 5.140300540811831
+        },
+        {
+          "sweep": 2920,
+          "temperature": 0.308,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 5,
+          "bare_energy": 9.589250191466656
+        },
+        {
+          "sweep": 2930,
+          "temperature": 0.307,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.0027804935340185
+        },
+        {
+          "sweep": 2940,
+          "temperature": 0.306,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.959591709567408
+        },
+        {
+          "sweep": 2950,
+          "temperature": 0.305,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 8.613638735036522
+        },
+        {
+          "sweep": 2960,
+          "temperature": 0.304,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 7.8404893075736215
+        },
+        {
+          "sweep": 2970,
+          "temperature": 0.303,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 4.444674676319167
+        },
+        {
+          "sweep": 2980,
+          "temperature": 0.302,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 4.288718830503726
+        },
+        {
+          "sweep": 2990,
+          "temperature": 0.301,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 7.649402271259369
+        },
+        {
+          "sweep": 3000,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.844590418192696
+        },
+        {
+          "sweep": 3010,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 8.2413528963864
+        },
+        {
+          "sweep": 3020,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 8.568377668666527
+        },
+        {
+          "sweep": 3030,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 6.7366255373288455
+        },
+        {
+          "sweep": 3040,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.602821732863089
+        },
+        {
+          "sweep": 3050,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 3,
+          "bare_energy": 7.097710663941788
+        },
+        {
+          "sweep": 3060,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 1,
+          "bare_energy": 3.890495015066574
+        },
+        {
+          "sweep": 3070,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 4,
+          "bare_energy": 3.8617039104598625
+        },
+        {
+          "sweep": 3080,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 6.989801257595128
+        },
+        {
+          "sweep": 3090,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 7.704943072360951
+        },
+        {
+          "sweep": 3100,
+          "temperature": 0.3,
+          "graph_distance": 3,
+          "mass_a_degree": 24,
+          "mass_b_degree": 24,
+          "shared_neighbors": 0,
+          "plaquettes_touching_masses": 2,
+          "bare_energy": 4.263367849329848
+        }
+      ]
+    }
+  ]
+}

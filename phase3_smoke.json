@@ -1,0 +1,141 @@
+{
+  "mode": "unified-phase3",
+  "graph_prior": "3d-local",
+  "degree": 8,
+  "temperature": 0.3,
+  "anneal_start_temperature": 0.6,
+  "burn_in_sweeps": 2,
+  "measurement_sweeps": 2,
+  "sample_interval": 1,
+  "edge_swap_attempts_per_sweep": 2,
+  "link_updates_per_sweep": 2,
+  "radius_count": 6,
+  "mass_nodes": [
+    0,
+    1
+  ],
+  "mass_degree": 24,
+  "mass_coupling": 0.5,
+  "beta3": 1.0,
+  "beta2": 1.0,
+  "beta1": 1.0,
+  "collapse_area_law": {
+    "slope": 0.10842902441393856,
+    "intercept": -2.3871752293852917e-17,
+    "r2": 1.0
+  },
+  "global_distance_trend": {
+    "slope": -1.8215449209524249e-16,
+    "intercept": 2.000000000000001,
+    "r2": 1.0
+  },
+  "points": [
+    {
+      "sites": 16,
+      "seed": 7,
+      "graph_prior": "3d-local",
+      "degree": 8,
+      "mass_nodes": [
+        0,
+        1
+      ],
+      "mass_degree": 24,
+      "edge_count": 77,
+      "plaquette_count": 171,
+      "samples_collected": 3,
+      "initial_distance": 2,
+      "final_distance": 2,
+      "min_distance": 2,
+      "mean_distance": 2.0,
+      "mean_su3_energy": 48.078225109955106,
+      "mean_su2_energy": 38.99327182026426,
+      "mean_u1_energy": 45.53146109516131,
+      "mean_bare_energy": 132.60295802538067,
+      "bare_energy_std": 1.243689824147144,
+      "mean_total_energy": 232.60295802538067,
+      "total_energy_std": 1.243689824147144,
+      "area_law": {
+        "slope": 0.10842902441393856,
+        "intercept": -2.3871752293852917e-17,
+        "r2": 1.0
+      },
+      "volume_law": {
+        "slope": -1.5180063417951375,
+        "intercept": 24.288101468722207,
+        "r2": 1.0
+      },
+      "distance_trend": {
+        "slope": -1.8215449209524249e-16,
+        "intercept": 2.000000000000001,
+        "r2": 1.0
+      },
+      "su3_su2_correlation": -0.4374486955384823,
+      "su3_u1_correlation": -0.6099927183076643,
+      "su2_u1_correlation": 0.9794072771289879,
+      "distance_su3_correlation": 0.0,
+      "distance_su2_correlation": 0.0,
+      "distance_u1_correlation": 0.0,
+      "measurements": [
+        {
+          "radius": 1,
+          "area": 14.0,
+          "volume": 15.0,
+          "entropy": 1.5180063417951402
+        },
+        {
+          "radius": 2,
+          "area": 0.0,
+          "volume": 16.0,
+          "entropy": 0.0
+        }
+      ],
+      "samples": [
+        {
+          "sweep": 0,
+          "temperature": 0.6,
+          "graph_distance": 2,
+          "mass_a_degree": 14,
+          "mass_b_degree": 14,
+          "shared_neighbors": 14,
+          "plaquettes_touching_masses": 98,
+          "su3_energy": 47.81617591140066,
+          "su2_energy": 39.24723230221619,
+          "u1_energy": 46.64350170161404,
+          "bare_energy": 133.70690991523088,
+          "mass_penalty_energy": 100.0,
+          "total_energy": 233.70690991523088
+        },
+        {
+          "sweep": 3,
+          "temperature": 0.3,
+          "graph_distance": 2,
+          "mass_a_degree": 14,
+          "mass_b_degree": 14,
+          "shared_neighbors": 14,
+          "plaquettes_touching_masses": 98,
+          "su3_energy": 48.25338319076479,
+          "su2_energy": 39.158727573022105,
+          "u1_energy": 45.82466819501795,
+          "bare_energy": 133.23677895880485,
+          "mass_penalty_energy": 100.0,
+          "total_energy": 233.23677895880485
+        },
+        {
+          "sweep": 4,
+          "temperature": 0.3,
+          "graph_distance": 2,
+          "mass_a_degree": 14,
+          "mass_b_degree": 14,
+          "shared_neighbors": 14,
+          "plaquettes_touching_masses": 98,
+          "su3_energy": 48.16511622769989,
+          "su2_energy": 38.5738555855545,
+          "u1_energy": 44.126213388851944,
+          "bare_energy": 130.86518520210632,
+          "mass_penalty_energy": 100.0,
+          "total_energy": 230.86518520210632
+        }
+      ]
+    }
+  ]
+}
